@@ -140,3 +140,103 @@ class BoardGenerator {
     throw StateError('Unable to generate balanced board for seed $seed');
   }
 }
+
+/// Stable physical intersections and sides of the pointy-top hex grid.
+/// Coordinates use integer lattice keys, avoiding floating-point de-duplication.
+class BoardVertex {
+  BoardVertex(this.id, this.x, this.y, List<int> tiles, List<int> edges)
+    : tiles = List.unmodifiable(tiles),
+      edges = List.unmodifiable(edges);
+  final int id;
+  final double x, y;
+  final List<int> tiles, edges;
+}
+
+class BoardEdge {
+  BoardEdge(this.id, this.a, this.b, List<int> tiles)
+    : tiles = List.unmodifiable(tiles);
+  final int id, a, b;
+  final List<int> tiles;
+}
+
+class BoardTopology {
+  BoardTopology._(this.vertices, this.edges, this.tileVertices);
+  final List<BoardVertex> vertices;
+  final List<BoardEdge> edges;
+  final List<List<int>> tileVertices;
+
+  factory BoardTopology(Board board) {
+    final ids = <(int, int), int>{};
+    final coordinates = <(int, int)>[];
+    final vertexTiles = <List<int>>[];
+    final vertexEdges = <List<int>>[];
+    final tileVertices = <List<int>>[];
+    const dx = [1, 1, 0, -1, -1, 0];
+    const dy = [-1, 1, 2, 1, -1, -2];
+    for (var tile = 0; tile < board.tiles.length; tile++) {
+      final position = board.tiles[tile].position;
+      final corners = <int>[];
+      for (var corner = 0; corner < 6; corner++) {
+        final key = (
+          2 * position.q + position.r + dx[corner],
+          3 * position.r + dy[corner],
+        );
+        final id = ids.putIfAbsent(key, () {
+          final next = coordinates.length;
+          coordinates.add(key);
+          vertexTiles.add([]);
+          vertexEdges.add([]);
+          return next;
+        });
+        corners.add(id);
+        vertexTiles[id].add(tile);
+      }
+      tileVertices.add(List.unmodifiable(corners));
+    }
+    final edgeIds = <(int, int), int>{};
+    final edgeEnds = <(int, int)>[];
+    final edgeTiles = <List<int>>[];
+    for (var tile = 0; tile < tileVertices.length; tile++) {
+      final corners = tileVertices[tile];
+      for (var side = 0; side < 6; side++) {
+        final x = corners[side], y = corners[(side + 1) % 6];
+        final pair = (x < y ? x : y, x < y ? y : x);
+        final id = edgeIds.putIfAbsent(pair, () {
+          final next = edgeEnds.length;
+          edgeEnds.add(pair);
+          edgeTiles.add([]);
+          vertexEdges[pair.$1].add(next);
+          vertexEdges[pair.$2].add(next);
+          return next;
+        });
+        edgeTiles[id].add(tile);
+      }
+    }
+    final vertices = [
+      for (var id = 0; id < coordinates.length; id++)
+        BoardVertex(
+          id,
+          coordinates[id].$1 * 0.8660254037844386,
+          coordinates[id].$2 / 2,
+          vertexTiles[id],
+          vertexEdges[id],
+        ),
+    ];
+    final edges = [
+      for (var id = 0; id < edgeEnds.length; id++)
+        BoardEdge(id, edgeEnds[id].$1, edgeEnds[id].$2, edgeTiles[id]),
+    ];
+    return BoardTopology._(
+      List.unmodifiable(vertices),
+      List.unmodifiable(edges),
+      List.unmodifiable(tileVertices),
+    );
+  }
+
+  Iterable<int> neighbours(int vertex) sync* {
+    for (final edge in vertices[vertex].edges) {
+      final e = edges[edge];
+      yield e.a == vertex ? e.b : e.a;
+    }
+  }
+}

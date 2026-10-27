@@ -1,13 +1,11 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
-import 'engine/board.dart';
-import 'engine/game.dart';
+import 'engine/match.dart';
+import 'ui/match_screen.dart';
 
 void main() => runApp(const StoneBannerApp());
 
-enum _Page { home, board, rules }
+enum Page { home, board, rules }
 
 class StoneBannerApp extends StatefulWidget {
   const StoneBannerApp({super.key});
@@ -16,85 +14,360 @@ class StoneBannerApp extends StatefulWidget {
 }
 
 class _StoneBannerAppState extends State<StoneBannerApp> {
-  _Page page = _Page.home;
-  GameState game = GameEngine.newGame(['Player 1', 'Player 2']);
-  final Board board = BoardGenerator.generate(20261027);
+  Page page = Page.home;
+  MatchState? match;
+  bool handoff = false;
+  int seats = 3;
+  final seed = TextEditingController(text: '20261027');
+  final names = [
+    for (var i = 1; i <= 4; i++) TextEditingController(text: 'Player $i'),
+  ];
+
+  @override
+  void dispose() {
+    seed.dispose();
+    for (final n in names) {
+      n.dispose();
+    }
+    super.dispose();
+  }
+
+  void fail(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  void start() {
+    try {
+      final s = MatchEngine.newGame([
+        for (var i = 0; i < seats; i++) names[i].text.trim(),
+      ], int.parse(seed.text));
+      setState(() {
+        match = s;
+        page = Page.board;
+        handoff = true;
+      });
+    } on FormatException {
+      fail('Enter a numeric seed.');
+    } on StateError catch (e) {
+      fail(e.message);
+    }
+  }
+
+  void dispatch(MatchEvent event) {
+    try {
+      final s = MatchEngine.apply(match!, event);
+      setState(() {
+        handoff =
+            s.active != match!.active ||
+            event is ProposeTrade ||
+            event is RespondTrade;
+        match = s;
+      });
+    } on StateError catch (e) {
+      fail(e.message);
+    }
+  }
+
+  Future<void> importMatch() async {
+    final controller = TextEditingController();
+    final raw = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import replay'),
+        content: TextField(
+          controller: controller,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            labelText: 'Paste replay JSON',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Load'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (raw == null) return;
+    try {
+      final loaded = MatchEngine.importReplay(raw);
+      setState(() {
+        match = loaded;
+        page = Page.board;
+        handoff = true;
+      });
+    } on Object catch (e) {
+      fail('Invalid replay: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final light = ColorScheme.fromSeed(seedColor: const Color(0xff806334));
-    final dark = ColorScheme.fromSeed(
-      seedColor: const Color(0xffe7bf7b),
-      brightness: Brightness.dark,
-      surface: const Color(0xff192529),
-    );
+    final current = match;
     return MaterialApp(
       title: 'Stone & Banner',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
         fontFamily: 'NotoSans',
-        colorScheme: light,
-        scaffoldBackgroundColor: const Color(0xfff7f3e9),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff806334)),
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
         fontFamily: 'NotoSans',
-        colorScheme: dark,
-        scaffoldBackgroundColor: const Color(0xff10191d),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xffe7bf7b),
+          brightness: Brightness.dark,
+          surface: const Color(0xff192529),
+        ),
       ),
       themeMode: ThemeMode.system,
       home: Builder(
         builder: (context) => PopScope(
-          canPop: page == _Page.home,
+          canPop: page == Page.home,
           onPopInvokedWithResult: (didPop, result) {
-            if (!didPop && page != _Page.home) {
-              setState(() => page = _Page.home);
-            }
+            if (!didPop) setState(() => page = Page.home);
           },
           child: Scaffold(
             appBar: AppBar(
               centerTitle: true,
               title: const Text(
                 'STONE & BANNER',
-                style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 2),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.7,
+                ),
               ),
             ),
             bottomNavigationBar: NavigationBar(
               selectedIndex: page.index,
-              onDestinationSelected: (index) =>
-                  setState(() => page = _Page.values[index]),
+              onDestinationSelected: (n) =>
+                  setState(() => page = Page.values[n]),
               destinations: const [
                 NavigationDestination(
                   icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home),
                   label: 'Home',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.hexagon_outlined),
-                  selectedIcon: Icon(Icons.hexagon),
                   label: 'Board',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.menu_book_outlined),
-                  selectedIcon: Icon(Icons.menu_book),
                   label: 'Rules',
                 ),
               ],
             ),
-            body: switch (page) {
-              _Page.home => _HomeScreen(
-                onBoard: () => setState(() => page = _Page.board),
-                onRules: () => setState(() => page = _Page.rules),
-              ),
-              _Page.board => _BoardScreen(
-                board: board,
-                game: game,
-                onNextTurn: () =>
-                    setState(() => game = GameEngine.advanceTurn(game)),
-              ),
-              _Page.rules => const _RulesScreen(),
-            },
+            body: Stack(
+              children: [
+                switch (page) {
+                  Page.home => Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          Text(
+                            'Raise a town. Shape a realm.',
+                            style: Theme.of(context).textTheme.headlineLarge,
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'An original offline pass-and-play strategy game. Claim villages, span the frontier and earn 15 Victory Points.',
+                          ),
+                          const SizedBox(height: 20),
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(18),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    'New local match',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SegmentedButton<int>(
+                                    segments: const [
+                                      ButtonSegment(
+                                        value: 3,
+                                        label: Text('3 players'),
+                                      ),
+                                      ButtonSegment(
+                                        value: 4,
+                                        label: Text('4 players'),
+                                      ),
+                                    ],
+                                    selected: {seats},
+                                    onSelectionChanged: (v) =>
+                                        setState(() => seats = v.first),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  for (var i = 0; i < seats; i++) ...[
+                                    TextField(
+                                      controller: names[i],
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      decoration: InputDecoration(
+                                        labelText: 'Seat ${i + 1}',
+                                        border: const OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                  ],
+                                  TextField(
+                                    controller: seed,
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(
+                                      labelText: 'World seed',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  FilledButton.icon(
+                                    onPressed: start,
+                                    icon: const Icon(Icons.play_arrow),
+                                    label: const Text('Start match'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () => setState(() => page = Page.rules),
+                            icon: const Icon(Icons.menu_book_outlined),
+                            label: const Text('Read the rules'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: importMatch,
+                            icon: const Icon(Icons.history),
+                            label: const Text('Import replay'),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            '3–4 players · Local only · Reproducible seeds and events',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Page.board =>
+                    current == null
+                        ? Center(
+                            child: FilledButton(
+                              onPressed: () => setState(() => page = Page.home),
+                              child: const Text('Create a match'),
+                            ),
+                          )
+                        : MatchView(state: current, onEvent: dispatch),
+                  Page.rules => Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          Text(
+                            'The founding rules',
+                            style: Theme.of(context).textTheme.headlineMedium,
+                          ),
+                          const SizedBox(height: 16),
+                          const _Rule(
+                            'Claim',
+                            'Draft two Villages and adjoining roads per seat, in reverse order on the second pass. Settlements cannot be neighbours.',
+                          ),
+                          const _Rule(
+                            'Roll',
+                            'Matching numbers generate goods: Village one, Town two, Capital three. On a seven move the Bandit, blocking production on its hex.',
+                          ),
+                          const _Rule(
+                            'Build',
+                            'Road costs wood + brick. Village costs wood + brick + wheat + wool. Town costs 2 wheat + 3 ore. Capital costs 2 wood + 3 wheat + 3 ore in Stage 2.',
+                          ),
+                          const _Rule(
+                            'Trade',
+                            'Bank rate 4:1, or once per round at 3:1 if trailing by at least three points. Rival offers need consent.',
+                          ),
+                          const _Rule(
+                            'Win',
+                            'Reach 15 VP. Village = 1; Town = 2; Capital = 4. Longest unbroken road of five or more sides earns 2 VP.',
+                          ),
+                          const _Rule(
+                            'Future stages',
+                            'Paper, cloth, coin, Knights, Town Developments, Strategy Cards, Reaver Fleet and Invasion arrive later.',
+                          ),
+                          const Text(
+                            'Every move is engine-validated and logged for deterministic replay.',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                },
+                if (page == Page.board && handoff && current != null)
+                  Positioned.fill(
+                    child: ColoredBox(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          child: Card(
+                            margin: const EdgeInsets.all(24),
+                            child: Padding(
+                              padding: const EdgeInsets.all(28),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.lock_outline, size: 42),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'Pass the device',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineMedium,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    current.trade == null
+                                        ? current.current.id
+                                        : current
+                                              .players[current.trade!.target]
+                                              .id,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge,
+                                  ),
+                                  Text(
+                                    current.trade == null
+                                        ? 'Your turn'
+                                        : 'Private trade decision',
+                                  ),
+                                  const SizedBox(height: 20),
+                                  FilledButton.icon(
+                                    onPressed: () =>
+                                        setState(() => handoff = false),
+                                    icon: const Icon(Icons.visibility_outlined),
+                                    label: const Text("I'm ready"),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -102,250 +375,18 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
   }
 }
 
-class _HomeScreen extends StatelessWidget {
-  const _HomeScreen({required this.onBoard, required this.onRules});
-  final VoidCallback onBoard, onRules;
-
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(20),
-    children: [
-      Text(
-        'Raise a town. Shape a realm.',
-        style: Theme.of(context).textTheme.headlineLarge,
-      ),
-      const SizedBox(height: 14),
-      Text(
-        'A turn-based strategy world of shifting markets, common defence and decisions that matter even when it isn’t your turn.',
-        style: Theme.of(context).textTheme.bodyLarge,
-      ),
-      const SizedBox(height: 24),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Stage 1 · Founding build',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Explore the board prototype, turn order and draft rules. Full local play comes next.',
-              ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: onBoard,
-                icon: const Icon(Icons.hexagon_outlined),
-                label: const Text('Open board preview'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: onRules,
-                icon: const Icon(Icons.menu_book_outlined),
-                label: const Text('Read rule primer'),
-              ),
-            ],
-          ),
-        ),
-      ),
-      const SizedBox(height: 16),
-      const Text(
-        '2–4 players planned · Local pass-and-play first · Offline by design',
-      ),
-    ],
-  );
-}
-
-class _BoardScreen extends StatelessWidget {
-  const _BoardScreen({
-    required this.board,
-    required this.game,
-    required this.onNextTurn,
-  });
-  final Board board;
-  final GameState game;
-  final VoidCallback onNextTurn;
-
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
-    children: [
-      Text('The frontier', style: Theme.of(context).textTheme.headlineMedium),
-      const SizedBox(height: 12),
-      Card(
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Procedural layout preview · no moves yet',
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-              const SizedBox(height: 8),
-              AspectRatio(
-                aspectRatio: 1.05,
-                child: Semantics(
-                  label: 'Nineteen hex terrain board preview',
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: CustomPaint(
-                      painter: _BoardPainter(board),
-                      child: const SizedBox.expand(),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      const SizedBox(height: 12),
-      Text(
-        'Round ${game.round} · ${game.season.name[0].toUpperCase()}${game.season.name.substring(1)}',
-        style: Theme.of(context).textTheme.titleLarge,
-      ),
-      Text(
-        'Turn: ${game.activePlayer.id}',
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-      const SizedBox(height: 10),
-      FilledButton(
-        onPressed: onNextTurn,
-        child: const Text('Advance preview turn'),
-      ),
-      const SizedBox(height: 10),
-      const Text(
-        'Develop towns, build roads, prepare knights and respond to rival actions. Board placement and costs arrive in Stage 2.',
-      ),
-    ],
-  );
-}
-
-class _BoardPainter extends CustomPainter {
-  const _BoardPainter(this.board);
-  final Board board;
-  static const terrain = [
-    Color(0xff6d9874),
-    Color(0xffc17f63),
-    Color(0xffdbc58d),
-    Color(0xff97b8a5),
-    Color(0xff94a0a5),
-    Color(0xff756b5c),
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawColor(const Color(0xff283f48), BlendMode.src);
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width / 9.66, size.height / 9.0);
-    for (final tile in board.tiles) {
-      final x =
-          center.dx +
-          math.sqrt(3) * radius * (tile.position.q + tile.position.r / 2);
-      final y = center.dy + 1.5 * radius * tile.position.r;
-      final path = Path();
-      for (var index = 0; index < 6; index++) {
-        final angle = (index * 60 - 30) * math.pi / 180;
-        final px = x + radius * math.cos(angle),
-            py = y + radius * math.sin(angle);
-        if (index == 0) {
-          path.moveTo(px, py);
-        } else {
-          path.lineTo(px, py);
-        }
-      }
-      path.close();
-      canvas.drawPath(path, Paint()..color = terrain[tile.land.index]);
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0xff283f48)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3,
-      );
-      if (tile.productionNumber case final int number) {
-        canvas.drawCircle(
-          Offset(x, y),
-          radius * .32,
-          Paint()..color = const Color(0xfff7f0da),
-        );
-        final text = TextPainter(
-          text: TextSpan(
-            text: '$number',
-            style: TextStyle(
-              color: number == 6 || number == 8
-                  ? const Color(0xffad332f)
-                  : const Color(0xff263338),
-              fontFamily: 'NotoSans',
-              fontSize: radius * .31,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        text.paint(canvas, Offset(x - text.width / 2, y - text.height / 2));
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BoardPainter oldDelegate) =>
-      !identical(board, oldDelegate.board);
-}
-
-class _RulesScreen extends StatelessWidget {
-  const _RulesScreen();
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(20),
-    children: [
-      Text(
-        'The founding rules',
-        style: Theme.of(context).textTheme.headlineMedium,
-      ),
-      const SizedBox(height: 18),
-      const _Rule(
-        'Build',
-        'Village 1 VP · Town 2 VP · Capital 4 VP total. Reach 15 Victory Points.',
-      ),
-      const _Rule(
-        'Trade',
-        'Wood, brick, wheat, wool and ore support construction. Paper, cloth and coin fund advanced developments.',
-      ),
-      const _Rule(
-        'Develop',
-        'Innovation, Commerce and Governance are three independent strategy paths.',
-      ),
-      const _Rule(
-        'Respond',
-        'Offer, Escort and Blockade can change a rival’s move during a short shared reaction window.',
-      ),
-      const _Rule(
-        'Recover',
-        'A trailing player may make one 3:1 bank exchange per round when three or more points behind—never free Victory Points.',
-      ),
-      const SizedBox(height: 16),
-      const Text('This is a primer. The full rules live in docs/RULES.md.'),
-    ],
-  );
-}
-
 class _Rule extends StatelessWidget {
-  const _Rule(this.heading, this.body);
-  final String heading, body;
+  const _Rule(this.name, this.description);
+  final String name, description;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 18),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(heading, style: Theme.of(context).textTheme.titleLarge),
+        Text(name, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
-        Text(body),
+        Text(description),
       ],
     ),
   );
