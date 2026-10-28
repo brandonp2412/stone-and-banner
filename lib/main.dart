@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'engine/match.dart';
+import 'replay_codes.dart';
 import 'ui/match_screen.dart';
 import 'ui/lan_room_page.dart';
 
@@ -15,7 +19,61 @@ class StoneBannerApp extends StatefulWidget {
 }
 
 class _StoneBannerAppState extends State<StoneBannerApp> {
+  static const _savedMatchKey = 'stone_banner_local_replay_v1';
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
+  String? savedReplay;
+  Future<void> _saveTail = Future<void>.value();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadSaved());
+  }
+
+  Future<void> _loadSaved() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted && match == null) {
+        setState(() => savedReplay = prefs.getString(_savedMatchKey));
+      }
+    } on Object {
+      if (mounted) fail('Could not load the saved local match.');
+    }
+  }
+
+  void _save(MatchState state) {
+    final replay = MatchEngine.exportReplay(state);
+    savedReplay = replay;
+    // Serialize writes: a slower prior event must never replace a newer replay.
+    _saveTail = _saveTail.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (!await prefs.setString(_savedMatchKey, replay)) {
+          throw StateError('Storage rejected the replay.');
+        }
+      } on Object {
+        if (mounted) {
+          fail('Autosave failed. Copy the replay to preserve this match.');
+        }
+      }
+    });
+  }
+
+  void resume() {
+    final replay = savedReplay;
+    if (replay == null) return;
+    try {
+      final loaded = MatchEngine.importReplay(replay);
+      setState(() {
+        match = loaded;
+        page = Page.board;
+        handoff = true;
+      });
+    } on Object catch (e) {
+      fail('Saved replay is invalid: $e');
+    }
+  }
+
   Page page = Page.home;
   MatchState? match;
   bool handoff = false;
@@ -48,6 +106,7 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
         page = Page.board;
         handoff = true;
       });
+      _save(s);
     } on FormatException {
       fail('Enter a numeric seed.');
     } on StateError catch (e) {
@@ -64,6 +123,7 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
             (match!.tactical?.responder ?? match!.active);
         match = s;
       });
+      _save(s);
     } on StateError catch (e) {
       fail(e.message);
     }
@@ -76,12 +136,13 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
     );
     if (raw == null) return;
     try {
-      final loaded = MatchEngine.importReplay(raw);
+      final loaded = MatchEngine.importReplay(ReplayCodes.expand(raw));
       setState(() {
         match = loaded;
         page = Page.board;
         handoff = true;
       });
+      _save(loaded);
     } on Object catch (e) {
       fail('Invalid replay: $e');
     }
@@ -128,8 +189,14 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
             ),
             bottomNavigationBar: NavigationBar(
               selectedIndex: page.index,
-              onDestinationSelected: (n) =>
-                  setState(() => page = Page.values[n]),
+              onDestinationSelected: (n) => setState(() {
+                final next = Page.values[n];
+                // Re-entering a private board always requires a fresh handoff.
+                if (next == Page.board && page != Page.board && match != null) {
+                  handoff = true;
+                }
+                page = next;
+              }),
               destinations: const [
                 NavigationDestination(
                   icon: Icon(Icons.home_outlined),
@@ -154,15 +221,54 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                       child: ListView(
                         padding: const EdgeInsets.all(20),
                         children: [
-                          Text(
-                            'Raise a town. Shape a realm.',
-                            style: Theme.of(context).textTheme.headlineLarge,
+                          Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(18),
+                                child: Image.asset(
+                                  'assets/art/stone_banner_crest.jpg',
+                                  width: 104,
+                                  height: 104,
+                                  fit: BoxFit.cover,
+                                  semanticLabel: 'Original Stone & Banner emblem: a standing stone and gold banner',
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Stone & Banner',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Raise a town. Shape a realm.',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 12),
                           const Text(
                             'An original offline pass-and-play strategy game. Claim villages, span the frontier and earn 15 Victory Points.',
                           ),
                           const SizedBox(height: 20),
+                          if (savedReplay != null) ...[
+                            FilledButton.tonalIcon(
+                              onPressed: resume,
+                              icon: const Icon(Icons.restore),
+                              label: const Text('Continue saved match'),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                           Card(
                             child: Padding(
                               padding: const EdgeInsets.all(18),
@@ -216,7 +322,9 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                                   FilledButton.icon(
                                     onPressed: start,
                                     icon: const Icon(Icons.play_arrow),
-                                    label: const Text('Start match'),
+                                    label: Text(
+                                      savedReplay == null ? 'Start match' : 'Start new match (replaces saved match)',
+                                    ),
                                   ),
                                 ],
                               ),
@@ -298,7 +406,7 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                           ),
                           const _Rule(
                             'Advanced systems',
-                            'Advance Innovation, Commerce and Governance through five Town Developments each. Recruit, activate, promote and move Knights. Fortifications guard Towns; Reaver Fleet Invasions test shared defence. Strategy Cards arrive in Stage 4.',
+                            'Advance Innovation, Commerce and Governance through five Town Developments each. Recruit, activate, promote and move Knights. Fortifications guard Towns; Reaver Fleet Invasions test shared defence. Innovation, Commerce and Governance Strategy Cards can be collected and played.',
                           ),
                           const Text(
                             'Every move is engine-validated and logged for deterministic replay.',
@@ -394,6 +502,7 @@ class _ReplayImportDialogState extends State<_ReplayImportDialog> {
       maxLines: 5,
       decoration: const InputDecoration(
         labelText: 'Paste replay JSON',
+        helperText: 'Compact share codes also work',
         border: OutlineInputBorder(),
       ),
     ),

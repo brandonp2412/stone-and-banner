@@ -1,7 +1,7 @@
 name: stone_and_banner
 description: "Original turn-based strategy game Stone & Banner."
 publish_to: none
-version: 1.0.0+1
+version: 0.8.0+8
 environment:
   sdk: ^3.13.5
 dependencies:
@@ -14,6 +14,8 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 flutter:
   uses-material-design: true
+  assets:
+    - assets/art/stone_banner_crest.jpg
   fonts:
     - family: NotoSans
       fonts:

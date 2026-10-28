@@ -8,6 +8,7 @@ import '../engine/advanced.dart';
 import '../engine/board.dart';
 import '../engine/game.dart';
 import '../engine/match.dart';
+import '../replay_codes.dart';
 import 'strategy_hand.dart';
 
 enum _Move {
@@ -57,6 +58,7 @@ class MatchView extends StatefulWidget {
 class _MatchViewState extends State<MatchView> {
   _Move choice = _Move.inspect;
   int? selectedKnight;
+  Size? _boardSize;
   MatchState get s => widget.state;
   _Move get move => switch (s.phase) {
     MatchPhase.setupVillage => _Move.village,
@@ -72,7 +74,7 @@ class _MatchViewState extends State<MatchView> {
     });
   }
 
-  void tapBoard(Offset tap, Size size) async {
+  Future<void> tapBoard(Offset tap, Size size) async {
     final g = _Geometry(size);
     if (move == _Move.village || move == _Move.upgrade) {
       final legal = move == _Move.village
@@ -243,6 +245,114 @@ class _MatchViewState extends State<MatchView> {
         ),
       );
     }
+  }
+
+  List<int> get availableTargets => switch (move) {
+    _Move.village => MatchEngine.legalVertices(s),
+    _Move.road => MatchEngine.legalEdges(s),
+    _Move.upgrade => MatchEngine.legalUpgrades(s),
+    _Move.fortify => [
+      for (final v in s.sites.keys)
+        if (MatchEngine.legalFort(s, v)) v,
+    ],
+    _Move.recruit => [
+      for (var v = 0; v < s.topology.vertices.length; v++)
+        if (MatchEngine.legalRecruit(s, v)) v,
+    ],
+    _Move.activate => [
+      for (final v in s.knights.keys)
+        if (MatchEngine.legalActivate(s, v)) v,
+    ],
+    _Move.promote => [
+      for (final v in s.knights.keys)
+        if (MatchEngine.legalPromote(s, v)) v,
+    ],
+    _Move.knightMove =>
+      selectedKnight == null
+          ? [
+              for (final v in s.knights.keys)
+                if (s.knights[v]!.owner == s.active &&
+                    s.knights[v]!.active &&
+                    s.knights[v]!.actedTurn != s.turnSerial &&
+                    MatchEngine.legalKnightDestinations(s, v).isNotEmpty)
+                  v,
+            ]
+          : MatchEngine.legalKnightDestinations(s, selectedKnight!),
+    _Move.bandit => [
+      for (var i = 0; i < s.board.tiles.length; i++)
+        if (i != s.banditTile) i,
+    ],
+    _Move.inspect => <int>[],
+  };
+
+  String targetDescription(int id) {
+    String terrain(List<int> tiles) => tiles
+        .map(
+          (t) =>
+              '${s.board.tiles[t].land.name} ${s.board.tiles[t].productionNumber ?? 'unnumbered'}',
+        )
+        .join(', ');
+    if (move == _Move.bandit) {
+      final tile = s.board.tiles[id];
+      return 'Hex ${id + 1}: ${tile.land.name}, ${tile.productionNumber ?? 'no number'}';
+    }
+    if (move == _Move.road) {
+      final edge = s.topology.edges[id];
+      return 'Road ${id + 1}: junction ${edge.a + 1} to ${edge.b + 1}, ${terrain(edge.tiles)}';
+    }
+    return 'Junction ${id + 1}: ${terrain(s.topology.vertices[id].tiles)}';
+  }
+
+  Future<void> chooseTarget() async {
+    final options = availableTargets;
+    final boardSize = _boardSize;
+    if (options.isEmpty || boardSize == null) return;
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: .65,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'Choose legal board target',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: options.length,
+                  itemBuilder: (context, index) => ListTile(
+                    title: Text(targetDescription(options[index])),
+                    minVerticalPadding: 12,
+                    onTap: () => Navigator.pop(context, options[index]),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    final geometry = _Geometry(boardSize);
+    final Offset position;
+    if (move == _Move.bandit) {
+      position = geometry.tile(s.board.tiles[selected].position);
+    } else if (move == _Move.road) {
+      final edge = s.topology.edges[selected];
+      position =
+          (geometry.vertex(s.topology.vertices[edge.a]) +
+              geometry.vertex(s.topology.vertices[edge.b])) /
+          2;
+    } else {
+      position = geometry.vertex(s.topology.vertices[selected]);
+    }
+    await tapBoard(position, boardSize);
   }
 
   Future<void> exchange() async {
@@ -474,6 +584,7 @@ class _MatchViewState extends State<MatchView> {
                       child: LayoutBuilder(
                         builder: (context, box) {
                           final size = Size(box.maxWidth, box.maxHeight);
+                          _boardSize = size;
                           return ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: InteractiveViewer(
@@ -498,6 +609,14 @@ class _MatchViewState extends State<MatchView> {
                 ),
               ),
             ),
+            if (availableTargets.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: chooseTarget,
+                icon: const Icon(Icons.format_list_numbered),
+                label: const Text('Choose board target from list'),
+              ),
+            ],
             const SizedBox(height: 6),
             Wrap(
               spacing: 6,
@@ -827,6 +946,30 @@ class _MatchViewState extends State<MatchView> {
                   ),
               ],
             ),
+            if (!widget.online)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(
+                        text: ReplayCodes.compact(MatchEngine.exportReplay(s)),
+                      ),
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Share code copied; it contains every private hand.',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.share_outlined),
+                  label: const Text('Copy compact replay code'),
+                ),
+              ),
             for (var i = 0; i < s.players.length; i++)
               Row(
                 children: [
