@@ -5,7 +5,7 @@
 - [x] **3. Advanced systems:** commodity production, five tiers of Town Developments, Knight and Reaver Fleet rules, Invasion, Capital races and bounded drought recovery.
 - [x] **4. Three strategy decks:** original green Innovation, yellow Commerce, blue Governance cards and deterministic effect tests.
 - [x] **5. Out-of-turn play:** escrowed standing offers/counters, Knight theft interception, reactive Governance cards, Invasion emergency aid, replay-safe windows, private handoff and explicit pass/timeout events.
-- [ ] **6. Multiplayer architecture:** retain offline hot-seat, LAN/server-authoritative state protocol, reconnect, no unapproved public hosting.
+- [x] **6. Multiplayer architecture:** retain offline hot-seat, LAN/server-authoritative state protocol, reconnect, no unapproved public hosting.
 - [ ] **7. Balance:** seeded simulation, strategy equity, comeback rates, first-seat advantage, property and regression tests.
 - [ ] **8. Harden:** original art, accessibility, release/UI validation, user device QA and IP/security checks, no public store publication without approval.
 

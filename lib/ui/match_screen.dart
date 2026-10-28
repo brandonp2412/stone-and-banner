@@ -39,9 +39,17 @@ const landColors = [
 ];
 
 class MatchView extends StatefulWidget {
-  const MatchView({super.key, required this.state, required this.onEvent});
+  const MatchView({
+    super.key,
+    required this.state,
+    required this.onEvent,
+    this.online = false,
+    this.onlineView,
+  });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
+  final bool online;
+  final Map<String, dynamic>? onlineView;
   @override
   State<MatchView> createState() => _MatchViewState();
 }
@@ -185,7 +193,11 @@ class _MatchViewState extends State<MatchView> {
         }
       }
       if (best == -1 || distance >= g.radius) return;
-      final victims = MatchEngine.banditVictims(s, best);
+      final victims = widget.online
+          ? ((widget.onlineView?["victims"] as Map?)?["$best"] as List?)
+                    ?.cast<int>() ??
+                <int>[]
+          : MatchEngine.banditVictims(s, best);
       if (victims.isEmpty) {
         send(MoveBandit(best));
       } else {
@@ -382,7 +394,7 @@ class _MatchViewState extends State<MatchView> {
   @override
   Widget build(BuildContext context) {
     if (s.tactical != null) {
-      return _TacticalPanel(state: s, onEvent: send);
+      return _TacticalPanel(state: s, onEvent: send, online: widget.online);
     }
     final phase = s.phase;
     final winner = MatchEngine.winner(s);
@@ -619,7 +631,9 @@ class _MatchViewState extends State<MatchView> {
             else if (phase == MatchPhase.roll)
               FilledButton.icon(
                 onPressed: () {
-                  final pair = MatchEngine.expectedDice(s);
+                  final pair = widget.online
+                      ? (0, 0)
+                      : MatchEngine.expectedDice(s);
                   send(RollDice(pair.$1, pair.$2));
                 },
                 icon: const Icon(Icons.casino),
@@ -715,7 +729,13 @@ class _MatchViewState extends State<MatchView> {
                 ],
               ),
               const SizedBox(height: 8),
-              StrategyHand(state: s, onEvent: send),
+              StrategyHand(
+                state: s,
+                onEvent: send,
+                onlineOptions: widget.online
+                    ? (widget.onlineView?["options"] as Map?)
+                    : null,
+              ),
               const SizedBox(height: 8),
               Card(
                 child: Padding(
@@ -790,20 +810,21 @@ class _MatchViewState extends State<MatchView> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: () async {
-                    await Clipboard.setData(
-                      ClipboardData(text: MatchEngine.exportReplay(s)),
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Replay copied')),
+                if (!widget.online)
+                  TextButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        ClipboardData(text: MatchEngine.exportReplay(s)),
                       );
-                    }
-                  },
-                  icon: const Icon(Icons.copy_outlined),
-                  label: const Text('Copy replay'),
-                ),
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Replay copied')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.copy_outlined),
+                    label: const Text('Copy replay'),
+                  ),
               ],
             ),
             for (var i = 0; i < s.players.length; i++)
@@ -819,7 +840,11 @@ class _MatchViewState extends State<MatchView> {
                 ],
               ),
             if (s.dice != null)
-              Text('Last dice: ${s.dice} · Event ${s.events.length}'),
+              Text(
+                widget.online
+                    ? 'Last dice: ${s.dice} · Event ${widget.onlineView?['eventCount']}'
+                    : 'Last dice: ${s.dice} · Event ${s.events.length}',
+              ),
           ],
         ),
       ),
@@ -829,9 +854,14 @@ class _MatchViewState extends State<MatchView> {
 
 /// The entire normal hand/board is hidden for a visiting reaction seat.
 class _TacticalPanel extends StatelessWidget {
-  const _TacticalPanel({required this.state, required this.onEvent});
+  const _TacticalPanel({
+    required this.state,
+    required this.onEvent,
+    required this.online,
+  });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
+  final bool online;
 
   @override
   Widget build(BuildContext context) {
@@ -974,11 +1004,12 @@ class _TacticalPanel extends StatelessWidget {
                           ),
                           child: const Text('Pass'),
                         ),
-                        TextButton(
-                          onPressed: () =>
-                              onEvent(TimeoutTactical(w.id, responder)),
-                          child: const Text('Skip / timeout fallback'),
-                        ),
+                        if (!online)
+                          TextButton(
+                            onPressed: () =>
+                                onEvent(TimeoutTactical(w.id, responder)),
+                            child: const Text('Skip / timeout fallback'),
+                          ),
                       ],
                     ),
                   ),

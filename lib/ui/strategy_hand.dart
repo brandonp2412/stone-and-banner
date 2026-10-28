@@ -1,3 +1,5 @@
+import '../network/room_protocol.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -68,9 +70,15 @@ class _CardMotif extends CustomPainter {
 }
 
 class StrategyHand extends StatelessWidget {
-  const StrategyHand({super.key, required this.state, required this.onEvent});
+  const StrategyHand({
+    super.key,
+    required this.state,
+    required this.onEvent,
+    this.onlineOptions,
+  });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
+  final Map? onlineOptions;
 
   String _optionLabel(StrategyCard card, PlayStrategyCard option) {
     switch (card.power) {
@@ -106,7 +114,13 @@ class StrategyHand extends StatelessWidget {
 
   Future<void> _showCard(BuildContext context, int handIndex) async {
     final card = state.current.cards[handIndex].definition;
-    final options = MatchEngine.legalCardPlays(state, handIndex);
+    final options = onlineOptions == null
+        ? MatchEngine.legalCardPlays(state, handIndex)
+        : [
+            for (final e in (onlineOptions!['$handIndex'] as List? ?? []))
+              RoomProtocol.eventFromJson(Map<String, dynamic>.from(e as Map))
+                  as PlayStrategyCard,
+          ];
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

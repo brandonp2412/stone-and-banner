@@ -487,14 +487,14 @@ class MatchEngine {
     if (!condition) throw StateError(reason);
   }
 
-  static MatchState newGame(List<String> names, int seed) {
+  static MatchState newGame(List<String> names, int seed, {int? boardSeed}) {
     _require(names.length >= 3 && names.length <= 4, 'Choose 3 or 4 players.');
     _require(
       names.every((n) => n.trim().isNotEmpty) &&
           names.toSet().length == names.length,
       'Use distinct player names.',
     );
-    final board = BoardGenerator.generate(seed);
+    final board = BoardGenerator.generate(boardSeed ?? seed);
     return MatchState(
       seed: seed,
       board: board,
@@ -516,9 +516,10 @@ class MatchEngine {
   static MatchState replay(
     List<String> names,
     int seed,
-    Iterable<MatchEvent> events,
-  ) {
-    var state = newGame(names, seed);
+    Iterable<MatchEvent> events, {
+    int? boardSeed,
+  }) {
+    var state = newGame(names, seed, boardSeed: boardSeed);
     for (final event in events) {
       state = apply(state, event);
     }
@@ -528,6 +529,7 @@ class MatchEngine {
   static String exportReplay(MatchState s) => jsonEncode({
     'format': 'stone-and-banner-replay-v1',
     'seed': s.seed,
+    'boardSeed': s.board.seed,
     'names': [for (final p in s.players) p.id],
     'events': [for (final e in s.events) e.toJson()],
   });
@@ -597,7 +599,12 @@ class MatchEngine {
         _ => throw FormatException('Unknown event type.'),
       };
     });
-    return replay(names, value['seed'] as int, events);
+    return replay(
+      names,
+      value['seed'] as int,
+      events,
+      boardSeed: value['boardSeed'] as int?,
+    );
   }
 
   static String snapshot(MatchState s) => jsonEncode({

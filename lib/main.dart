@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'engine/match.dart';
 import 'ui/match_screen.dart';
+import 'ui/lan_room_page.dart';
 
 void main() => runApp(const StoneBannerApp());
 
@@ -222,6 +223,15 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                             ),
                           ),
                           const SizedBox(height: 12),
+                          FilledButton.tonalIcon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const LanRoomPage(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.groups_outlined),
+                            label: const Text('LAN multiplayer room'),
+                          ),
                           OutlinedButton.icon(
                             onPressed: () => setState(() => page = Page.rules),
                             icon: const Icon(Icons.menu_book_outlined),
