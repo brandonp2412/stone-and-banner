@@ -11,3 +11,5 @@
 - Nox default-drop firewall initially blocked 8765. A temporary rule restricted to Waydroid 192.168.240.2 → 192.168.240.1 TCP/8765 enabled smoke test; after tests service stone-banner-stage6-smoke stopped and nft rule handle 34 removed and verified absent. No permanent firewall change or public service.
 - Screenshot: docs/evidence/stage6_waydroid_waiting.png.
 - No physical Samsung install/test; no deployed remote-internet backend. LAN requires an explicit restricted Nox firewall allowance; host process must remain alive as rooms are in-memory. See docs/STAGE6.md for trust model.
+
+- Canonical main post-merge verification: buildq #1697 pub get, #1698 analyze (clean), #1699 all 62 tests, #1700 release APK 53,838,525 bytes with SHA-256 a6154b02625281ee5c0784013bf87f6eb28cc5f2553fffc9bddd4f426d79ac29; buildq #1701 installed this exact canonical APK on Waydroid and MainActivity cold-launched successfully (167 ms). The rebuilt APK byte hash differs from the earlier identical-source worktree release.
