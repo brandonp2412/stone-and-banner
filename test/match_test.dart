@@ -134,24 +134,35 @@ void main() {
       s,
       const ProposeTrade(1, Resource.wood, 2, Resource.wool, 2),
     );
-    expect(() => MatchEngine.apply(s, const EndTurn()), throwsStateError);
+    final firstOffer = s.offers.single.id;
     expect(
       () => MatchEngine.apply(s, const RespondTrade(2, true)),
       throwsStateError,
     );
-    s = MatchEngine.apply(s, const RespondTrade(1, true));
+    s = MatchEngine.apply(s, const EndTurn());
+    final roll = MatchEngine.expectedDice(s);
+    s = MatchEngine.apply(s, RollDice(roll.$1, roll.$2));
+    if (s.phase == MatchPhase.bandit) {
+      s = MatchEngine.apply(s, MoveBandit((s.banditTile + 1) % 19));
+    }
+    s = MatchEngine.apply(s, RespondTrade(1, true, offerId: firstOffer));
     conserved(s);
     expect(
       s.players[1].stores[Resource.wood],
       second[Resource.wood] == null ? 2 : second[Resource.wood]! + 2,
     );
+    s = s.copyWith(active: 0, phase: MatchPhase.actions);
     s = MatchEngine.apply(
       s,
       const ProposeTrade(1, Resource.brick, 1, Resource.wool, 1),
     );
-    final before = s.players[0].stores;
-    s = MatchEngine.apply(s, const RespondTrade(1, false));
-    expect(s.players[0].stores, before);
+    final before = s.players[0].stores[Resource.brick] ?? 0;
+    s = s.copyWith(active: 1, phase: MatchPhase.actions);
+    s = MatchEngine.apply(
+      s,
+      RespondTrade(1, false, offerId: s.offers.single.id),
+    );
+    expect(s.players[0].stores[Resource.brick], before + 1);
     conserved(s);
   });
 

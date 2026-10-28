@@ -37,3 +37,49 @@ Innovation (green), Commerce (yellow), and Governance (blue) each have 18 origin
 Card plays occur in the owner's action phase, after the Bandit is resolved and with no pending offer. An explicit target or resource choice is validated by the pure reducer, as are bank stock, road/fortification geometry, Knight eligibility and enemy-owned resources. Effects cannot create goods: resources move between player stores and finite bank or between player stores. Unplayable cards may remain in hand or be discarded; they never prevent ending a turn. Each action records a replay event. Public draw reports expose counts, never private card identities.
 
 See `docs/STAGE4_BALANCE.md` for sampling targets, measured event rates, limits, and unresolved match-equity deviations.
+
+
+## Stage 5 — Standing offers and out-of-turn responses
+
+**Standing trade.** During their action phase, a player may post one outstanding
+offer to another seat using positive quantities of two different goods. Offered
+goods leave spendable stores for escrow, and remain in finite supply totals.
+Terms are public, but the recipient's hand contents are not. Posting does not
+pause a turn or spend a reaction allowance. Only the recipient may accept or
+decline, during their own action phase. Acceptance transfers escrow exactly
+once and the requested available goods to the proposer; if insufficient,
+acceptance is disabled and decline remains legal. Decline and withdrawal
+return escrow. An offer expires/refunds as its proposer next becomes active,
+after every other seat had a turn. Only one offer per proposer is live. A
+recipient may counter once during their action phase, atomically refunding
+and replacing original escrow, reversing roles and setting a counter flag.
+A counter cannot itself be countered.
+
+**Tactical window.** A qualifying event is recorded before its effect settles.
+The acting seat cannot move during the response. Each window carries an
+event-ordinal ID and a deterministic respondent queue. Every response and
+timeout must match both ID and first responder; stale or duplicate actions
+fail. Pass/timeout never spends allowance. A seat has **one successful
+tactical response per round**; reset at the next completed round. Posting,
+accepting, declining or countering a standing trade, ordinary turn actions
+and passing do not consume it. Counter-responses cannot recurse.
+
+- **Bandit:** After a victim is chosen and before seeded theft, that victim
+  may intercept using any active Knight if the allowance remains. The
+  lowest-index active Knight is exhausted; the Bandit moves without theft.
+  Pass/timeout makes the one original seeded theft.
+- **Governance:** A targeted Political Pressure or Supply Raid can be
+  canceled by a held Boundary Dispute; targeted Defection by held Defection.
+  Attacker and counter cards are each discarded once; nothing transfers.
+  Pass/timeout applies the original validated effect once. Other plays
+  settle immediately.
+- **Invasion:** At the round boundary, before resolution, eligible nonacting
+  seats with wheat or ore respond clockwise after the new active seat.
+  Each may spend exactly one wheat (+1 temporary defence) or ore (+2)
+  to the bank; or pass. Aid does not count toward Knight Honour. After
+  the last response, the active seat resolves; temporary aid resets.
+
+Local pass-and-play uses private handoff, immediate Pass and visible
+Skip/timeout fallback without mandatory waiting. A future authoritative
+network session can schedule TimeoutTactical events; device wall clocks
+do not enter game state or replay. All ordering and expiry is event-derived.

@@ -1,3 +1,4 @@
+// ignore_for_file: prefer_interpolation_to_compose_strings
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -287,39 +288,42 @@ class _MatchViewState extends State<MatchView> {
     );
   }
 
-  Future<void> offer() async {
-    var target = (s.active + 1) % s.players.length;
-    var give = Resource.wood, take = Resource.wool;
-    var countGive = 1, countTake = 1;
+  Future<void> offer([TradeProposal? counter]) async {
+    var target = counter?.proposer ?? (s.active + 1) % s.players.length;
+    var give = counter?.want ?? Resource.wood;
+    var take = counter?.give ?? Resource.wool;
+    var countGive = counter?.wantCount ?? 1;
+    var countTake = counter?.giveCount ?? 1;
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, update) {
           final valid =
-              give != take &&
-              (s.current.stores[give] ?? 0) >= countGive &&
-              (s.players[target].stores[take] ?? 0) >= countTake;
+              give != take && (s.current.stores[give] ?? 0) >= countGive;
           return AlertDialog(
-            title: const Text('Offer a trade'),
+            title: Text(
+              counter == null ? 'Standing trade offer' : 'Counteroffer',
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<int>(
-                    key: ValueKey(target),
-                    initialValue: target,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Offer to'),
-                    items: [
-                      for (var i = 0; i < s.players.length; i++)
-                        if (i != s.active)
-                          DropdownMenuItem(
-                            value: i,
-                            child: Text(s.players[i].id),
-                          ),
-                    ],
-                    onChanged: (v) => update(() => target = v!),
-                  ),
+                  if (counter == null)
+                    DropdownButtonFormField<int>(
+                      key: ValueKey(target),
+                      initialValue: target,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Offer to'),
+                      items: [
+                        for (var i = 0; i < s.players.length; i++)
+                          if (i != s.active)
+                            DropdownMenuItem(
+                              value: i,
+                              child: Text(s.players[i].id),
+                            ),
+                      ],
+                      onChanged: (v) => update(() => target = v!),
+                    ),
                   const SizedBox(height: 12),
                   _GoodInput(
                     label: 'You give',
@@ -359,11 +363,14 @@ class _MatchViewState extends State<MatchView> {
                             countGive,
                             take,
                             countTake,
+                            counterOf: counter?.id,
                           ),
                         );
                       }
                     : null,
-                child: const Text('Send offer'),
+                child: Text(
+                  counter == null ? 'Escrow and offer' : 'Send counter',
+                ),
               ),
             ],
           );
@@ -374,6 +381,9 @@ class _MatchViewState extends State<MatchView> {
 
   @override
   Widget build(BuildContext context) {
+    if (s.tactical != null) {
+      return _TacticalPanel(state: s, onEvent: send);
+    }
     final phase = s.phase;
     final winner = MatchEngine.winner(s);
     final instruction = switch (phase) {
@@ -490,45 +500,90 @@ class _MatchViewState extends State<MatchView> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Reaver Fleet ${s.reaverPressure}/3 · Defence ${MatchEngine.defenceStrength(s)} · First Capital: ${s.firstCapitalOwner == null ? 'unclaimed' : s.players[s.firstCapitalOwner!].id}',
+              'Reaver Fleet ${s.reaverPressure}/3 · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid} · First Capital: ${s.firstCapitalOwner == null ? 'unclaimed' : s.players[s.firstCapitalOwner!].id}',
             ),
             if (s.lastInvasion.isNotEmpty) Text(s.lastInvasion),
-            if (s.trade case final TradeProposal trade)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        '${s.current.id} offers ${trade.giveCount} ${trade.give.name} for ${trade.wantCount} ${trade.want.name}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text('Decision: ${s.players[trade.target].id}'),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () =>
-                                  send(RespondTrade(trade.target, false)),
-                              child: const Text('Decline'),
-                            ),
+            if (phase == MatchPhase.actions && s.offers.isNotEmpty)
+              for (final trade in s.offers)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Offer #' +
+                              trade.id.toString() +
+                              ': ' +
+                              s.players[trade.proposer].id +
+                              ' gives ' +
+                              trade.giveCount.toString() +
+                              ' ' +
+                              trade.give.name +
+                              ' for ' +
+                              trade.wantCount.toString() +
+                              ' ' +
+                              trade.want.name +
+                              ' from ' +
+                              s.players[trade.target].id,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        if (trade.target == s.active) ...[
+                          const Text(
+                            'Decide this turn; escrow is held until expiry.',
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: FilledButton(
-                              onPressed: () =>
-                                  send(RespondTrade(trade.target, true)),
-                              child: const Text('Accept'),
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              OutlinedButton(
+                                onPressed: () => send(
+                                  RespondTrade(
+                                    s.active,
+                                    false,
+                                    offerId: trade.id,
+                                  ),
+                                ),
+                                child: const Text('Decline'),
+                              ),
+                              FilledButton(
+                                onPressed:
+                                    (s.current.stores[trade.want] ?? 0) >=
+                                        trade.wantCount
+                                    ? () => send(
+                                        RespondTrade(
+                                          s.active,
+                                          true,
+                                          offerId: trade.id,
+                                        ),
+                                      )
+                                    : null,
+                                child: const Text('Accept'),
+                              ),
+                              if (!trade.isCounter &&
+                                  s.offers.every((o) => o.proposer != s.active))
+                                TextButton(
+                                  onPressed: () => offer(trade),
+                                  child: const Text('Counter'),
+                                ),
+                            ],
+                          ),
+                        ] else if (trade.proposer == s.active) ...[
+                          const Text(
+                            'Your goods are reserved until accepted, declined, or expired.',
+                          ),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              onPressed: () => send(WithdrawTrade(trade.id)),
+                              child: const Text('Withdraw'),
                             ),
                           ),
                         ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              )
-            else if (phase == MatchPhase.invasion)
+            if (phase == MatchPhase.invasion)
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -536,9 +591,15 @@ class _MatchViewState extends State<MatchView> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Fleet strength ${MatchEngine.invasionStrength(s)} · Defence ${MatchEngine.defenceStrength(s)}',
+                        'Fleet strength ${MatchEngine.invasionStrength(s)} · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid}',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
+                      if (s.invasionAid > 0)
+                        Text(
+                          'Emergency aid +' +
+                              s.invasionAid.toString() +
+                              ' is included in the defence preview.',
+                        ),
                       const Text(
                         'All active Knights and Fortifications defend. '
                         'A failed defence damages the highest-scoring Town '
@@ -759,6 +820,176 @@ class _MatchViewState extends State<MatchView> {
               ),
             if (s.dice != null)
               Text('Last dice: ${s.dice} · Event ${s.events.length}'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The entire normal hand/board is hidden for a visiting reaction seat.
+class _TacticalPanel extends StatelessWidget {
+  const _TacticalPanel({required this.state, required this.onEvent});
+  final MatchState state;
+  final ValueChanged<MatchEvent> onEvent;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = state.tactical!;
+    final responder = w.responder;
+    final label = switch (w.kind) {
+      TacticalKind.bandit => 'Bandit interception',
+      TacticalKind.governance => 'Governance challenge',
+      TacticalKind.invasion => 'Invasion emergency aid',
+    };
+    final detail = switch (w.kind) {
+      TacticalKind.bandit =>
+        'An opponent is trying to steal a random good. '
+            'Exhaust one active Knight to prevent the theft.',
+      TacticalKind.governance =>
+        'A targeted Governance card is pending. '
+            'Spend the matching countercard to cancel it.',
+      TacticalKind.invasion =>
+        'One wheat gives +1 defence; one ore gives +2. '
+            'Both go to the bank. The aid lasts for this invasion only.',
+    };
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              'Response for ' + state.players[responder].id,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 420,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 170),
+                transitionBuilder: (child, animation) =>
+                    FadeTransition(opacity: animation, child: child),
+                child: Card(
+                  key: ValueKey(w.id.toString() + ':' + responder.toString()),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  label,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium,
+                                ),
+                                const SizedBox(height: 10),
+                                Text(detail),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Response allowance: ' +
+                                      (state.reactionsUsed.contains(responder)
+                                          ? 'spent'
+                                          : 'available'),
+                                ),
+                                if (w.kind == TacticalKind.bandit &&
+                                    MatchEngine.canIntercept(state, responder))
+                                  FilledButton.icon(
+                                    onPressed: () => onEvent(
+                                      RespondTactical(
+                                        w.id,
+                                        responder,
+                                        TacticalChoice.intercept,
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.shield_outlined),
+                                    label: const Text('Intercept with Knight'),
+                                  ),
+                                if (w.kind == TacticalKind.governance)
+                                  for (final i in MatchEngine.counterCards(
+                                    state,
+                                    responder,
+                                    w.card!,
+                                  ))
+                                    FilledButton.icon(
+                                      onPressed: () => onEvent(
+                                        RespondTactical(
+                                          w.id,
+                                          responder,
+                                          TacticalChoice.counter,
+                                          cardIndex: i,
+                                        ),
+                                      ),
+                                      icon: const Icon(Icons.gavel_outlined),
+                                      label: Text(
+                                        'Counter: ' +
+                                            state
+                                                .players[responder]
+                                                .cards[i]
+                                                .definition
+                                                .name,
+                                      ),
+                                    ),
+                                if (w.kind == TacticalKind.invasion)
+                                  for (final good in [
+                                    Resource.wheat,
+                                    Resource.ore,
+                                  ])
+                                    if ((state
+                                                .players[responder]
+                                                .stores[good] ??
+                                            0) >
+                                        0)
+                                      FilledButton.icon(
+                                        onPressed: () => onEvent(
+                                          RespondTactical(
+                                            w.id,
+                                            responder,
+                                            TacticalChoice.aid,
+                                            good: good,
+                                          ),
+                                        ),
+                                        icon: const Icon(
+                                          Icons.volunteer_activism_outlined,
+                                        ),
+                                        label: Text('Pledge 1 ' + good.name),
+                                      ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        OutlinedButton(
+                          onPressed: () => onEvent(
+                            RespondTactical(
+                              w.id,
+                              responder,
+                              TacticalChoice.pass,
+                            ),
+                          ),
+                          child: const Text('Pass'),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              onEvent(TimeoutTactical(w.id, responder)),
+                          child: const Text('Skip / timeout fallback'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Only this seat’s reaction choices are shown. '
+              'A response or pass returns play to the original turn.',
+            ),
           ],
         ),
       ),

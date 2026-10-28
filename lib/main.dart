@@ -14,6 +14,7 @@ class StoneBannerApp extends StatefulWidget {
 }
 
 class _StoneBannerAppState extends State<StoneBannerApp> {
+  final messengerKey = GlobalKey<ScaffoldMessengerState>();
   Page page = Page.home;
   MatchState? match;
   bool handoff = false;
@@ -33,7 +34,7 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
   }
 
   void fail(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    messengerKey.currentState?.showSnackBar(SnackBar(content: Text(text)));
   }
 
   void start() {
@@ -58,9 +59,8 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
       final s = MatchEngine.apply(match!, event);
       setState(() {
         handoff =
-            s.active != match!.active ||
-            event is ProposeTrade ||
-            event is RespondTrade;
+            (s.tactical?.responder ?? s.active) !=
+            (match!.tactical?.responder ?? match!.active);
         match = s;
       });
     } on StateError catch (e) {
@@ -68,33 +68,11 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
     }
   }
 
-  Future<void> importMatch() async {
-    final controller = TextEditingController();
+  Future<void> importMatch(BuildContext dialogContext) async {
     final raw = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Import replay'),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            labelText: 'Paste replay JSON',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Load'),
-          ),
-        ],
-      ),
+      context: dialogContext,
+      builder: (context) => const _ReplayImportDialog(),
     );
-    controller.dispose();
     if (raw == null) return;
     try {
       final loaded = MatchEngine.importReplay(raw);
@@ -113,6 +91,7 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
     final current = match;
     return MaterialApp(
       title: 'Stone & Banner',
+      scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -249,7 +228,7 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                             label: const Text('Read the rules'),
                           ),
                           OutlinedButton.icon(
-                            onPressed: importMatch,
+                            onPressed: () => importMatch(context),
                             icon: const Icon(Icons.history),
                             label: const Text('Import replay'),
                           ),
@@ -269,6 +248,8 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                               child: const Text('Create a match'),
                             ),
                           )
+                        : handoff
+                        ? const SizedBox.expand()
                         : MatchView(state: current, onEvent: dispatch),
                   Page.rules => Center(
                     child: ConstrainedBox(
@@ -296,6 +277,10 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                           const _Rule(
                             'Trade',
                             'Bank rate 4:1, or once per round at 3:1 if trailing by at least three points. Rival offers need consent.',
+                          ),
+                          const _Rule(
+                            'Reactions',
+                            'Standing offers reserve goods and can be accepted or countered on recipient turns. Bandit victims with active Knights can intercept; Governance targets can use matching countercards; Invasion allies may pledge aid. One successful tactical response per seat per round; Pass is always available.',
                           ),
                           const _Rule(
                             'Win',
@@ -337,19 +322,18 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                                   ),
                                   const SizedBox(height: 10),
                                   Text(
-                                    current.trade == null
-                                        ? current.current.id
-                                        : current
-                                              .players[current.trade!.target]
-                                              .id,
+                                    current
+                                        .players[current.tactical?.responder ??
+                                            current.active]
+                                        .id,
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleLarge,
                                   ),
                                   Text(
-                                    current.trade == null
+                                    current.tactical == null
                                         ? 'Your turn'
-                                        : 'Private trade decision',
+                                        : 'Private tactical response',
                                   ),
                                   const SizedBox(height: 20),
                                   FilledButton.icon(
@@ -373,6 +357,47 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
       ),
     );
   }
+}
+
+/// Owns the controller until the dialog's exit animation has finished.
+class _ReplayImportDialog extends StatefulWidget {
+  const _ReplayImportDialog();
+
+  @override
+  State<_ReplayImportDialog> createState() => _ReplayImportDialogState();
+}
+
+class _ReplayImportDialogState extends State<_ReplayImportDialog> {
+  final controller = TextEditingController();
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Import replay'),
+    content: TextField(
+      controller: controller,
+      maxLines: 5,
+      decoration: const InputDecoration(
+        labelText: 'Paste replay JSON',
+        border: OutlineInputBorder(),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, controller.text),
+        child: const Text('Load'),
+      ),
+    ],
+  );
 }
 
 class _Rule extends StatelessWidget {

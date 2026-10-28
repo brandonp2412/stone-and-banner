@@ -23,14 +23,40 @@ class Site {
 
 class TradeProposal {
   const TradeProposal(
+    this.id,
+    this.proposer,
     this.target,
     this.give,
     this.giveCount,
     this.want,
-    this.wantCount,
-  );
-  final int target, giveCount, wantCount;
+    this.wantCount, {
+    this.isCounter = false,
+  });
+  final int id, proposer, target, giveCount, wantCount;
   final Resource give, want;
+  final bool isCounter;
+}
+
+enum TacticalKind { bandit, governance, invasion }
+
+enum TacticalChoice { pass, intercept, counter, aid }
+
+/// A server may emit timeout events; no device clocks affect the reducer.
+class TacticalWindow {
+  TacticalWindow(
+    this.id,
+    this.kind,
+    this.actor,
+    List<int> responders, {
+    this.bandit,
+    this.card,
+  }) : responders = List.unmodifiable(responders);
+  final int id, actor;
+  final TacticalKind kind;
+  final List<int> responders;
+  final MoveBandit? bandit;
+  final PlayStrategyCard? card;
+  int get responder => responders.first;
 }
 
 sealed class MatchEvent {
@@ -99,9 +125,11 @@ class ProposeTrade extends MatchEvent {
     this.give,
     this.giveCount,
     this.want,
-    this.wantCount,
-  );
+    this.wantCount, {
+    this.counterOf,
+  });
   final int target, giveCount, wantCount;
+  final int? counterOf;
   final Resource give, want;
   @override
   Map<String, Object?> toJson() => {
@@ -111,18 +139,62 @@ class ProposeTrade extends MatchEvent {
     'giveCount': giveCount,
     'want': want.name,
     'wantCount': wantCount,
+    'counterOf': counterOf,
   };
 }
 
 class RespondTrade extends MatchEvent {
-  const RespondTrade(this.player, this.accept);
+  const RespondTrade(this.player, this.accept, {this.offerId});
   final int player;
   final bool accept;
+  final int? offerId;
   @override
   Map<String, Object?> toJson() => {
     'type': 'answer',
     'player': player,
     'accept': accept,
+    'offerId': offerId,
+  };
+}
+
+class WithdrawTrade extends MatchEvent {
+  const WithdrawTrade(this.offerId);
+  final int offerId;
+  @override
+  Map<String, Object?> toJson() => {'type': 'withdraw', 'offerId': offerId};
+}
+
+class RespondTactical extends MatchEvent {
+  const RespondTactical(
+    this.windowId,
+    this.player,
+    this.choice, {
+    this.cardIndex,
+    this.good,
+  });
+  final int windowId, player;
+  final TacticalChoice choice;
+  final int? cardIndex;
+  final Resource? good;
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'tactical',
+    'windowId': windowId,
+    'player': player,
+    'choice': choice.name,
+    'cardIndex': cardIndex,
+    'good': good?.name,
+  };
+}
+
+class TimeoutTactical extends MatchEvent {
+  const TimeoutTactical(this.windowId, this.player);
+  final int windowId, player;
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'tacticalTimeout',
+    'windowId': windowId,
+    'player': player,
   };
 }
 
@@ -247,7 +319,10 @@ class MatchState {
     Map<StrategyDeck, List<int>> drawPiles = const {},
     Map<StrategyDeck, List<int>> discardPiles = const {},
     this.lastCardEvent = '',
-    this.trade,
+    List<TradeProposal> offers = const [],
+    this.tactical,
+    Set<int> reactionsUsed = const {},
+    this.invasionAid = 0,
     List<MatchEvent> events = const [],
   }) : players = List.unmodifiable(players),
        sites = Map.unmodifiable(sites),
@@ -269,6 +344,8 @@ class MatchState {
            (track, pile) => MapEntry(track, List<int>.unmodifiable(pile)),
          ),
        ),
+       offers = List.unmodifiable(offers),
+       reactionsUsed = Set.unmodifiable(reactionsUsed),
        events = List.unmodifiable(events);
 
   final int seed, active, setupStep, rollCount, banditTile, round;
@@ -289,7 +366,10 @@ class MatchState {
   final Set<int> catchupUsed;
   final Map<StrategyDeck, List<int>> drawPiles, discardPiles;
   final String lastCardEvent;
-  final TradeProposal? trade;
+  final List<TradeProposal> offers;
+  final TacticalWindow? tactical;
+  final Set<int> reactionsUsed;
+  final int invasionAid;
   final List<MatchEvent> events;
 
   PlayerState get current => players[active];
@@ -325,8 +405,11 @@ class MatchState {
     Map<StrategyDeck, List<int>>? drawPiles,
     Map<StrategyDeck, List<int>>? discardPiles,
     String? lastCardEvent,
-    TradeProposal? trade,
-    bool clearTrade = false,
+    List<TradeProposal>? offers,
+    TacticalWindow? tactical,
+    bool clearTactical = false,
+    Set<int>? reactionsUsed,
+    int? invasionAid,
     List<MatchEvent>? events,
   }) => MatchState(
     seed: seed,
@@ -363,7 +446,10 @@ class MatchState {
     drawPiles: drawPiles ?? this.drawPiles,
     discardPiles: discardPiles ?? this.discardPiles,
     lastCardEvent: lastCardEvent ?? this.lastCardEvent,
-    trade: clearTrade ? null : trade ?? this.trade,
+    offers: offers ?? this.offers,
+    tactical: clearTactical ? null : tactical ?? this.tactical,
+    reactionsUsed: reactionsUsed ?? this.reactionsUsed,
+    invasionAid: invasionAid ?? this.invasionAid,
     events: events ?? this.events,
   );
 }
@@ -488,8 +574,25 @@ class MatchEngine {
           e['giveCount'] as int,
           resource('want'),
           e['wantCount'] as int,
+          counterOf: e['counterOf'] as int?,
         ),
-        'answer' => RespondTrade(e['player'] as int, e['accept'] as bool),
+        'answer' => RespondTrade(
+          e['player'] as int,
+          e['accept'] as bool,
+          offerId: e['offerId'] as int?,
+        ),
+        'withdraw' => WithdrawTrade(e['offerId'] as int),
+        'tactical' => RespondTactical(
+          e['windowId'] as int,
+          e['player'] as int,
+          TacticalChoice.values.byName(e['choice'] as String),
+          cardIndex: e['cardIndex'] as int?,
+          good: e['good'] == null ? null : resource('good'),
+        ),
+        'tacticalTimeout' => TimeoutTactical(
+          e['windowId'] as int,
+          e['player'] as int,
+        ),
         'end' => const EndTurn(),
         _ => throw FormatException('Unknown event type.'),
       };
@@ -559,15 +662,31 @@ class MatchEngine {
     'roads': [
       for (final key in (s.roads.keys.toList()..sort())) [key, s.roads[key]],
     ],
-    'trade': s.trade == null
+    'offers': [
+      for (final o in s.offers)
+        [
+          o.id,
+          o.proposer,
+          o.target,
+          o.give.name,
+          o.giveCount,
+          o.want.name,
+          o.wantCount,
+          o.isCounter,
+        ],
+    ],
+    'tactical': s.tactical == null
         ? null
         : [
-            s.trade!.target,
-            s.trade!.give.name,
-            s.trade!.giveCount,
-            s.trade!.want.name,
-            s.trade!.wantCount,
+            s.tactical!.id,
+            s.tactical!.kind.name,
+            s.tactical!.actor,
+            s.tactical!.responders,
+            s.tactical!.bandit?.toJson(),
+            s.tactical!.card?.toJson(),
           ],
+    'reactionsUsed': s.reactionsUsed.toList()..sort(),
+    'invasionAid': s.invasionAid,
     'events': [for (final e in s.events) e.toJson()],
   });
 
@@ -606,9 +725,7 @@ class MatchEngine {
     }
     if (s.topology.neighbours(vertex).any(s.sites.containsKey)) return false;
     if (s.phase == MatchPhase.setupVillage) return true;
-    if (s.phase != MatchPhase.actions ||
-        s.trade != null ||
-        !affordable(s, villageCost)) {
+    if (s.phase != MatchPhase.actions || !affordable(s, villageCost)) {
       return false;
     }
     return s.topology.vertices[vertex].edges.any((e) => s.roads[e] == s.active);
@@ -627,9 +744,7 @@ class MatchEngine {
     if (s.phase == MatchPhase.setupRoad) {
       return e.a == s.pendingVillage || e.b == s.pendingVillage;
     }
-    if (s.phase != MatchPhase.actions ||
-        s.trade != null ||
-        !affordable(s, effectiveRoadCost(s))) {
+    if (s.phase != MatchPhase.actions || !affordable(s, effectiveRoadCost(s))) {
       return false;
     }
     bool linked(int vertex) {
@@ -643,7 +758,7 @@ class MatchEngine {
   }
 
   static bool legalUpgrade(MatchState s, int vertex) {
-    if (s.phase != MatchPhase.actions || s.trade != null) return false;
+    if (s.phase != MatchPhase.actions) return false;
     final site = s.sites[vertex];
     if (site == null ||
         site.owner != s.active ||
@@ -661,7 +776,6 @@ class MatchEngine {
   static bool canDevelop(MatchState s, StrategyDeck track) {
     final level = s.current.level(track);
     return s.phase == MatchPhase.actions &&
-        s.trade == null &&
         level < 5 &&
         s.sites.values.any(
           (site) =>
@@ -672,7 +786,6 @@ class MatchEngine {
 
   static bool legalFort(MatchState s, int vertex) =>
       s.phase == MatchPhase.actions &&
-      s.trade == null &&
       s.sites[vertex]?.owner == s.active &&
       s.sites[vertex]!.structure != Structure.village &&
       !s.fortified.contains(vertex) &&
@@ -680,7 +793,6 @@ class MatchEngine {
 
   static bool legalRecruit(MatchState s, int vertex) {
     if (s.phase != MatchPhase.actions ||
-        s.trade != null ||
         vertex < 0 ||
         vertex >= s.topology.vertices.length ||
         s.knights.containsKey(vertex) ||
@@ -700,7 +812,6 @@ class MatchEngine {
   static bool legalActivate(MatchState s, int vertex) {
     final knight = s.knights[vertex];
     return s.phase == MatchPhase.actions &&
-        s.trade == null &&
         knight != null &&
         knight.owner == s.active &&
         !knight.active &&
@@ -717,7 +828,6 @@ class MatchEngine {
   static bool legalPromote(MatchState s, int vertex) {
     final knight = s.knights[vertex];
     return s.phase == MatchPhase.actions &&
-        s.trade == null &&
         knight != null &&
         knight.owner == s.active &&
         knight.active &&
@@ -729,7 +839,6 @@ class MatchEngine {
   static bool legalMoveKnight(MatchState s, int from, int to) {
     final knight = s.knights[from], occupant = s.knights[to];
     if (s.phase != MatchPhase.actions ||
-        s.trade != null ||
         knight == null ||
         knight.owner != s.active ||
         !knight.active ||
@@ -877,7 +986,6 @@ class MatchEngine {
   /// Empty options never block End Turn or the explicit discard action.
   static List<PlayStrategyCard> legalCardPlays(MatchState s, int handIndex) {
     if (s.phase != MatchPhase.actions ||
-        s.trade != null ||
         handIndex < 0 ||
         handIndex >= s.current.cards.length) {
       return [];
@@ -1297,7 +1405,8 @@ class MatchEngine {
   }
 
   static MatchState _resolveInvasion(MatchState s) {
-    final strength = defenceStrength(s), threat = invasionStrength(s);
+    final strength = defenceStrength(s) + s.invasionAid,
+        threat = invasionStrength(s);
     var report = '';
     var result = s;
     if (strength >= threat) {
@@ -1386,8 +1495,175 @@ class MatchEngine {
       phase: MatchPhase.roll,
       invasions: s.invasions + 1,
       reaverPressure: 0,
+      invasionAid: 0,
       lastInvasion: report,
     );
+  }
+
+  static bool canIntercept(MatchState s, int player) =>
+      !s.reactionsUsed.contains(player) &&
+      s.knights.values.any((k) => k.owner == player && k.active);
+
+  static List<int> counterCards(
+    MatchState s,
+    int player,
+    PlayStrategyCard attack,
+  ) {
+    if (s.reactionsUsed.contains(player)) return [];
+    final power = s.current.cards[attack.handIndex].definition.power;
+    final required = switch (power) {
+      CardPower.seizeGood => 'boundary-dispute',
+      CardPower.exhaust => 'defection',
+      _ => '',
+    };
+    if (required.isEmpty) return [];
+    return [
+      for (var i = 0; i < s.players[player].cards.length; i++)
+        if (s.players[player].cards[i].definition.id == required) i,
+    ];
+  }
+
+  static bool canAid(MatchState s, int player) =>
+      !s.reactionsUsed.contains(player) &&
+      ((s.players[player].stores[Resource.wheat] ?? 0) > 0 ||
+          (s.players[player].stores[Resource.ore] ?? 0) > 0);
+
+  static MatchState _refund(MatchState s, TradeProposal offer) {
+    final players = s.players.toList();
+    final stores = Map<Resource, int>.of(players[offer.proposer].stores);
+    stores[offer.give] = (stores[offer.give] ?? 0) + offer.giveCount;
+    players[offer.proposer] = players[offer.proposer].copyWith(stores: stores);
+    return s.copyWith(players: players);
+  }
+
+  static MatchState _consumeCardAt(MatchState s, int player, int index) {
+    final cards = s.players[player].cards.toList();
+    final used = cards.removeAt(index);
+    final players = s.players.toList();
+    players[player] = players[player].copyWith(cards: cards);
+    return s.copyWith(
+      players: players,
+      discardPiles: {
+        ...s.discardPiles,
+        used.track: [...?s.discardPiles[used.track], used.index],
+      },
+    );
+  }
+
+  static MatchState _takeBandit(MatchState s, MoveBandit move) {
+    final players = s.players.toList();
+    if (move.victim case final int victim) {
+      final target = players[victim];
+      final goods = [
+        for (final resource in Resource.values)
+          for (var n = 0; n < (target.stores[resource] ?? 0); n++) resource,
+      ];
+      final index = _random(s.seed ^ s.rollCount ^ (move.tile << 16) ^ victim);
+      final stolen = goods[index % goods.length];
+      final from = Map<Resource, int>.of(target.stores);
+      final to = Map<Resource, int>.of(s.current.stores);
+      from[stolen] = from[stolen]! - 1;
+      to[stolen] = (to[stolen] ?? 0) + 1;
+      players[victim] = target.copyWith(stores: from);
+      players[s.active] = s.current.copyWith(stores: to);
+    }
+    return s.copyWith(
+      players: players,
+      banditTile: move.tile,
+      phase: MatchPhase.actions,
+    );
+  }
+
+  static MatchState _react(MatchState s, MatchEvent event) {
+    final window = s.tactical;
+    _require(window != null, 'No tactical window.');
+    final w = window!;
+    final timedOut = event is TimeoutTactical;
+    final response = event is RespondTactical ? event : null;
+    if (response != null) {
+      _require(response.windowId == w.id, 'Stale tactical response.');
+    }
+    final player = event is TimeoutTactical ? event.player : response!.player;
+    _require(player == w.responder, 'Wrong reaction seat.');
+    if (event is TimeoutTactical) {
+      _require(event.windowId == w.id, 'Stale reaction deadline.');
+    }
+    final choice = timedOut
+        ? TacticalChoice.pass
+        : (event as RespondTactical).choice;
+    var blocked = false;
+    if (choice == TacticalChoice.intercept) {
+      _require(
+        w.kind == TacticalKind.bandit && canIntercept(s, player),
+        'No active Knight or response allowance.',
+      );
+      final vertex =
+          (s.knights.keys
+                  .where(
+                    (v) =>
+                        s.knights[v]!.owner == player && s.knights[v]!.active,
+                  )
+                  .toList()
+                ..sort())
+              .first;
+      s = s.copyWith(
+        knights: {
+          ...s.knights,
+          vertex: s.knights[vertex]!.copyWith(active: false),
+        },
+        reactionsUsed: {...s.reactionsUsed, player},
+      );
+      blocked = true;
+    } else if (choice == TacticalChoice.counter) {
+      _require(
+        w.kind == TacticalKind.governance &&
+            response?.cardIndex != null &&
+            counterCards(s, player, w.card!).contains(response?.cardIndex),
+        'No eligible Governance countercard.',
+      );
+      s = _consumeCardAt(s, player, response!.cardIndex!);
+      s = _consumeCardAt(s, w.actor, w.card!.handIndex);
+      s = s.copyWith(reactionsUsed: {...s.reactionsUsed, player});
+      blocked = true;
+    } else if (choice == TacticalChoice.aid) {
+      _require(
+        w.kind == TacticalKind.invasion &&
+            canAid(s, player) &&
+            response?.good != null &&
+            {Resource.wheat, Resource.ore}.contains(response?.good) &&
+            (s.players[player].stores[response?.good] ?? 0) > 0,
+        'Cannot pledge that aid.',
+      );
+      final good = response!.good!;
+      final players = s.players.toList();
+      final stores = Map<Resource, int>.of(players[player].stores);
+      stores[good] = stores[good]! - 1;
+      players[player] = players[player].copyWith(stores: stores);
+      s = s.copyWith(
+        players: players,
+        bank: {...s.bank, good: s.bank[good]! + 1},
+        invasionAid: s.invasionAid + (good == Resource.ore ? 2 : 1),
+        reactionsUsed: {...s.reactionsUsed, player},
+      );
+    } else {
+      _require(choice == TacticalChoice.pass, 'Invalid reaction.');
+    }
+    s = s.copyWith(clearTactical: true);
+    if (w.kind == TacticalKind.bandit) {
+      return _takeBandit(
+        s,
+        MoveBandit(w.bandit!.tile, victim: blocked ? null : w.bandit!.victim),
+      );
+    }
+    if (w.kind == TacticalKind.governance) {
+      return blocked ? s : _playStrategyCard(s, w.card!);
+    }
+    final remaining = w.responders.skip(1).where((p) => canAid(s, p)).toList();
+    return remaining.isEmpty
+        ? s
+        : s.copyWith(
+            tactical: TacticalWindow(w.id, w.kind, w.actor, remaining),
+          );
   }
 
   static MatchState _awardSetupGoods(MatchState s, int vertex) {
@@ -1414,12 +1690,16 @@ class MatchEngine {
       'Match is finished.',
     );
     _require(
-      state.trade == null || event is RespondTrade,
-      'Respond to the offer first.',
+      state.tactical == null ||
+          event is RespondTactical ||
+          event is TimeoutTactical,
+      'Resolve or pass the tactical window first.',
     );
     var s = state;
 
-    if (event is PlaceVillage) {
+    if (event is RespondTactical || event is TimeoutTactical) {
+      s = _react(s, event);
+    } else if (event is PlaceVillage) {
       _require(
         legalVillage(s, event.vertex),
         'Village cannot be placed there.',
@@ -1614,29 +1894,17 @@ class MatchEngine {
         event.victim == null || eligible.contains(event.victim),
         'Victim must have goods and border the selected tile.',
       );
-      var players = List<PlayerState>.of(s.players);
-      if (event.victim case final int victim) {
-        final target = players[victim];
-        final goods = [
-          for (final resource in Resource.values)
-            for (var n = 0; n < (target.stores[resource] ?? 0); n++) resource,
-        ];
-        final index = _random(
-          s.seed ^ s.rollCount ^ (event.tile << 16) ^ victim,
-        );
-        final stolen = goods[index % goods.length];
-        final from = Map<Resource, int>.of(target.stores);
-        final to = Map<Resource, int>.of(s.current.stores);
-        from[stolen] = from[stolen]! - 1;
-        to[stolen] = (to[stolen] ?? 0) + 1;
-        players[victim] = target.copyWith(stores: from);
-        players[s.active] = s.current.copyWith(stores: to);
-      }
-      s = s.copyWith(
-        players: players,
-        banditTile: event.tile,
-        phase: MatchPhase.actions,
-      );
+      s = event.victim != null && canIntercept(s, event.victim!)
+          ? s.copyWith(
+              tactical: TacticalWindow(
+                s.events.length,
+                TacticalKind.bandit,
+                s.active,
+                [event.victim!],
+                bandit: event,
+              ),
+            )
+          : _takeBandit(s, event);
     } else if (event is BankExchange) {
       _require(s.phase == MatchPhase.actions, 'Trade after rolling.');
       _require(event.give != event.receive, 'Choose different goods.');
@@ -1673,7 +1941,7 @@ class MatchEngine {
         },
       );
     } else if (event is ProposeTrade) {
-      _require(s.phase == MatchPhase.actions, 'Trade after rolling.');
+      _require(s.phase == MatchPhase.actions, 'Offer during your actions.');
       _require(
         event.target >= 0 &&
             event.target < s.players.length &&
@@ -1685,47 +1953,111 @@ class MatchEngine {
         'Invalid offer.',
       );
       _require(
-        (s.current.stores[event.give] ?? 0) >= event.giveCount,
-        'You cannot offer goods you do not have.',
+        s.offers.every((o) => o.proposer != s.active),
+        'One standing offer per player.',
       );
+      var counter = false;
+      if (event.counterOf case final int id) {
+        final originals = s.offers
+            .where(
+              (o) =>
+                  o.id == id &&
+                  o.target == s.active &&
+                  o.proposer == event.target &&
+                  !o.isCounter,
+            )
+            .toList();
+        _require(originals.length == 1, 'Cannot counter this offer.');
+        s = _refund(s, originals.single);
+        s = s.copyWith(offers: s.offers.where((o) => o.id != id).toList());
+        counter = true;
+      }
       _require(
-        (s.players[event.target].stores[event.want] ?? 0) >= event.wantCount,
-        'Recipient lacks the requested goods.',
+        (s.current.stores[event.give] ?? 0) >= event.giveCount,
+        'You cannot escrow unavailable goods.',
       );
+      final players = s.players.toList();
+      final stores = Map<Resource, int>.of(s.current.stores);
+      stores[event.give] = stores[event.give]! - event.giveCount;
+      players[s.active] = s.current.copyWith(stores: stores);
       s = s.copyWith(
-        trade: TradeProposal(
-          event.target,
-          event.give,
-          event.giveCount,
-          event.want,
-          event.wantCount,
-        ),
+        players: players,
+        offers: [
+          ...s.offers,
+          TradeProposal(
+            s.events.length,
+            s.active,
+            event.target,
+            event.give,
+            event.giveCount,
+            event.want,
+            event.wantCount,
+            isCounter: counter,
+          ),
+        ],
       );
     } else if (event is RespondTrade) {
-      final offer = s.trade;
-      _require(offer != null, 'No outstanding trade offer.');
-      _require(event.player == offer!.target, 'Only the recipient can answer.');
+      _require(
+        s.phase == MatchPhase.actions && s.active == event.player,
+        'Answer offers on your own action turn.',
+      );
+      final choices = s.offers
+          .where(
+            (o) =>
+                o.target == event.player &&
+                (event.offerId == null || o.id == event.offerId),
+          )
+          .toList();
+      _require(choices.isNotEmpty, 'Offer expired or was already answered.');
+      final offer = choices.first;
       if (event.accept) {
-        final buyer = s.current, seller = s.players[event.player];
+        final seller = s.players[event.player];
         _require(
-          (buyer.stores[offer.give] ?? 0) >= offer.giveCount &&
-              (seller.stores[offer.want] ?? 0) >= offer.wantCount,
-          'Goods no longer available.',
+          (seller.stores[offer.want] ?? 0) >= offer.wantCount,
+          'Requested goods are no longer available. Decline instead.',
         );
-        final a = Map<Resource, int>.of(buyer.stores);
-        final b = Map<Resource, int>.of(seller.stores);
-        a[offer.give] = a[offer.give]! - offer.giveCount;
-        a[offer.want] = (a[offer.want] ?? 0) + offer.wantCount;
-        b[offer.want] = b[offer.want]! - offer.wantCount;
-        b[offer.give] = (b[offer.give] ?? 0) + offer.giveCount;
-        final players = List<PlayerState>.of(s.players);
-        players[s.active] = buyer.copyWith(stores: a);
-        players[event.player] = seller.copyWith(stores: b);
-        s = s.copyWith(players: players);
+        final buyers = s.players.toList();
+        final from = Map<Resource, int>.of(seller.stores);
+        final to = Map<Resource, int>.of(buyers[offer.proposer].stores);
+        from[offer.want] = from[offer.want]! - offer.wantCount;
+        from[offer.give] = (from[offer.give] ?? 0) + offer.giveCount;
+        to[offer.want] = (to[offer.want] ?? 0) + offer.wantCount;
+        buyers[event.player] = seller.copyWith(stores: from);
+        buyers[offer.proposer] = buyers[offer.proposer].copyWith(stores: to);
+        s = s.copyWith(players: buyers);
+      } else {
+        s = _refund(s, offer);
       }
-      s = s.copyWith(clearTrade: true);
+      s = s.copyWith(offers: s.offers.where((o) => o.id != offer.id).toList());
+    } else if (event is WithdrawTrade) {
+      _require(s.phase == MatchPhase.actions, 'Withdraw on your turn.');
+      final matches = s.offers
+          .where((o) => o.id == event.offerId && o.proposer == s.active)
+          .toList();
+      _require(matches.length == 1, 'Not your outstanding offer.');
+      s = _refund(s, matches.single);
+      s = s.copyWith(
+        offers: s.offers.where((o) => o.id != event.offerId).toList(),
+      );
     } else if (event is PlayStrategyCard) {
-      s = _playStrategyCard(s, event);
+      final validated = _playStrategyCard(s, event);
+      final power = s.current.cards[event.handIndex].definition.power;
+      final target = power == CardPower.seizeGood
+          ? event.target
+          : power == CardPower.exhaust
+          ? s.knights[event.vertex]?.owner
+          : null;
+      s = target != null && counterCards(s, target, event).isNotEmpty
+          ? s.copyWith(
+              tactical: TacticalWindow(
+                s.events.length,
+                TacticalKind.governance,
+                s.active,
+                [target],
+                card: event,
+              ),
+            )
+          : validated;
     } else if (event is DiscardStrategyCard) {
       _require(s.phase == MatchPhase.actions, 'Discard after rolling.');
       _require(
@@ -1736,6 +2068,15 @@ class MatchEngine {
     } else if (event is EndTurn) {
       _require(s.phase == MatchPhase.actions, 'Roll and resolve Bandit first.');
       final next = (s.active + 1) % s.players.length;
+      // Expire any offer when its proposer next receives the action turn.
+      // Its target has necessarily had a full opportunity to accept.
+      final expired = s.offers.where((o) => o.proposer == next).toList();
+      for (final offer in expired) {
+        s = _refund(s, offer);
+      }
+      s = s.copyWith(
+        offers: s.offers.where((o) => o.proposer != next).toList(),
+      );
       final newRound = s.round + (next == 0 ? 1 : 0);
       final pressure = s.reaverPressure + (next == 0 ? 1 : 0);
       s = s.copyWith(
@@ -1747,9 +2088,27 @@ class MatchEngine {
             ? MatchPhase.invasion
             : MatchPhase.roll,
         clearDice: true,
+        reactionsUsed: next == 0 ? {} : s.reactionsUsed,
         catchupUsed: next == 0 ? {} : s.catchupUsed,
         reliefUsed: next == 0 && (newRound - 1) % 3 == 0 ? {} : s.reliefUsed,
       );
+      if (s.phase == MatchPhase.invasion) {
+        final responders = [
+          for (var offset = 1; offset < s.players.length; offset++)
+            if (canAid(s, (s.active + offset) % s.players.length))
+              (s.active + offset) % s.players.length,
+        ];
+        if (responders.isNotEmpty) {
+          s = s.copyWith(
+            tactical: TacticalWindow(
+              s.events.length,
+              TacticalKind.invasion,
+              s.active,
+              responders,
+            ),
+          );
+        }
+      }
     }
     if (winner(s) != null) s = s.copyWith(phase: MatchPhase.finished);
     return s.copyWith(events: [...s.events, event]);

@@ -257,6 +257,10 @@ void main() {
       }
       for (var turn = 0; turn < 650; turn++) {
         if (s.phase == MatchPhase.invasion) {
+          while (s.tactical != null) {
+            final w = s.tactical!;
+            s = MatchEngine.apply(s, TimeoutTactical(w.id, w.responder));
+          }
           s = MatchEngine.apply(s, const ResolveInvasion());
         }
         if (s.phase == MatchPhase.roll) s = MatchEngine.roll(s);
