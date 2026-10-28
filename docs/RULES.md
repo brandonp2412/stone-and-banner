@@ -83,3 +83,16 @@ Local pass-and-play uses private handoff, immediate Pass and visible
 Skip/timeout fallback without mandatory waiting. A future authoritative
 network session can schedule TimeoutTactical events; device wall clocks
 do not enter game state or replay. All ordering and expiry is event-derived.
+
+## Stage 7 — measured balance, no production rule change
+
+All Stage 3–5 numerical rules above remain the release defaults. The
+deterministic simulation harness measures seeded legal bot games and compares
+replay-stored alternative rule parameters without enabling those alternatives
+in hot-seat or LAN sessions. A 360-game baseline found no clear first-seat
+or green runaway, but Commerce-focused bots won more often than Innovation.
+The tested recovery and Commerce variations did not consistently improve
+that gap in independent seeds; see `BALANCE.md`. A trailing seat can still
+trade 3:1 at most once per round, with real bank goods; drought relief is
+once per three-round season, behind by 3 VP, and never awards free points.
+These conclusions are bot-model-dependent, not proof of human match parity.

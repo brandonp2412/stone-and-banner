@@ -1,0 +1,82 @@
+{
+  "original": {
+    "games": 240,
+    "completed": 200,
+    "capped": 40,
+    "firstSeatWinShareCompleted": 0.33,
+    "trackWins": {
+      "innovation": 29,
+      "commerce": 106,
+      "governance": 65
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.11153846153846154,
+      "commerce": 0.4076923076923077,
+      "governance": 0.25
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 121,
+      "gamesWithTrailingSeat": 240,
+      "eligibleTrailingSeats": 606,
+      "probabilityPerEligibleSeat": 0.19966996699669967,
+      "probabilityPerEligibleGame": 0.5041666666666667
+    },
+    "meanTurns": 221.97916666666666,
+    "meanFullRounds": 68.54166666666667,
+    "unproductiveRounds": 751,
+    "unproductiveRoundShare": 0.04565349544072948,
+    "reactionOpportunities": 18772,
+    "reactionUses": 4559,
+    "reactionUseShare": 0.24286170892819092,
+    "cardPlays": {
+      "innovation": 2938,
+      "commerce": 2961,
+      "governance": 2716
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.04,
+      "commerce": 1.2,
+      "governance": 1.29
+    }
+  },
+  "market_4_to_1": {
+    "games": 240,
+    "completed": 200,
+    "capped": 40,
+    "firstSeatWinShareCompleted": 0.265,
+    "trackWins": {
+      "innovation": 35,
+      "commerce": 111,
+      "governance": 54
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.1346153846153846,
+      "commerce": 0.4269230769230769,
+      "governance": 0.2076923076923077
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 125,
+      "gamesWithTrailingSeat": 240,
+      "eligibleTrailingSeats": 625,
+      "probabilityPerEligibleSeat": 0.2,
+      "probabilityPerEligibleGame": 0.5208333333333334
+    },
+    "meanTurns": 223.17083333333332,
+    "meanFullRounds": 68.94583333333334,
+    "unproductiveRounds": 789,
+    "unproductiveRoundShare": 0.047682359340061646,
+    "reactionOpportunities": 18931,
+    "reactionUses": 4567,
+    "reactionUseShare": 0.2412445195710739,
+    "cardPlays": {
+      "innovation": 2932,
+      "commerce": 2982,
+      "governance": 2671
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.05,
+      "commerce": 1.2,
+      "governance": 1.28
+    }
+  }
+}

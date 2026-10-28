@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'advanced.dart';
+import 'balance.dart';
 import 'board.dart';
 import 'cards.dart';
 import 'game.dart';
@@ -290,6 +291,7 @@ class EndTurn extends MatchEvent {
 class MatchState {
   MatchState({
     required this.seed,
+    this.balance = MatchBalance.baseline,
     required this.board,
     required this.topology,
     required List<PlayerState> players,
@@ -349,6 +351,7 @@ class MatchState {
        events = List.unmodifiable(events);
 
   final int seed, active, setupStep, rollCount, banditTile, round;
+  final MatchBalance balance;
   final Board board;
   final BoardTopology topology;
   final List<PlayerState> players;
@@ -413,6 +416,7 @@ class MatchState {
     List<MatchEvent>? events,
   }) => MatchState(
     seed: seed,
+    balance: balance,
     board: board,
     topology: topology,
     players: players ?? this.players,
@@ -461,7 +465,7 @@ class MatchEngine {
   static const roadLimit = 15;
   static const roadCost = {Resource.wood: 1, Resource.brick: 1};
   static Map<Resource, int> effectiveRoadCost(MatchState s) =>
-      s.current.level(StrategyDeck.innovation) >= 2
+      s.current.level(StrategyDeck.innovation) >= s.balance.stoneworksTier
       ? {Resource.wood: 1}
       : roadCost;
   static const villageCost = {
@@ -487,7 +491,12 @@ class MatchEngine {
     if (!condition) throw StateError(reason);
   }
 
-  static MatchState newGame(List<String> names, int seed, {int? boardSeed}) {
+  static MatchState newGame(
+    List<String> names,
+    int seed, {
+    int? boardSeed,
+    MatchBalance balance = MatchBalance.baseline,
+  }) {
     _require(names.length >= 3 && names.length <= 4, 'Choose 3 or 4 players.');
     _require(
       names.every((n) => n.trim().isNotEmpty) &&
@@ -497,6 +506,7 @@ class MatchEngine {
     final board = BoardGenerator.generate(boardSeed ?? seed);
     return MatchState(
       seed: seed,
+      balance: balance,
       board: board,
       topology: BoardTopology(board),
       players: [for (final n in names) PlayerState(id: n)],
@@ -518,8 +528,9 @@ class MatchEngine {
     int seed,
     Iterable<MatchEvent> events, {
     int? boardSeed,
+    MatchBalance balance = MatchBalance.baseline,
   }) {
-    var state = newGame(names, seed, boardSeed: boardSeed);
+    var state = newGame(names, seed, boardSeed: boardSeed, balance: balance);
     for (final event in events) {
       state = apply(state, event);
     }
@@ -530,6 +541,7 @@ class MatchEngine {
     'format': 'stone-and-banner-replay-v1',
     'seed': s.seed,
     'boardSeed': s.board.seed,
+    'balance': s.balance.toJson(),
     'names': [for (final p in s.players) p.id],
     'events': [for (final e in s.events) e.toJson()],
   });
@@ -604,11 +616,13 @@ class MatchEngine {
       value['seed'] as int,
       events,
       boardSeed: value['boardSeed'] as int?,
+      balance: MatchBalance.fromJson(value['balance'] as Map<String, dynamic>?),
     );
   }
 
   static String snapshot(MatchState s) => jsonEncode({
     'seed': s.seed,
+    'balance': s.balance.toJson(),
     'phase': s.phase.name,
     'active': s.active,
     'round': s.round,
@@ -712,10 +726,10 @@ class MatchEngine {
     final best = [for (var i = 0; i < s.players.length; i++) score(s, i)]
         .reduce((a, b) => a > b ? a : b);
     final commerce = s.players[player].level(StrategyDeck.commerce);
-    if (commerce >= 4) return 2;
-    if (commerce >= 2) return 3;
+    if (commerce >= 4) return s.balance.guildRate;
+    if (commerce >= 2) return s.balance.marketRate;
     return best - score(s, player) >= 3 && !s.catchupUsed.contains(player)
-        ? 3
+        ? s.balance.catchupRate
         : 4;
   }
 
@@ -780,6 +794,22 @@ class MatchEngine {
     );
   }
 
+  static Map<Resource, int> developmentCost(
+    MatchState s,
+    StrategyDeck track,
+    int level,
+  ) {
+    final cost = Map<Resource, int>.of(track.costFor(level));
+    if (track == StrategyDeck.innovation && level == 2) {
+      if (s.balance.innovationTier2Paper == 0) {
+        cost.remove(Resource.paper);
+      } else {
+        cost[Resource.paper] = s.balance.innovationTier2Paper;
+      }
+    }
+    return cost;
+  }
+
   static bool canDevelop(MatchState s, StrategyDeck track) {
     final level = s.current.level(track);
     return s.phase == MatchPhase.actions &&
@@ -788,7 +818,7 @@ class MatchEngine {
           (site) =>
               site.owner == s.active && site.structure != Structure.village,
         ) &&
-        affordable(s, track.costFor(level + 1));
+        affordable(s, developmentCost(s, track, level + 1));
   }
 
   static bool legalFort(MatchState s, int vertex) =>
@@ -1342,7 +1372,7 @@ class MatchEngine {
     for (var i = 0; i < players.length; i++) {
       dry[i] = produced[i] > 0 ? 0 : (dry[i] ?? 0) + 1;
       final innovation = players[i].level(StrategyDeck.innovation);
-      final threshold = innovation >= 3 ? 2 : 3;
+      final threshold = innovation >= 3 ? 2 : s.balance.reliefRolls;
       if (dry[i]! < threshold ||
           relieved.contains(i) ||
           leader - score(s, i) < 3) {
@@ -1778,7 +1808,7 @@ class MatchEngine {
     } else if (event is DevelopTown) {
       _require(canDevelop(s, event.track), 'Cannot develop that track.');
       final level = s.current.level(event.track) + 1;
-      s = _pay(s, event.track.costFor(level));
+      s = _pay(s, developmentCost(s, event.track, level));
       final players = List<PlayerState>.of(s.players);
       players[s.active] = s.current.copyWith(
         developments: {...s.current.developments, event.track: level},
@@ -1926,8 +1956,9 @@ class MatchEngine {
         'Not enough goods.',
       );
       final commerce = s.current.level(StrategyDeck.commerce);
-      final count =
-          commerce >= 5 || (commerce >= 3 && event.receive == Resource.cloth)
+      final count = commerce >= 5
+          ? s.balance.bazaarGoods
+          : commerce >= 3 && event.receive == Resource.cloth
           ? 2
           : 1;
       _require((s.bank[event.receive] ?? 0) >= count, 'Bank stock exhausted.');
@@ -1944,7 +1975,7 @@ class MatchEngine {
         bank: bank,
         catchupUsed: {
           ...s.catchupUsed,
-          if (rate == 3 && s.current.level(StrategyDeck.commerce) < 2) s.active,
+          if (rate < 4 && s.current.level(StrategyDeck.commerce) < 2) s.active,
         },
       );
     } else if (event is ProposeTrade) {

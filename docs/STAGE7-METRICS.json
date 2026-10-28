@@ -1,0 +1,322 @@
+{
+  "original": {
+    "games": 120,
+    "completed": 104,
+    "capped": 16,
+    "firstSeatWinShareCompleted": 0.33653846153846156,
+    "trackWins": {
+      "innovation": 15,
+      "commerce": 56,
+      "governance": 33
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.11538461538461539,
+      "commerce": 0.4307692307692308,
+      "governance": 0.25384615384615383
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 60,
+      "gamesWithTrailingSeat": 119,
+      "eligibleTrailingSeats": 302,
+      "probabilityPerEligibleSeat": 0.1986754966887417,
+      "probabilityPerEligibleGame": 0.5042016806722689
+    },
+    "meanTurns": 217.54166666666666,
+    "meanFullRounds": 67.225,
+    "unproductiveRounds": 350,
+    "unproductiveRoundShare": 0.043386636915829925,
+    "reactionOpportunities": 9293,
+    "reactionUses": 2300,
+    "reactionUseShare": 0.2474981168621543,
+    "cardPlays": {
+      "innovation": 1522,
+      "commerce": 1400,
+      "governance": 1218
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.05,
+      "commerce": 1.2,
+      "governance": 1.28
+    }
+  },
+  "trailing_2_to_1": {
+    "games": 120,
+    "completed": 101,
+    "capped": 19,
+    "firstSeatWinShareCompleted": 0.36633663366336633,
+    "trackWins": {
+      "innovation": 16,
+      "commerce": 55,
+      "governance": 30
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.12307692307692308,
+      "commerce": 0.4230769230769231,
+      "governance": 0.23076923076923078
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 62,
+      "gamesWithTrailingSeat": 120,
+      "eligibleTrailingSeats": 320,
+      "probabilityPerEligibleSeat": 0.19375,
+      "probabilityPerEligibleGame": 0.5166666666666667
+    },
+    "meanTurns": 216.03333333333333,
+    "meanFullRounds": 66.95833333333333,
+    "unproductiveRounds": 340,
+    "unproductiveRoundShare": 0.042314872433105166,
+    "reactionOpportunities": 9248,
+    "reactionUses": 2323,
+    "reactionUseShare": 0.25118944636678203,
+    "cardPlays": {
+      "innovation": 1507,
+      "commerce": 1394,
+      "governance": 1126
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.04,
+      "commerce": 1.21,
+      "governance": 1.28
+    }
+  },
+  "relief_after_2_dry": {
+    "games": 120,
+    "completed": 107,
+    "capped": 13,
+    "firstSeatWinShareCompleted": 0.3177570093457944,
+    "trackWins": {
+      "innovation": 17,
+      "commerce": 56,
+      "governance": 34
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.13076923076923078,
+      "commerce": 0.4307692307692308,
+      "governance": 0.26153846153846155
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 66,
+      "gamesWithTrailingSeat": 119,
+      "eligibleTrailingSeats": 308,
+      "probabilityPerEligibleSeat": 0.21428571428571427,
+      "probabilityPerEligibleGame": 0.5546218487394958
+    },
+    "meanTurns": 212.44166666666666,
+    "meanFullRounds": 65.79166666666667,
+    "unproductiveRounds": 321,
+    "unproductiveRoundShare": 0.04065864471184294,
+    "reactionOpportunities": 9098,
+    "reactionUses": 2254,
+    "reactionUseShare": 0.24774675752912728,
+    "cardPlays": {
+      "innovation": 1456,
+      "commerce": 1310,
+      "governance": 1145
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.05,
+      "commerce": 1.21,
+      "governance": 1.28
+    }
+  },
+  "stoneworks_at_III": {
+    "games": 120,
+    "completed": 103,
+    "capped": 17,
+    "firstSeatWinShareCompleted": 0.2912621359223301,
+    "trackWins": {
+      "innovation": 16,
+      "commerce": 53,
+      "governance": 34
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.12307692307692308,
+      "commerce": 0.4076923076923077,
+      "governance": 0.26153846153846155
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 55,
+      "gamesWithTrailingSeat": 118,
+      "eligibleTrailingSeats": 305,
+      "probabilityPerEligibleSeat": 0.18032786885245902,
+      "probabilityPerEligibleGame": 0.4661016949152542
+    },
+    "meanTurns": 222.1,
+    "meanFullRounds": 68.625,
+    "unproductiveRounds": 374,
+    "unproductiveRoundShare": 0.045415907710989675,
+    "reactionOpportunities": 9545,
+    "reactionUses": 2364,
+    "reactionUseShare": 0.24766893661602934,
+    "cardPlays": {
+      "innovation": 1599,
+      "commerce": 1428,
+      "governance": 1191
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.04,
+      "commerce": 1.2,
+      "governance": 1.29
+    }
+  },
+  "stoneworks_cheaper_paper": {
+    "games": 120,
+    "completed": 106,
+    "capped": 14,
+    "firstSeatWinShareCompleted": 0.3113207547169811,
+    "trackWins": {
+      "innovation": 15,
+      "commerce": 55,
+      "governance": 36
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.11538461538461539,
+      "commerce": 0.4230769230769231,
+      "governance": 0.27692307692307694
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 59,
+      "gamesWithTrailingSeat": 120,
+      "eligibleTrailingSeats": 308,
+      "probabilityPerEligibleSeat": 0.19155844155844157,
+      "probabilityPerEligibleGame": 0.49166666666666664
+    },
+    "meanTurns": 216.64166666666668,
+    "meanFullRounds": 66.95,
+    "unproductiveRounds": 355,
+    "unproductiveRoundShare": 0.04418720438137914,
+    "reactionOpportunities": 9223,
+    "reactionUses": 2239,
+    "reactionUseShare": 0.2427626585709639,
+    "cardPlays": {
+      "innovation": 1575,
+      "commerce": 1333,
+      "governance": 1173
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.05,
+      "commerce": 1.2,
+      "governance": 1.29
+    }
+  },
+  "guild_3_to_1": {
+    "games": 120,
+    "completed": 105,
+    "capped": 15,
+    "firstSeatWinShareCompleted": 0.3142857142857143,
+    "trackWins": {
+      "innovation": 14,
+      "commerce": 58,
+      "governance": 33
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.1076923076923077,
+      "commerce": 0.4461538461538462,
+      "governance": 0.25384615384615383
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 60,
+      "gamesWithTrailingSeat": 119,
+      "eligibleTrailingSeats": 303,
+      "probabilityPerEligibleSeat": 0.19801980198019803,
+      "probabilityPerEligibleGame": 0.5042016806722689
+    },
+    "meanTurns": 218.09166666666667,
+    "meanFullRounds": 67.40833333333333,
+    "unproductiveRounds": 356,
+    "unproductiveRoundShare": 0.044010384472740756,
+    "reactionOpportunities": 9346,
+    "reactionUses": 2318,
+    "reactionUseShare": 0.24802054354804196,
+    "cardPlays": {
+      "innovation": 1528,
+      "commerce": 1402,
+      "governance": 1210
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.06,
+      "commerce": 1.2,
+      "governance": 1.28
+    }
+  },
+  "bazaar_single_good": {
+    "games": 120,
+    "completed": 104,
+    "capped": 16,
+    "firstSeatWinShareCompleted": 0.33653846153846156,
+    "trackWins": {
+      "innovation": 15,
+      "commerce": 56,
+      "governance": 33
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.11538461538461539,
+      "commerce": 0.4307692307692308,
+      "governance": 0.25384615384615383
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 60,
+      "gamesWithTrailingSeat": 119,
+      "eligibleTrailingSeats": 302,
+      "probabilityPerEligibleSeat": 0.1986754966887417,
+      "probabilityPerEligibleGame": 0.5042016806722689
+    },
+    "meanTurns": 217.54166666666666,
+    "meanFullRounds": 67.225,
+    "unproductiveRounds": 350,
+    "unproductiveRoundShare": 0.043386636915829925,
+    "reactionOpportunities": 9293,
+    "reactionUses": 2300,
+    "reactionUseShare": 0.2474981168621543,
+    "cardPlays": {
+      "innovation": 1522,
+      "commerce": 1400,
+      "governance": 1218
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.05,
+      "commerce": 1.2,
+      "governance": 1.28
+    }
+  },
+  "market_4_to_1": {
+    "games": 120,
+    "completed": 102,
+    "capped": 18,
+    "firstSeatWinShareCompleted": 0.30392156862745096,
+    "trackWins": {
+      "innovation": 21,
+      "commerce": 46,
+      "governance": 35
+    },
+    "trackWinRateStarts": {
+      "innovation": 0.16153846153846155,
+      "commerce": 0.35384615384615387,
+      "governance": 0.2692307692307692
+    },
+    "comebackAfter3VpDeficitAt8PlusLeaderVp": {
+      "wins": 62,
+      "gamesWithTrailingSeat": 119,
+      "eligibleTrailingSeats": 309,
+      "probabilityPerEligibleSeat": 0.20064724919093851,
+      "probabilityPerEligibleGame": 0.5210084033613446
+    },
+    "meanTurns": 225.96666666666667,
+    "meanFullRounds": 69.69166666666666,
+    "unproductiveRounds": 376,
+    "unproductiveRoundShare": 0.04495994260432859,
+    "reactionOpportunities": 9704,
+    "reactionUses": 2393,
+    "reactionUseShare": 0.24659934047815335,
+    "cardPlays": {
+      "innovation": 1564,
+      "commerce": 1501,
+      "governance": 1272
+    },
+    "cardEffectValuePerUse": {
+      "innovation": 2.05,
+      "commerce": 1.22,
+      "governance": 1.28
+    }
+  }
+}
