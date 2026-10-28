@@ -7,6 +7,7 @@ import '../engine/advanced.dart';
 import '../engine/board.dart';
 import '../engine/game.dart';
 import '../engine/match.dart';
+import 'strategy_hand.dart';
 
 enum _Move {
   inspect,
@@ -652,6 +653,8 @@ class _MatchViewState extends State<MatchView> {
                     ),
                 ],
               ),
+              const SizedBox(height: 8),
+              StrategyHand(state: s, onEvent: send),
               const SizedBox(height: 8),
               Card(
                 child: Padding(

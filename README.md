@@ -1,6 +1,6 @@
 # Stone & Banner
 
-Original offline-first Android strategy game, now built in **Flutter/Dart** on Nox. Stage 2 is a playable 3–4-seat pass-and-play match: 19 hexes, legal roads and settlements, seeded dice, finite resources, Bandit, bank and accepted player trades, 15-VP win condition, and portable deterministic event replay. Advanced cards, Knights and Invasion arrive in later stages.
+Original offline-first Android strategy game, now built in **Flutter/Dart** on Nox. Stages 1–4 provide a playable 3–4-seat pass-and-play match: 19 hexes, legal roads and settlements, seeded dice, finite resources, Bandit, bank and accepted player trades, 15-VP win condition, and portable deterministic event replay. Town Developments, Knights, Invasion and three original Strategy Card decks are implemented.
 
 ## Build on Nox
 

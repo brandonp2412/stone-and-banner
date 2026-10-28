@@ -1,4 +1,5 @@
 import 'board.dart';
+import 'cards.dart';
 
 enum Structure {
   village(1),
@@ -26,7 +27,9 @@ class PlayerState {
     this.charterPoints = 0,
     this.reactionTokens = 1,
     Map<StrategyDeck, int> developments = const {},
-  }) : developments = Map.unmodifiable(developments),
+    List<HeldCard> cards = const [],
+  }) : cards = List.unmodifiable(cards),
+       developments = Map.unmodifiable(developments),
        buildings = List.unmodifiable(buildings),
        stores = Map.unmodifiable(stores);
   final String id;
@@ -34,6 +37,7 @@ class PlayerState {
   final Map<Resource, int> stores;
   final int guardianHonour, charterPoints, reactionTokens;
   final Map<StrategyDeck, int> developments;
+  final List<HeldCard> cards;
   int level(StrategyDeck track) => developments[track] ?? 0;
 
   PlayerState copyWith({
@@ -43,6 +47,7 @@ class PlayerState {
     int? charterPoints,
     int? reactionTokens,
     Map<StrategyDeck, int>? developments,
+    List<HeldCard>? cards,
   }) => PlayerState(
     id: id,
     buildings: buildings ?? this.buildings,
@@ -51,6 +56,7 @@ class PlayerState {
     charterPoints: charterPoints ?? this.charterPoints,
     reactionTokens: reactionTokens ?? this.reactionTokens,
     developments: developments ?? this.developments,
+    cards: cards ?? this.cards,
   );
 }
 

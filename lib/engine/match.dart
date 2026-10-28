@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'advanced.dart';
 import 'board.dart';
+import 'cards.dart';
 import 'game.dart';
 
 enum MatchPhase {
@@ -177,6 +178,37 @@ class ResolveInvasion extends MatchEvent {
   Map<String, Object?> toJson() => {'type': 'invasion'};
 }
 
+class PlayStrategyCard extends MatchEvent {
+  const PlayStrategyCard(
+    this.handIndex, {
+    this.vertex,
+    this.tile,
+    this.target,
+    this.give,
+    this.receive,
+  });
+  final int handIndex;
+  final int? vertex, tile, target;
+  final Resource? give, receive;
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'cardPlay',
+    'hand': handIndex,
+    'vertex': vertex,
+    'tile': tile,
+    'target': target,
+    'give': give?.name,
+    'receive': receive?.name,
+  };
+}
+
+class DiscardStrategyCard extends MatchEvent {
+  const DiscardStrategyCard(this.handIndex);
+  final int handIndex;
+  @override
+  Map<String, Object?> toJson() => {'type': 'cardDiscard', 'hand': handIndex};
+}
+
 class EndTurn extends MatchEvent {
   const EndTurn();
   @override
@@ -212,6 +244,9 @@ class MatchState {
     this.firstCapitalOwner,
     this.lastInvasion = '',
     Set<int> catchupUsed = const {},
+    Map<StrategyDeck, List<int>> drawPiles = const {},
+    Map<StrategyDeck, List<int>> discardPiles = const {},
+    this.lastCardEvent = '',
     this.trade,
     List<MatchEvent> events = const [],
   }) : players = List.unmodifiable(players),
@@ -224,6 +259,16 @@ class MatchState {
        reliefUsed = Set.unmodifiable(reliefUsed),
        bank = Map.unmodifiable(bank),
        catchupUsed = Set.unmodifiable(catchupUsed),
+       drawPiles = Map.unmodifiable(
+         drawPiles.map(
+           (track, pile) => MapEntry(track, List<int>.unmodifiable(pile)),
+         ),
+       ),
+       discardPiles = Map.unmodifiable(
+         discardPiles.map(
+           (track, pile) => MapEntry(track, List<int>.unmodifiable(pile)),
+         ),
+       ),
        events = List.unmodifiable(events);
 
   final int seed, active, setupStep, rollCount, banditTile, round;
@@ -242,6 +287,8 @@ class MatchState {
   final MatchPhase phase;
   final int? pendingVillage, dice, longestRoadHolder;
   final Set<int> catchupUsed;
+  final Map<StrategyDeck, List<int>> drawPiles, discardPiles;
+  final String lastCardEvent;
   final TradeProposal? trade;
   final List<MatchEvent> events;
 
@@ -275,6 +322,9 @@ class MatchState {
     int? longestRoadHolder,
     bool clearRoadHolder = false,
     Set<int>? catchupUsed,
+    Map<StrategyDeck, List<int>>? drawPiles,
+    Map<StrategyDeck, List<int>>? discardPiles,
+    String? lastCardEvent,
     TradeProposal? trade,
     bool clearTrade = false,
     List<MatchEvent>? events,
@@ -310,6 +360,9 @@ class MatchState {
         ? null
         : longestRoadHolder ?? this.longestRoadHolder,
     catchupUsed: catchupUsed ?? this.catchupUsed,
+    drawPiles: drawPiles ?? this.drawPiles,
+    discardPiles: discardPiles ?? this.discardPiles,
+    lastCardEvent: lastCardEvent ?? this.lastCardEvent,
     trade: clearTrade ? null : trade ?? this.trade,
     events: events ?? this.events,
   );
@@ -362,6 +415,14 @@ class MatchEngine {
       topology: BoardTopology(board),
       players: [for (final n in names) PlayerState(id: n)],
       bank: {for (final r in Resource.values) r: bankSupply},
+      drawPiles: {
+        for (final track in StrategyDeck.values)
+          track: _shuffle(
+            List.generate(StrategyCards.deck(track).length, (i) => i),
+            seed ^ ((track.index + 1) * 0x9e3779b9),
+          ),
+      },
+      discardPiles: {for (final track in StrategyDeck.values) track: <int>[]},
       banditTile: board.tiles.indexWhere((tile) => tile.land == Land.barren),
     );
   }
@@ -408,6 +469,15 @@ class MatchEngine {
         'activate' => ActivateKnight(e['vertex'] as int),
         'promote' => PromoteKnight(e['vertex'] as int),
         'knightMove' => MoveKnight(e['from'] as int, e['to'] as int),
+        'cardPlay' => PlayStrategyCard(
+          e['hand'] as int,
+          vertex: e['vertex'] as int?,
+          tile: e['tile'] as int?,
+          target: e['target'] as int?,
+          give: e['give'] == null ? null : resource('give'),
+          receive: e['receive'] == null ? null : resource('receive'),
+        ),
+        'cardDiscard' => DiscardStrategyCard(e['hand'] as int),
         'invasion' => const ResolveInvasion(),
         'roll' => RollDice(e['first'] as int, e['second'] as int),
         'bandit' => MoveBandit(e['tile'] as int, victim: e['victim'] as int?),
@@ -443,6 +513,15 @@ class MatchEngine {
     'serial': s.turnSerial,
     'firstCapital': s.firstCapitalOwner,
     'lastInvasion': s.lastInvasion,
+    'lastCardEvent': s.lastCardEvent,
+    'drawPiles': {
+      for (final track in StrategyDeck.values)
+        track.name: s.drawPiles[track] ?? <int>[],
+    },
+    'discardPiles': {
+      for (final track in StrategyDeck.values)
+        track.name: s.discardPiles[track] ?? <int>[],
+    },
     'forts': s.fortified.toList()..sort(),
     'scars': s.reaverScars.toList()..sort(),
     'reliefUsed': s.reliefUsed.toList()..sort(),
@@ -468,6 +547,9 @@ class MatchEngine {
           'honour': p.guardianHonour,
           'charters': p.charterPoints,
           'developments': [for (final t in StrategyDeck.values) p.level(t)],
+          'cards': [
+            for (final c in p.cards) [c.track.name, c.index],
+          ],
         },
     ],
     'sites': [
@@ -706,6 +788,285 @@ class MatchEngine {
     x ^= x >> 17;
     x ^= (x << 5) & 0xffffffff;
     return x & 0xffffffff;
+  }
+
+  static List<int> _shuffle(List<int> source, int seed) {
+    final cards = List<int>.of(source);
+    var cursor = seed;
+    for (var i = cards.length - 1; i > 0; i--) {
+      cursor = _random(cursor ^ (i * 0x85ebca6b));
+      final j = cursor % (i + 1);
+      final swap = cards[i];
+      cards[i] = cards[j];
+      cards[j] = swap;
+    }
+    return cards;
+  }
+
+  /// The saved roll index determines two independent virtual dice: a six-face
+  /// event die (faces 1–3 offer tracks) and a five-face tier check.
+  static (int, int) strategyRoll(MatchState s) {
+    final serial = s.rollCount;
+    final event = _random(s.seed ^ 0x17be4d2f ^ (serial * 0x6c8e9cf5));
+    final tier = _random(s.seed ^ 0x4a1cefe3 ^ (serial * 0x72f4b619));
+    return (event % 6 + 1, tier % 5 + 1);
+  }
+
+  static MatchState _drawStrategy(MatchState s) {
+    final (event, tier) = strategyRoll(s);
+    if (event > 3) {
+      return s.copyWith(
+        lastCardEvent: 'Event die $event: calm skies (tier $tier).',
+      );
+    }
+    final track = StrategyDeck.values[event - 1];
+    final players = List<PlayerState>.of(s.players);
+    var pile = List<int>.of(s.drawPiles[track] ?? []);
+    var discards = List<int>.of(s.discardPiles[track] ?? []);
+    var draws = 0;
+
+    // Rotate the queue with the roller so an exhausted pile never privileges
+    // a fixed seat index. Do not publish other players' private card names.
+    for (var offset = 0; offset < players.length; offset++) {
+      final seat = (s.active + offset) % players.length;
+      final player = players[seat];
+      if (player.level(track) < tier ||
+          player.cards.length >= StrategyCards.handLimit) {
+        continue;
+      }
+      if (pile.isEmpty && discards.isNotEmpty) {
+        pile = _shuffle(
+          discards,
+          s.seed ^ (s.rollCount * 0x51ed270b) ^ track.index,
+        );
+        discards = [];
+      }
+      if (pile.isEmpty) break;
+      final index = pile.removeLast();
+      players[seat] = player.copyWith(
+        cards: [...player.cards, HeldCard(track, index)],
+      );
+      draws++;
+    }
+    final outcome = '$draws eligible draw(s)';
+    return s.copyWith(
+      players: players,
+      drawPiles: {...s.drawPiles, track: pile},
+      discardPiles: {...s.discardPiles, track: discards},
+      lastCardEvent: '${track.name} · event $event · tier $tier: $outcome.',
+    );
+  }
+
+  static bool _cardRoadLegal(MatchState s, int id) {
+    if (s.roads.containsKey(id) ||
+        s.roads.values.where((p) => p == s.active).length >= roadLimit) {
+      return false;
+    }
+    final edge = s.topology.edges[id];
+    bool linked(int vertex) {
+      if (s.sites[vertex] case final Site site) return site.owner == s.active;
+      return s.topology.vertices[vertex].edges.any(
+        (e) => s.roads[e] == s.active,
+      );
+    }
+
+    return linked(edge.a) || linked(edge.b);
+  }
+
+  /// UI presents these exact options; the reducer revalidates every event.
+  /// Empty options never block End Turn or the explicit discard action.
+  static List<PlayStrategyCard> legalCardPlays(MatchState s, int handIndex) {
+    if (s.phase != MatchPhase.actions ||
+        s.trade != null ||
+        handIndex < 0 ||
+        handIndex >= s.current.cards.length) {
+      return [];
+    }
+    final card = s.current.cards[handIndex].definition;
+    final choices = <PlayStrategyCard>[];
+    void add({
+      int? vertex,
+      int? tile,
+      int? target,
+      Resource? give,
+      Resource? receive,
+    }) {
+      choices.add(
+        PlayStrategyCard(
+          handIndex,
+          vertex: vertex,
+          tile: tile,
+          target: target,
+          give: give,
+          receive: receive,
+        ),
+      );
+    }
+
+    switch (card.power) {
+      case CardPower.fixedGoods:
+        if (card.goods.entries.every((e) => (s.bank[e.key] ?? 0) >= e.value)) {
+          add();
+        }
+      case CardPower.chooseBasic:
+      case CardPower.chooseCommodity:
+        final goods = card.power == CardPower.chooseBasic
+            ? Resource.values.take(5)
+            : Resource.values.skip(5);
+        for (final good in goods) {
+          if ((s.bank[good] ?? 0) >= card.amount) add(receive: good);
+        }
+      case CardPower.freeRoad:
+        for (var edge = 0; edge < s.topology.edges.length; edge++) {
+          if (_cardRoadLegal(s, edge)) add(vertex: edge);
+        }
+      case CardPower.freeFort:
+        for (final vertex in (s.sites.keys.toList()..sort())) {
+          final site = s.sites[vertex]!;
+          if (site.owner == s.active &&
+              site.structure != Structure.village &&
+              !s.fortified.contains(vertex)) {
+            add(vertex: vertex);
+          }
+        }
+      case CardPower.swap:
+      case CardPower.portSwap:
+      case CardPower.leverageSwap:
+        final giveCount = card.power == CardPower.leverageSwap ? 2 : 1;
+        final receiveCount = card.power == CardPower.portSwap ? 2 : 1;
+        for (final from in Resource.values) {
+          if ((s.current.stores[from] ?? 0) < giveCount) continue;
+          if (card.power == CardPower.portSwap && from.index < 5) continue;
+          if (card.power == CardPower.leverageSwap && from.index >= 5) continue;
+          for (final to in Resource.values) {
+            if (to == from || (s.bank[to] ?? 0) < receiveCount) continue;
+            if (card.power == CardPower.portSwap && to.index >= 5) continue;
+            if (card.power == CardPower.leverageSwap && to.index < 5) continue;
+            add(give: from, receive: to);
+          }
+        }
+      case CardPower.activate:
+      case CardPower.promote:
+      case CardPower.exhaust:
+        for (final vertex in (s.knights.keys.toList()..sort())) {
+          final knight = s.knights[vertex]!;
+          if (card.power == CardPower.exhaust) {
+            if (knight.owner != s.active && knight.active) add(vertex: vertex);
+          } else if (knight.owner == s.active &&
+              knight.actedTurn != s.turnSerial) {
+            if (card.power == CardPower.activate && !knight.active) {
+              add(vertex: vertex);
+            } else if (card.power == CardPower.promote &&
+                knight.active &&
+                knight.rank != KnightRank.champion) {
+              add(vertex: vertex);
+            }
+          }
+        }
+      case CardPower.moveBandit:
+        for (var tile = 0; tile < s.board.tiles.length; tile++) {
+          if (tile != s.banditTile) add(tile: tile);
+        }
+      case CardPower.seizeGood:
+        for (var target = 0; target < s.players.length; target++) {
+          if (target == s.active) continue;
+          for (final good in Resource.values) {
+            if ((s.players[target].stores[good] ?? 0) > 0) {
+              add(target: target, receive: good);
+            }
+          }
+        }
+    }
+    return choices;
+  }
+
+  static MatchState _consumeCard(MatchState s, int handIndex) {
+    final hand = List<HeldCard>.of(s.current.cards);
+    final card = hand.removeAt(handIndex);
+    final players = List<PlayerState>.of(s.players);
+    players[s.active] = s.current.copyWith(cards: hand);
+    return s.copyWith(
+      players: players,
+      discardPiles: {
+        ...s.discardPiles,
+        card.track: [...?s.discardPiles[card.track], card.index],
+      },
+    );
+  }
+
+  static MatchState _playStrategyCard(MatchState s, PlayStrategyCard event) {
+    final valid = legalCardPlays(s, event.handIndex).any(
+      (option) => jsonEncode(option.toJson()) == jsonEncode(event.toJson()),
+    );
+    _require(valid, 'That Strategy Card or target is not legal.');
+    final card = s.current.cards[event.handIndex].definition;
+    final bank = Map<Resource, int>.of(s.bank);
+    final players = List<PlayerState>.of(s.players);
+    final stores = Map<Resource, int>.of(s.current.stores);
+    final rewards = <Resource, int>{};
+    switch (card.power) {
+      case CardPower.fixedGoods:
+        rewards.addAll(card.goods);
+      case CardPower.chooseBasic:
+      case CardPower.chooseCommodity:
+        rewards[event.receive!] = card.amount;
+      case CardPower.freeRoad:
+        s = _recalculateRoads(
+          s.copyWith(roads: {...s.roads, event.vertex!: s.active}),
+        );
+      case CardPower.freeFort:
+        s = s.copyWith(fortified: {...s.fortified, event.vertex!});
+      case CardPower.swap:
+      case CardPower.portSwap:
+      case CardPower.leverageSwap:
+        final spent = card.power == CardPower.leverageSwap ? 2 : 1;
+        stores[event.give!] = stores[event.give!]! - spent;
+        bank[event.give!] = bank[event.give!]! + spent;
+        rewards[event.receive!] = card.power == CardPower.portSwap ? 2 : 1;
+      case CardPower.activate:
+        s = s.copyWith(
+          knights: {
+            ...s.knights,
+            event.vertex!: s.knights[event.vertex]!.copyWith(
+              active: true,
+              actedTurn: s.turnSerial,
+            ),
+          },
+        );
+      case CardPower.promote:
+        final knight = s.knights[event.vertex]!;
+        s = s.copyWith(
+          knights: {
+            ...s.knights,
+            event.vertex!: knight.copyWith(
+              rank: KnightRank.values[knight.rank.index + 1],
+              actedTurn: s.turnSerial,
+            ),
+          },
+        );
+      case CardPower.exhaust:
+        s = s.copyWith(
+          knights: {
+            ...s.knights,
+            event.vertex!: s.knights[event.vertex]!.copyWith(active: false),
+          },
+        );
+      case CardPower.moveBandit:
+        s = s.copyWith(banditTile: event.tile!);
+      case CardPower.seizeGood:
+        final victim = players[event.target!];
+        final lost = Map<Resource, int>.of(victim.stores);
+        lost[event.receive!] = lost[event.receive!]! - 1;
+        players[event.target!] = victim.copyWith(stores: lost);
+        stores[event.receive!] = (stores[event.receive!] ?? 0) + 1;
+    }
+    for (final reward in rewards.entries) {
+      bank[reward.key] = bank[reward.key]! - reward.value;
+      stores[reward.key] = (stores[reward.key] ?? 0) + reward.value;
+    }
+    players[s.active] = s.current.copyWith(stores: stores);
+    s = s.copyWith(players: players, bank: bank);
+    return _consumeCard(s, event.handIndex);
   }
 
   static (int, int) expectedDice(MatchState s) {
@@ -1239,6 +1600,7 @@ class MatchEngine {
       } else {
         s = _discardOnSeven(s).copyWith(reaverPressure: s.reaverPressure + 1);
       }
+      s = _drawStrategy(s);
     } else if (event is MoveBandit) {
       _require(s.phase == MatchPhase.bandit, 'Bandit moves only after seven.');
       _require(
@@ -1362,6 +1724,15 @@ class MatchEngine {
         s = s.copyWith(players: players);
       }
       s = s.copyWith(clearTrade: true);
+    } else if (event is PlayStrategyCard) {
+      s = _playStrategyCard(s, event);
+    } else if (event is DiscardStrategyCard) {
+      _require(s.phase == MatchPhase.actions, 'Discard after rolling.');
+      _require(
+        event.handIndex >= 0 && event.handIndex < s.current.cards.length,
+        'Unknown card.',
+      );
+      s = _consumeCard(s, event.handIndex);
     } else if (event is EndTurn) {
       _require(s.phase == MatchPhase.actions, 'Roll and resolve Bandit first.');
       final next = (s.active + 1) % s.players.length;
