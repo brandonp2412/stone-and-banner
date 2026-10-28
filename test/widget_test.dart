@@ -80,6 +80,7 @@ void main() {
     }
     expect(find.text('Roll dice'), findsOneWidget);
     await tester.ensureVisible(find.text('Roll dice'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Roll dice'));
     await tester.pumpAndSettle();
     expect(find.text('Roll dice'), findsNothing);

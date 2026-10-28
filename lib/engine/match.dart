@@ -1,9 +1,18 @@
 import 'dart:convert';
 
+import 'advanced.dart';
 import 'board.dart';
 import 'game.dart';
 
-enum MatchPhase { setupVillage, setupRoad, roll, bandit, actions, finished }
+enum MatchPhase {
+  setupVillage,
+  setupRoad,
+  roll,
+  bandit,
+  actions,
+  invasion,
+  finished,
+}
 
 class Site {
   const Site(this.owner, this.structure);
@@ -116,6 +125,58 @@ class RespondTrade extends MatchEvent {
   };
 }
 
+class DevelopTown extends MatchEvent {
+  const DevelopTown(this.track);
+  final StrategyDeck track;
+  @override
+  Map<String, Object?> toJson() => {'type': 'develop', 'track': track.name};
+}
+
+class FortifyTown extends MatchEvent {
+  const FortifyTown(this.vertex);
+  final int vertex;
+  @override
+  Map<String, Object?> toJson() => {'type': 'fortify', 'vertex': vertex};
+}
+
+class RecruitKnight extends MatchEvent {
+  const RecruitKnight(this.vertex);
+  final int vertex;
+  @override
+  Map<String, Object?> toJson() => {'type': 'recruit', 'vertex': vertex};
+}
+
+class ActivateKnight extends MatchEvent {
+  const ActivateKnight(this.vertex);
+  final int vertex;
+  @override
+  Map<String, Object?> toJson() => {'type': 'activate', 'vertex': vertex};
+}
+
+class PromoteKnight extends MatchEvent {
+  const PromoteKnight(this.vertex);
+  final int vertex;
+  @override
+  Map<String, Object?> toJson() => {'type': 'promote', 'vertex': vertex};
+}
+
+class MoveKnight extends MatchEvent {
+  const MoveKnight(this.from, this.to);
+  final int from, to;
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'knightMove',
+    'from': from,
+    'to': to,
+  };
+}
+
+class ResolveInvasion extends MatchEvent {
+  const ResolveInvasion();
+  @override
+  Map<String, Object?> toJson() => {'type': 'invasion'};
+}
+
 class EndTurn extends MatchEvent {
   const EndTurn();
   @override
@@ -140,12 +201,27 @@ class MatchState {
     this.banditTile = 0,
     this.round = 1,
     this.longestRoadHolder,
+    Map<int, KnightPiece> knights = const {},
+    Set<int> fortified = const {},
+    Set<int> reaverScars = const {},
+    Map<int, int> dryRolls = const {},
+    Set<int> reliefUsed = const {},
+    this.reaverPressure = 0,
+    this.invasions = 0,
+    this.turnSerial = 0,
+    this.firstCapitalOwner,
+    this.lastInvasion = '',
     Set<int> catchupUsed = const {},
     this.trade,
     List<MatchEvent> events = const [],
   }) : players = List.unmodifiable(players),
        sites = Map.unmodifiable(sites),
        roads = Map.unmodifiable(roads),
+       knights = Map.unmodifiable(knights),
+       fortified = Set.unmodifiable(fortified),
+       reaverScars = Set.unmodifiable(reaverScars),
+       dryRolls = Map.unmodifiable(dryRolls),
+       reliefUsed = Set.unmodifiable(reliefUsed),
        bank = Map.unmodifiable(bank),
        catchupUsed = Set.unmodifiable(catchupUsed),
        events = List.unmodifiable(events);
@@ -156,6 +232,12 @@ class MatchState {
   final List<PlayerState> players;
   final Map<int, Site> sites;
   final Map<int, int> roads;
+  final Map<int, KnightPiece> knights;
+  final Set<int> fortified, reaverScars, reliefUsed;
+  final Map<int, int> dryRolls;
+  final int reaverPressure, invasions, turnSerial;
+  final int? firstCapitalOwner;
+  final String lastInvasion;
   final Map<Resource, int> bank;
   final MatchPhase phase;
   final int? pendingVillage, dice, longestRoadHolder;
@@ -169,6 +251,16 @@ class MatchState {
     List<PlayerState>? players,
     Map<int, Site>? sites,
     Map<int, int>? roads,
+    Map<int, KnightPiece>? knights,
+    Set<int>? fortified,
+    Set<int>? reaverScars,
+    Set<int>? reliefUsed,
+    Map<int, int>? dryRolls,
+    int? reaverPressure,
+    int? invasions,
+    int? turnSerial,
+    int? firstCapitalOwner,
+    String? lastInvasion,
     Map<Resource, int>? bank,
     MatchPhase? phase,
     int? active,
@@ -193,6 +285,16 @@ class MatchState {
     players: players ?? this.players,
     sites: sites ?? this.sites,
     roads: roads ?? this.roads,
+    knights: knights ?? this.knights,
+    fortified: fortified ?? this.fortified,
+    reaverScars: reaverScars ?? this.reaverScars,
+    reliefUsed: reliefUsed ?? this.reliefUsed,
+    dryRolls: dryRolls ?? this.dryRolls,
+    reaverPressure: reaverPressure ?? this.reaverPressure,
+    invasions: invasions ?? this.invasions,
+    turnSerial: turnSerial ?? this.turnSerial,
+    firstCapitalOwner: firstCapitalOwner ?? this.firstCapitalOwner,
+    lastInvasion: lastInvasion ?? this.lastInvasion,
     bank: bank ?? this.bank,
     phase: phase ?? this.phase,
     active: active ?? this.active,
@@ -219,6 +321,10 @@ class MatchEngine {
   static const bankSupply = 19;
   static const roadLimit = 15;
   static const roadCost = {Resource.wood: 1, Resource.brick: 1};
+  static Map<Resource, int> effectiveRoadCost(MatchState s) =>
+      s.current.level(StrategyDeck.innovation) >= 2
+      ? {Resource.wood: 1}
+      : roadCost;
   static const villageCost = {
     Resource.wood: 1,
     Resource.brick: 1,
@@ -226,12 +332,17 @@ class MatchEngine {
     Resource.wool: 1,
   };
   static const townCost = {Resource.wheat: 2, Resource.ore: 3};
-  // Stage 2 bridge until advanced commodities and Town Developments arrive.
   static const capitalCost = {
-    Resource.wood: 2,
-    Resource.wheat: 3,
-    Resource.ore: 3,
+    Resource.wheat: 2,
+    Resource.ore: 2,
+    Resource.paper: 1,
+    Resource.cloth: 1,
+    Resource.coin: 1,
   };
+  static const fortCost = {Resource.brick: 2, Resource.coin: 1};
+  static const recruitCost = {Resource.wool: 1, Resource.ore: 1};
+  static const activateCost = {Resource.wheat: 1};
+  static const rebuildCost = {Resource.wheat: 1, Resource.ore: 2};
 
   static void _require(bool condition, String reason) {
     if (!condition) throw StateError(reason);
@@ -289,6 +400,15 @@ class MatchEngine {
         'village' => PlaceVillage(e['vertex'] as int),
         'road' => PlaceRoad(e['edge'] as int),
         'upgrade' => UpgradeSite(e['vertex'] as int),
+        'develop' => DevelopTown(
+          StrategyDeck.values.byName(e['track'] as String),
+        ),
+        'fortify' => FortifyTown(e['vertex'] as int),
+        'recruit' => RecruitKnight(e['vertex'] as int),
+        'activate' => ActivateKnight(e['vertex'] as int),
+        'promote' => PromoteKnight(e['vertex'] as int),
+        'knightMove' => MoveKnight(e['from'] as int, e['to'] as int),
+        'invasion' => const ResolveInvasion(),
         'roll' => RollDice(e['first'] as int, e['second'] as int),
         'bandit' => MoveBandit(e['tile'] as int, victim: e['victim'] as int?),
         'bank' => BankExchange(resource('give'), resource('receive')),
@@ -318,6 +438,25 @@ class MatchEngine {
     'rollCount': s.rollCount,
     'bandit': s.banditTile,
     'holder': s.longestRoadHolder,
+    'pressure': s.reaverPressure,
+    'invasions': s.invasions,
+    'serial': s.turnSerial,
+    'firstCapital': s.firstCapitalOwner,
+    'lastInvasion': s.lastInvasion,
+    'forts': s.fortified.toList()..sort(),
+    'scars': s.reaverScars.toList()..sort(),
+    'reliefUsed': s.reliefUsed.toList()..sort(),
+    'dryRolls': [for (var i = 0; i < s.players.length; i++) s.dryRolls[i] ?? 0],
+    'knights': [
+      for (final v in (s.knights.keys.toList()..sort()))
+        [
+          v,
+          s.knights[v]!.owner,
+          s.knights[v]!.rank.name,
+          s.knights[v]!.active,
+          s.knights[v]!.actedTurn,
+        ],
+    ],
     'catchup': s.catchupUsed.toList()..sort(),
     'bank': [for (final r in Resource.values) s.bank[r] ?? 0],
     'players': [
@@ -326,6 +465,9 @@ class MatchEngine {
           'name': p.id,
           'resources': [for (final r in Resource.values) p.stores[r] ?? 0],
           'score': GameEngine.score(p),
+          'honour': p.guardianHonour,
+          'charters': p.charterPoints,
+          'developments': [for (final t in StrategyDeck.values) p.level(t)],
         },
     ],
     'sites': [
@@ -361,6 +503,9 @@ class MatchEngine {
   static int tradeRate(MatchState s, int player) {
     final best = [for (var i = 0; i < s.players.length; i++) score(s, i)]
         .reduce((a, b) => a > b ? a : b);
+    final commerce = s.players[player].level(StrategyDeck.commerce);
+    if (commerce >= 4) return 2;
+    if (commerce >= 2) return 3;
     return best - score(s, player) >= 3 && !s.catchupUsed.contains(player)
         ? 3
         : 4;
@@ -402,7 +547,7 @@ class MatchEngine {
     }
     if (s.phase != MatchPhase.actions ||
         s.trade != null ||
-        !affordable(s, roadCost)) {
+        !affordable(s, effectiveRoadCost(s))) {
       return false;
     }
     bool linked(int vertex) {
@@ -425,9 +570,119 @@ class MatchEngine {
     }
     return affordable(
       s,
-      site.structure == Structure.village ? townCost : capitalCost,
+      site.structure == Structure.village
+          ? (s.reaverScars.contains(vertex) ? rebuildCost : townCost)
+          : capitalCost,
     );
   }
+
+  static bool canDevelop(MatchState s, StrategyDeck track) {
+    final level = s.current.level(track);
+    return s.phase == MatchPhase.actions &&
+        s.trade == null &&
+        level < 5 &&
+        s.sites.values.any(
+          (site) =>
+              site.owner == s.active && site.structure != Structure.village,
+        ) &&
+        affordable(s, track.costFor(level + 1));
+  }
+
+  static bool legalFort(MatchState s, int vertex) =>
+      s.phase == MatchPhase.actions &&
+      s.trade == null &&
+      s.sites[vertex]?.owner == s.active &&
+      s.sites[vertex]!.structure != Structure.village &&
+      !s.fortified.contains(vertex) &&
+      affordable(s, fortCost);
+
+  static bool legalRecruit(MatchState s, int vertex) {
+    if (s.phase != MatchPhase.actions ||
+        s.trade != null ||
+        vertex < 0 ||
+        vertex >= s.topology.vertices.length ||
+        s.knights.containsKey(vertex) ||
+        (s.sites[vertex] != null && s.sites[vertex]!.owner != s.active) ||
+        s.knights.values.where((k) => k.owner == s.active).length >= 3 ||
+        !affordable(
+          s,
+          s.current.level(StrategyDeck.governance) >= 4
+              ? {Resource.wool: 1}
+              : recruitCost,
+        )) {
+      return false;
+    }
+    return s.topology.vertices[vertex].edges.any((e) => s.roads[e] == s.active);
+  }
+
+  static bool legalActivate(MatchState s, int vertex) {
+    final knight = s.knights[vertex];
+    return s.phase == MatchPhase.actions &&
+        s.trade == null &&
+        knight != null &&
+        knight.owner == s.active &&
+        !knight.active &&
+        knight.actedTurn != s.turnSerial &&
+        affordable(s, activateCost);
+  }
+
+  static Map<Resource, int> promotionCost(KnightRank rank) => switch (rank) {
+    KnightRank.sentinel => {Resource.ore: 1, Resource.wool: 1},
+    KnightRank.warden => {Resource.ore: 2, Resource.coin: 1},
+    KnightRank.champion => {},
+  };
+
+  static bool legalPromote(MatchState s, int vertex) {
+    final knight = s.knights[vertex];
+    return s.phase == MatchPhase.actions &&
+        s.trade == null &&
+        knight != null &&
+        knight.owner == s.active &&
+        knight.active &&
+        knight.rank != KnightRank.champion &&
+        knight.actedTurn != s.turnSerial &&
+        affordable(s, promotionCost(knight.rank));
+  }
+
+  static bool legalMoveKnight(MatchState s, int from, int to) {
+    final knight = s.knights[from], occupant = s.knights[to];
+    if (s.phase != MatchPhase.actions ||
+        s.trade != null ||
+        knight == null ||
+        knight.owner != s.active ||
+        !knight.active ||
+        knight.actedTurn == s.turnSerial ||
+        to < 0 ||
+        to >= s.topology.vertices.length ||
+        from == to ||
+        (s.sites[to] != null && s.sites[to]!.owner != s.active) ||
+        (occupant != null &&
+            (occupant.owner == s.active ||
+                occupant.rank.strength >= knight.rank.strength))) {
+      return false;
+    }
+    return s.topology.vertices[from].edges.any((id) {
+      final edge = s.topology.edges[id];
+      return s.roads[id] == s.active && (edge.a == to || edge.b == to);
+    });
+  }
+
+  static List<int> legalKnightDestinations(MatchState s, int from) => [
+    for (var v = 0; v < s.topology.vertices.length; v++)
+      if (legalMoveKnight(s, from, v)) v,
+  ];
+
+  static int invasionStrength(MatchState s) =>
+      4 + s.invasions + (s.reaverPressure > 3 ? s.reaverPressure - 3 : 0);
+
+  static int defenceStrength(MatchState s) =>
+      s.knights.values
+          .where((k) => k.active)
+          .fold<int>(0, (total, k) => total + k.rank.strength) +
+      s.fortified.length +
+      s.players.where((p) => p.level(StrategyDeck.governance) >= 2).length +
+      s.players.where((p) => p.level(StrategyDeck.governance) >= 5).length +
+      s.players.where((p) => p.level(StrategyDeck.innovation) >= 5).length;
 
   static List<int> legalVertices(MatchState s) => [
     for (var v = 0; v < s.topology.vertices.length; v++)
@@ -553,29 +808,46 @@ class MatchEngine {
 
   static MatchState _produce(MatchState s, int number) {
     final claims = <Resource, Map<int, int>>{};
+    void claim(Resource resource, int player, int count) {
+      if (count == 0) return;
+      final recipients = claims.putIfAbsent(resource, () => {});
+      recipients[player] = (recipients[player] ?? 0) + count;
+    }
+
     for (var tile = 0; tile < s.board.tiles.length; tile++) {
       final t = s.board.tiles[tile];
       if (tile == s.banditTile || t.productionNumber != number) continue;
       final good = t.land.produces;
       if (good == null) continue;
-      final recipients = claims.putIfAbsent(good, () => {});
       for (final vertex in s.topology.tileVertices[tile]) {
         final site = s.sites[vertex];
         if (site == null) continue;
-        recipients[site.owner] =
-            (recipients[site.owner] ?? 0) +
-            (site.structure == Structure.village
-                ? 1
-                : site.structure == Structure.town
-                ? 2
-                : 3);
+        var basic = switch (site.structure) {
+          Structure.village => 1,
+          Structure.town => 2,
+          Structure.capital => 3,
+        };
+        if (site.structure != Structure.village) {
+          for (final track in StrategyDeck.values) {
+            final level = s.players[site.owner].level(track);
+            if (level > 0 && track.sourceLand == t.land) {
+              final converted = level == 5 ? 2 : 1;
+              claim(track.commodity, site.owner, converted);
+              basic -= converted;
+              break;
+            }
+          }
+        }
+        claim(good, site.owner, basic);
       }
     }
+
     final bank = Map<Resource, int>.of(s.bank);
     final players = List<PlayerState>.of(s.players);
+    final produced = List<int>.filled(players.length, 0);
     for (final entry in claims.entries) {
       final total = entry.value.values.fold<int>(0, (a, b) => a + b);
-      // Short supply: nobody receives that good; no player-order bias.
+      // Shortage blocks everyone equally; never pay in seat order.
       if ((bank[entry.key] ?? 0) < total) continue;
       bank[entry.key] = bank[entry.key]! - total;
       for (final receipt in entry.value.entries) {
@@ -583,9 +855,178 @@ class MatchEngine {
         final stores = Map<Resource, int>.of(p.stores);
         stores[entry.key] = (stores[entry.key] ?? 0) + receipt.value;
         players[receipt.key] = p.copyWith(stores: stores);
+        produced[receipt.key] += receipt.value;
       }
     }
+
+    final dry = Map<int, int>.of(s.dryRolls);
+    final relieved = Set<int>.of(s.reliefUsed);
+    final leader = [for (var i = 0; i < s.players.length; i++) score(s, i)]
+        .reduce((a, b) => a > b ? a : b);
+    for (var i = 0; i < players.length; i++) {
+      dry[i] = produced[i] > 0 ? 0 : (dry[i] ?? 0) + 1;
+      final innovation = players[i].level(StrategyDeck.innovation);
+      final threshold = innovation >= 3 ? 2 : 3;
+      if (dry[i]! < threshold ||
+          relieved.contains(i) ||
+          leader - score(s, i) < 3) {
+        continue;
+      }
+      Resource? chosen;
+      if (innovation >= 4) {
+        final candidates =
+            Resource.values.take(5).where((r) => bank[r]! > 0).toList()
+              ..sort((a, b) {
+                final byCount = (players[i].stores[a] ?? 0).compareTo(
+                  players[i].stores[b] ?? 0,
+                );
+                return byCount != 0 ? byCount : a.index.compareTo(b.index);
+              });
+        if (candidates.isNotEmpty) chosen = candidates.first;
+      } else if (bank[Resource.wheat]! > 0) {
+        chosen = Resource.wheat;
+      }
+      if (chosen != null) {
+        bank[chosen] = bank[chosen]! - 1;
+        final stores = Map<Resource, int>.of(players[i].stores);
+        stores[chosen] = (stores[chosen] ?? 0) + 1;
+        players[i] = players[i].copyWith(stores: stores);
+        relieved.add(i);
+        dry[i] = 0;
+      }
+    }
+    return s.copyWith(
+      players: players,
+      bank: bank,
+      dryRolls: dry,
+      reliefUsed: relieved,
+    );
+  }
+
+  static MatchState _discardOnSeven(MatchState s) {
+    final bank = Map<Resource, int>.of(s.bank);
+    final players = List<PlayerState>.of(s.players);
+    for (var i = 0; i < players.length; i++) {
+      final p = players[i];
+      final hand = Map<Resource, int>.of(p.stores);
+      final total = Resource.values.fold<int>(
+        0,
+        (sum, r) => sum + (hand[r] ?? 0),
+      );
+      final forts = s.fortified.where((v) => s.sites[v]?.owner == i).length;
+      final capacity =
+          7 +
+          forts * 2 +
+          (p.level(StrategyDeck.governance) >= 3 ? 2 : 0) +
+          (p.level(StrategyDeck.commerce) >= 3 ? 2 : 0);
+      if (total <= capacity) continue;
+      for (var count = total ~/ 2; count > 0; count--) {
+        final goods = Resource.values.where((r) => (hand[r] ?? 0) > 0).toList()
+          ..sort((a, b) {
+            final amount = (hand[b] ?? 0).compareTo(hand[a] ?? 0);
+            return amount != 0 ? amount : a.index.compareTo(b.index);
+          });
+        final good = goods.first;
+        hand[good] = hand[good]! - 1;
+        bank[good] = bank[good]! + 1;
+      }
+      players[i] = p.copyWith(stores: hand);
+    }
     return s.copyWith(players: players, bank: bank);
+  }
+
+  static MatchState _resolveInvasion(MatchState s) {
+    final strength = defenceStrength(s), threat = invasionStrength(s);
+    var report = '';
+    var result = s;
+    if (strength >= threat) {
+      final contributions = <int, int>{
+        for (var i = 0; i < s.players.length; i++)
+          i: s.knights.values
+              .where((k) => k.owner == i && k.active)
+              .fold<int>(0, (total, k) => total + k.rank.strength),
+      };
+      final peak = contributions.values.reduce((a, b) => a > b ? a : b);
+      final leaders = contributions.keys
+          .where((i) => peak > 0 && contributions[i] == peak)
+          .toList();
+      if (leaders.length == 1) {
+        final index = leaders.single;
+        final players = List<PlayerState>.of(s.players);
+        players[index] = players[index].copyWith(
+          guardianHonour: players[index].guardianHonour + 1,
+        );
+        result = result.copyWith(players: players);
+        report =
+            'Defended $strength–$threat. ${players[index].id} earns Guardian\'s Honour (+1 VP).';
+      } else {
+        report =
+            'Defended $strength–$threat. No sole Knight leader; no Honour awarded.';
+      }
+    } else {
+      final targets =
+          s.sites.keys
+              .where((v) => s.sites[v]!.structure != Structure.village)
+              .toList()
+            ..sort((a, b) {
+              final owners = score(
+                s,
+                s.sites[b]!.owner,
+              ).compareTo(score(s, s.sites[a]!.owner));
+              return owners != 0 ? owners : a.compareTo(b);
+            });
+      if (targets.isNotEmpty) {
+        final vertex = targets.first, site = s.sites[vertex]!;
+        if (s.fortified.contains(vertex)) {
+          result = result.copyWith(fortified: {...s.fortified}..remove(vertex));
+          report =
+              'Invasion $threat–$strength. Fortifications at $vertex held, then fell.';
+        } else {
+          final next = site.structure == Structure.capital
+              ? Structure.town
+              : Structure.village;
+          result = _syncBuildings(
+            result.copyWith(
+              sites: {...s.sites, vertex: Site(site.owner, next)},
+              reaverScars: {
+                ...s.reaverScars,
+                if (site.structure == Structure.town) vertex,
+              },
+            ),
+          );
+          if (s.players[site.owner].level(StrategyDeck.governance) < 3) {
+            final bank = Map<Resource, int>.of(result.bank);
+            final players = List<PlayerState>.of(result.players);
+            final hand = Map<Resource, int>.of(players[site.owner].stores);
+            for (var n = 0; n < 2; n++) {
+              final goods = Resource.values
+                  .where((r) => (hand[r] ?? 0) > 0)
+                  .toList();
+              if (goods.isEmpty) break;
+              goods.sort((a, b) {
+                final quantity = (hand[b] ?? 0).compareTo(hand[a] ?? 0);
+                return quantity != 0 ? quantity : a.index.compareTo(b.index);
+              });
+              final good = goods.first;
+              hand[good] = hand[good]! - 1;
+              bank[good] = bank[good]! + 1;
+            }
+            players[site.owner] = players[site.owner].copyWith(stores: hand);
+            result = result.copyWith(players: players, bank: bank);
+          }
+          report =
+              'Invasion $threat–$strength. ${s.players[site.owner].id} lost a ${site.structure.name} at $vertex.';
+        }
+      } else {
+        report = 'Invasion $threat–$strength. No Town to raid.';
+      }
+    }
+    return result.copyWith(
+      phase: MatchPhase.roll,
+      invasions: s.invasions + 1,
+      reaverPressure: 0,
+      lastInvasion: report,
+    );
   }
 
   static MatchState _awardSetupGoods(MatchState s, int vertex) {
@@ -641,7 +1082,7 @@ class MatchEngine {
     } else if (event is PlaceRoad) {
       _require(legalRoad(s, event.edge), 'Road must join your network.');
       final setup = s.phase == MatchPhase.setupRoad;
-      if (!setup) s = _pay(s, roadCost);
+      if (!setup) s = _pay(s, effectiveRoadCost(s));
       s = s.copyWith(roads: {...s.roads, event.edge: s.active});
       s = _recalculateRoads(s);
       if (setup) {
@@ -664,10 +1105,119 @@ class MatchEngine {
       final next = current.structure == Structure.village
           ? Structure.town
           : Structure.capital;
-      s = _pay(s, next == Structure.town ? townCost : capitalCost);
-      s = _syncBuildings(
-        s.copyWith(sites: {...s.sites, event.vertex: Site(s.active, next)}),
+      s = _pay(
+        s,
+        next == Structure.town
+            ? (s.reaverScars.contains(event.vertex) ? rebuildCost : townCost)
+            : capitalCost,
       );
+      final players = List<PlayerState>.of(s.players);
+      var firstCapital = s.firstCapitalOwner;
+      if (next == Structure.capital && firstCapital == null) {
+        firstCapital = s.active;
+        players[s.active] = s.current.copyWith(
+          charterPoints: s.current.charterPoints + 1,
+        );
+      }
+      s = _syncBuildings(
+        s.copyWith(
+          players: players,
+          firstCapitalOwner: firstCapital,
+          reaverScars: {...s.reaverScars}..remove(event.vertex),
+          sites: {...s.sites, event.vertex: Site(s.active, next)},
+        ),
+      );
+    } else if (event is DevelopTown) {
+      _require(canDevelop(s, event.track), 'Cannot develop that track.');
+      final level = s.current.level(event.track) + 1;
+      s = _pay(s, event.track.costFor(level));
+      final players = List<PlayerState>.of(s.players);
+      players[s.active] = s.current.copyWith(
+        developments: {...s.current.developments, event.track: level},
+      );
+      s = s.copyWith(players: players);
+    } else if (event is FortifyTown) {
+      _require(legalFort(s, event.vertex), 'Cannot fortify that Town.');
+      s = _pay(s, fortCost);
+      s = s.copyWith(fortified: {...s.fortified, event.vertex});
+    } else if (event is RecruitKnight) {
+      _require(legalRecruit(s, event.vertex), 'Cannot recruit there.');
+      s = _pay(
+        s,
+        s.current.level(StrategyDeck.governance) >= 4
+            ? {Resource.wool: 1}
+            : recruitCost,
+      );
+      s = s.copyWith(
+        knights: {
+          ...s.knights,
+          event.vertex: KnightPiece(
+            s.active,
+            KnightRank.sentinel,
+            false,
+            s.turnSerial,
+          ),
+        },
+      );
+    } else if (event is ActivateKnight) {
+      _require(legalActivate(s, event.vertex), 'Cannot activate that Knight.');
+      s = _pay(s, activateCost);
+      s = s.copyWith(
+        knights: {
+          ...s.knights,
+          event.vertex: s.knights[event.vertex]!.copyWith(
+            active: true,
+            actedTurn: s.turnSerial,
+          ),
+        },
+      );
+    } else if (event is PromoteKnight) {
+      _require(legalPromote(s, event.vertex), 'Cannot promote that Knight.');
+      final knight = s.knights[event.vertex]!;
+      s = _pay(s, promotionCost(knight.rank));
+      s = s.copyWith(
+        knights: {
+          ...s.knights,
+          event.vertex: knight.copyWith(
+            rank: KnightRank.values[knight.rank.index + 1],
+            actedTurn: s.turnSerial,
+          ),
+        },
+      );
+    } else if (event is MoveKnight) {
+      _require(
+        legalMoveKnight(s, event.from, event.to),
+        'Knight movement is not legal.',
+      );
+      final moving = s.knights[event.from]!;
+      final knights = Map<int, KnightPiece>.of(s.knights)..remove(event.from);
+      final displaced = knights.remove(event.to);
+      if (displaced != null) {
+        final choices =
+            s.topology.vertices[event.to].edges
+                .where((e) => s.roads[e] == displaced.owner)
+                .map((e) {
+                  final side = s.topology.edges[e];
+                  return side.a == event.to ? side.b : side.a;
+                })
+                .where(
+                  (v) =>
+                      !knights.containsKey(v) &&
+                      v != event.from &&
+                      s.sites[v]?.owner != s.active,
+                )
+                .toList()
+              ..sort();
+        if (choices.isNotEmpty) {
+          knights[choices.first] = displaced.copyWith(active: false);
+        }
+      }
+      knights[event.to] = moving.copyWith(actedTurn: s.turnSerial);
+      s = s.copyWith(knights: knights);
+    } else if (event is ResolveInvasion) {
+      _require(s.phase == MatchPhase.invasion, 'No Invasion to resolve.');
+      s = _resolveInvasion(s);
+      s = _recalculateRoads(s);
     } else if (event is RollDice) {
       _require(
         s.phase == MatchPhase.roll,
@@ -684,7 +1234,11 @@ class MatchEngine {
         rollCount: s.rollCount + 1,
         phase: value == 7 ? MatchPhase.bandit : MatchPhase.actions,
       );
-      if (value != 7) s = _produce(s, value);
+      if (value != 7) {
+        s = _produce(s, value);
+      } else {
+        s = _discardOnSeven(s).copyWith(reaverPressure: s.reaverPressure + 1);
+      }
     } else if (event is MoveBandit) {
       _require(s.phase == MatchPhase.bandit, 'Bandit moves only after seven.');
       _require(
@@ -725,27 +1279,36 @@ class MatchEngine {
       _require(s.phase == MatchPhase.actions, 'Trade after rolling.');
       _require(event.give != event.receive, 'Choose different goods.');
       _require(
-        event.receive.index < 5 && event.give.index < 5,
-        'Stage 2 bank trades use basic goods.',
+        event.receive.index < Resource.values.length &&
+            event.give.index < Resource.values.length,
+        'Unknown goods.',
       );
       final rate = tradeRate(s, s.active);
       _require(
         (s.current.stores[event.give] ?? 0) >= rate,
         'Not enough goods.',
       );
-      _require((s.bank[event.receive] ?? 0) >= 1, 'Bank stock exhausted.');
+      final commerce = s.current.level(StrategyDeck.commerce);
+      final count =
+          commerce >= 5 || (commerce >= 3 && event.receive == Resource.cloth)
+          ? 2
+          : 1;
+      _require((s.bank[event.receive] ?? 0) >= count, 'Bank stock exhausted.');
       final stores = Map<Resource, int>.of(s.current.stores);
       final bank = Map<Resource, int>.of(s.bank);
       stores[event.give] = stores[event.give]! - rate;
-      stores[event.receive] = (stores[event.receive] ?? 0) + 1;
+      stores[event.receive] = (stores[event.receive] ?? 0) + count;
       bank[event.give] = bank[event.give]! + rate;
-      bank[event.receive] = bank[event.receive]! - 1;
+      bank[event.receive] = bank[event.receive]! - count;
       final players = List<PlayerState>.of(s.players);
       players[s.active] = s.current.copyWith(stores: stores);
       s = s.copyWith(
         players: players,
         bank: bank,
-        catchupUsed: {...s.catchupUsed, if (rate == 3) s.active},
+        catchupUsed: {
+          ...s.catchupUsed,
+          if (rate == 3 && s.current.level(StrategyDeck.commerce) < 2) s.active,
+        },
       );
     } else if (event is ProposeTrade) {
       _require(s.phase == MatchPhase.actions, 'Trade after rolling.');
@@ -803,12 +1366,18 @@ class MatchEngine {
       _require(s.phase == MatchPhase.actions, 'Roll and resolve Bandit first.');
       final next = (s.active + 1) % s.players.length;
       final newRound = s.round + (next == 0 ? 1 : 0);
+      final pressure = s.reaverPressure + (next == 0 ? 1 : 0);
       s = s.copyWith(
         active: next,
         round: newRound,
-        phase: MatchPhase.roll,
+        turnSerial: s.turnSerial + 1,
+        reaverPressure: pressure,
+        phase: next == 0 && pressure >= 3
+            ? MatchPhase.invasion
+            : MatchPhase.roll,
         clearDice: true,
         catchupUsed: next == 0 ? {} : s.catchupUsed,
+        reliefUsed: next == 0 && (newRound - 1) % 3 == 0 ? {} : s.reliefUsed,
       );
     }
     if (winner(s) != null) s = s.copyWith(phase: MatchPhase.finished);

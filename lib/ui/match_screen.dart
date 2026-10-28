@@ -3,11 +3,23 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../engine/advanced.dart';
 import '../engine/board.dart';
 import '../engine/game.dart';
 import '../engine/match.dart';
 
-enum _Move { inspect, village, road, upgrade, bandit }
+enum _Move {
+  inspect,
+  village,
+  road,
+  upgrade,
+  bandit,
+  fortify,
+  recruit,
+  activate,
+  promote,
+  knightMove,
+}
 
 const seatColors = [
   Color(0xff40d5b4),
@@ -34,6 +46,7 @@ class MatchView extends StatefulWidget {
 
 class _MatchViewState extends State<MatchView> {
   _Move choice = _Move.inspect;
+  int? selectedKnight;
   MatchState get s => widget.state;
   _Move get move => switch (s.phase) {
     MatchPhase.setupVillage => _Move.village,
@@ -43,7 +56,10 @@ class _MatchViewState extends State<MatchView> {
   };
   void send(MatchEvent event) {
     widget.onEvent(event);
-    setState(() => choice = _Move.inspect);
+    setState(() {
+      choice = _Move.inspect;
+      selectedKnight = null;
+    });
   }
 
   void tapBoard(Offset tap, Size size) async {
@@ -84,6 +100,76 @@ class _MatchViewState extends State<MatchView> {
       }
       if (best != null && distance <= math.max(18, g.radius * .33)) {
         send(PlaceRoad(best));
+      }
+    } else if ({
+      _Move.fortify,
+      _Move.recruit,
+      _Move.activate,
+      _Move.promote,
+      _Move.knightMove,
+    }.contains(move)) {
+      final legal = switch (move) {
+        _Move.fortify => [
+          for (final v in s.sites.keys)
+            if (MatchEngine.legalFort(s, v)) v,
+        ],
+        _Move.recruit => [
+          for (var v = 0; v < s.topology.vertices.length; v++)
+            if (MatchEngine.legalRecruit(s, v)) v,
+        ],
+        _Move.activate => [
+          for (final v in s.knights.keys)
+            if (MatchEngine.legalActivate(s, v)) v,
+        ],
+        _Move.promote => [
+          for (final v in s.knights.keys)
+            if (MatchEngine.legalPromote(s, v)) v,
+        ],
+        _Move.knightMove =>
+          selectedKnight == null
+              ? [
+                  for (final v in s.knights.keys)
+                    if (s.knights[v]!.owner == s.active &&
+                        s.knights[v]!.active &&
+                        s.knights[v]!.actedTurn != s.turnSerial &&
+                        MatchEngine.legalKnightDestinations(s, v).isNotEmpty)
+                      v,
+                ]
+              : MatchEngine.legalKnightDestinations(s, selectedKnight!),
+        _ => <int>[],
+      };
+      int? best;
+      var distance = double.infinity;
+      for (final v in legal) {
+        final d = (tap - g.vertex(s.topology.vertices[v])).distance;
+        if (d < distance) {
+          distance = d;
+          best = v;
+        }
+      }
+      if (best == null || distance > math.max(22, g.radius * .45)) return;
+      switch (move) {
+        case _Move.fortify:
+          send(FortifyTown(best));
+          break;
+        case _Move.recruit:
+          send(RecruitKnight(best));
+          break;
+        case _Move.activate:
+          send(ActivateKnight(best));
+          break;
+        case _Move.promote:
+          send(PromoteKnight(best));
+          break;
+        case _Move.knightMove:
+          if (selectedKnight == null) {
+            setState(() => selectedKnight = best);
+          } else {
+            send(MoveKnight(selectedKnight!, best));
+          }
+          break;
+        default:
+          break;
       }
     } else if (move == _Move.bandit) {
       var best = -1;
@@ -152,12 +238,17 @@ class _MatchViewState extends State<MatchView> {
       builder: (context) => StatefulBuilder(
         builder: (context, update) {
           final rate = MatchEngine.tradeRate(s, s.active);
+          final commerce = s.current.level(StrategyDeck.commerce);
+          final receipt =
+              commerce >= 5 || (commerce >= 3 && take == Resource.cloth)
+              ? 2
+              : 1;
           final valid =
               give != take &&
               (s.current.stores[give] ?? 0) >= rate &&
-              (s.bank[take] ?? 0) >= 1;
+              (s.bank[take] ?? 0) >= receipt;
           return AlertDialog(
-            title: Text('Bank trade · $rate:1'),
+            title: Text('Bank trade · $rate:$receipt'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -168,7 +259,7 @@ class _MatchViewState extends State<MatchView> {
                 ),
                 const SizedBox(height: 12),
                 _GoodInput(
-                  label: 'Receive 1',
+                  label: 'Receive $receipt',
                   resource: take,
                   change: (r) => update(() => take = r),
                 ),
@@ -290,10 +381,20 @@ class _MatchViewState extends State<MatchView> {
       MatchPhase.roll => 'Roll two dice to gather goods',
       MatchPhase.bandit => 'Tap a new hex to move the Bandit',
       MatchPhase.finished => 'Victory!',
+      MatchPhase.invasion =>
+        'Reaver Fleet Invasion · review defence and resolve the outcome',
       MatchPhase.actions => switch (move) {
         _Move.village => 'Tap a glowing junction · wood + brick + wheat + wool',
         _Move.road => 'Tap a glowing road · wood + brick',
         _Move.upgrade => 'Tap your glowing Village or Town to upgrade',
+        _Move.fortify => 'Tap a glowing Town to raise Fortifications',
+        _Move.recruit => 'Tap an open road junction to recruit a Sentinel',
+        _Move.activate => 'Tap your inactive Knight to activate',
+        _Move.promote => 'Tap an active Knight to promote',
+        _Move.knightMove =>
+          selectedKnight == null
+              ? 'Select your active Knight'
+              : 'Tap a glowing destination',
         _ => 'Pinch to zoom · drag to pan · tap to inspect',
       },
     };
@@ -361,7 +462,7 @@ class _MatchViewState extends State<MatchView> {
                                 onTapUp: (details) =>
                                     tapBoard(details.localPosition, size),
                                 child: CustomPaint(
-                                  painter: _Painter(s, move),
+                                  painter: _Painter(s, move, selectedKnight),
                                   child: const SizedBox.expand(),
                                 ),
                               ),
@@ -387,6 +488,10 @@ class _MatchViewState extends State<MatchView> {
               ],
             ),
             const SizedBox(height: 8),
+            Text(
+              'Reaver Fleet ${s.reaverPressure}/3 · Defence ${MatchEngine.defenceStrength(s)} · First Capital: ${s.firstCapitalOwner == null ? 'unclaimed' : s.players[s.firstCapitalOwner!].id}',
+            ),
+            if (s.lastInvasion.isNotEmpty) Text(s.lastInvasion),
             if (s.trade case final TradeProposal trade)
               Card(
                 child: Padding(
@@ -417,6 +522,33 @@ class _MatchViewState extends State<MatchView> {
                             ),
                           ),
                         ],
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (phase == MatchPhase.invasion)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Fleet strength ${MatchEngine.invasionStrength(s)} · Defence ${MatchEngine.defenceStrength(s)}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const Text(
+                        'All active Knights and Fortifications defend. '
+                        'A failed defence damages the highest-scoring Town '
+                        'or Capital; a sole leading Knight defender may earn '
+                        "Guardian's Honour.",
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        onPressed: () => send(const ResolveInvasion()),
+                        icon: const Icon(Icons.shield_outlined),
+                        label: const Text('Resolve Invasion'),
                       ),
                     ],
                   ),
@@ -463,6 +595,101 @@ class _MatchViewState extends State<MatchView> {
                         : null,
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final entry in <(_Move, String, bool)>[
+                    (
+                      _Move.fortify,
+                      'Fortify',
+                      s.sites.keys.any((v) => MatchEngine.legalFort(s, v)),
+                    ),
+                    (
+                      _Move.recruit,
+                      'Recruit Knight',
+                      [
+                        for (var v = 0; v < s.topology.vertices.length; v++)
+                          if (MatchEngine.legalRecruit(s, v)) v,
+                      ].isNotEmpty,
+                    ),
+                    (
+                      _Move.activate,
+                      'Activate',
+                      s.knights.keys.any(
+                        (v) => MatchEngine.legalActivate(s, v),
+                      ),
+                    ),
+                    (
+                      _Move.promote,
+                      'Promote',
+                      s.knights.keys.any((v) => MatchEngine.legalPromote(s, v)),
+                    ),
+                    (
+                      _Move.knightMove,
+                      'Move Knight',
+                      s.knights.keys.any(
+                        (v) =>
+                            s.knights[v]!.owner == s.active &&
+                            MatchEngine.legalKnightDestinations(
+                              s,
+                              v,
+                            ).isNotEmpty,
+                      ),
+                    ),
+                  ])
+                    ChoiceChip(
+                      label: Text(entry.$2),
+                      selected: choice == entry.$1,
+                      onSelected: entry.$3
+                          ? (_) => setState(() {
+                              choice = entry.$1;
+                              selectedKnight = null;
+                            })
+                          : null,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Town Developments',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      for (final track in StrategyDeck.values)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${track.name} · ${s.current.level(track)}/5'
+                                  '${s.current.level(track) < 5 ? " · Next: ${track.tiers[s.current.level(track)]}" : " · Complete"}',
+                                ),
+                              ),
+                              OutlinedButton(
+                                onPressed: MatchEngine.canDevelop(s, track)
+                                    ? () => send(DevelopTown(track))
+                                    : null,
+                                child: Text(
+                                  s.current.level(track) == 5
+                                      ? 'Max'
+                                      : 'Develop',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               Row(
@@ -554,7 +781,7 @@ class _GoodInput extends StatelessWidget {
       border: const OutlineInputBorder(),
     ),
     items: [
-      for (final r in Resource.values.take(5))
+      for (final r in Resource.values)
         DropdownMenuItem(value: r, child: Text(r.name)),
     ],
     onChanged: (r) {
@@ -597,9 +824,10 @@ class _Geometry {
 }
 
 class _Painter extends CustomPainter {
-  const _Painter(this.state, this.mode);
+  const _Painter(this.state, this.mode, this.selectedKnight);
   final MatchState state;
   final _Move mode;
+  final int? selectedKnight;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -715,11 +943,41 @@ class _Painter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
     }
-    final legal = mode == _Move.village
-        ? MatchEngine.legalVertices(state).toSet()
-        : mode == _Move.upgrade
-        ? MatchEngine.legalUpgrades(state).toSet()
-        : <int>{};
+    final legal = switch (mode) {
+      _Move.village => MatchEngine.legalVertices(state).toSet(),
+      _Move.upgrade => MatchEngine.legalUpgrades(state).toSet(),
+      _Move.fortify => {
+        for (final v in state.sites.keys)
+          if (MatchEngine.legalFort(state, v)) v,
+      },
+      _Move.recruit => {
+        for (var v = 0; v < state.topology.vertices.length; v++)
+          if (MatchEngine.legalRecruit(state, v)) v,
+      },
+      _Move.activate => {
+        for (final v in state.knights.keys)
+          if (MatchEngine.legalActivate(state, v)) v,
+      },
+      _Move.promote => {
+        for (final v in state.knights.keys)
+          if (MatchEngine.legalPromote(state, v)) v,
+      },
+      _Move.knightMove =>
+        selectedKnight == null
+            ? {
+                for (final v in state.knights.keys)
+                  if (state.knights[v]!.owner == state.active &&
+                      state.knights[v]!.active &&
+                      state.knights[v]!.actedTurn != state.turnSerial &&
+                      MatchEngine.legalKnightDestinations(state, v).isNotEmpty)
+                    v,
+              }
+            : MatchEngine.legalKnightDestinations(
+                state,
+                selectedKnight!,
+              ).toSet(),
+      _ => <int>{},
+    };
     for (final v in state.topology.vertices) {
       final c = g.vertex(v);
       if (legal.contains(v.id)) {
@@ -768,6 +1026,48 @@ class _Painter extends CustomPainter {
           Paint()..color = const Color(0xffffd77e),
         );
       }
+      if (state.fortified.contains(v.id)) {
+        _label(
+          canvas,
+          '▣',
+          c + const Offset(12, -15),
+          19,
+          const Color(0xffffd77e),
+        );
+      }
+      if (state.reaverScars.contains(v.id)) {
+        _label(
+          canvas,
+          '!',
+          c + const Offset(10, 11),
+          14,
+          const Color(0xffec6757),
+        );
+      }
+    }
+    for (final entry in state.knights.entries) {
+      final knight = entry.value;
+      final c = g.vertex(state.topology.vertices[entry.key]);
+      canvas.drawCircle(
+        c + const Offset(0, 15),
+        9,
+        Paint()..color = const Color(0xff182a32),
+      );
+      canvas.drawCircle(
+        c + const Offset(0, 15),
+        7,
+        Paint()
+          ..color = knight.active
+              ? seatColors[knight.owner]
+              : const Color(0xff879699),
+      );
+      _label(
+        canvas,
+        '${knight.rank.strength}',
+        c + const Offset(0, 15),
+        11,
+        const Color(0xff102028),
+      );
     }
   }
 
@@ -789,5 +1089,7 @@ class _Painter extends CustomPainter {
 
   @override
   bool shouldRepaint(_Painter old) =>
-      !identical(old.state, state) || old.mode != mode;
+      !identical(old.state, state) ||
+      old.mode != mode ||
+      old.selectedKnight != selectedKnight;
 }

@@ -287,11 +287,11 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                           ),
                           const _Rule(
                             'Roll',
-                            'Matching numbers generate goods: Village one, Town two, Capital three. On a seven move the Bandit, blocking production on its hex.',
+                            'Matching numbers generate goods: Village one, Town two, Capital three. Developed Towns convert one terrain good to paper (woodland), cloth (meadows) or coin (ridges). On seven, exposed hands discard half and move the Bandit.',
                           ),
                           const _Rule(
                             'Build',
-                            'Road costs wood + brick. Village costs wood + brick + wheat + wool. Town costs 2 wheat + 3 ore. Capital costs 2 wood + 3 wheat + 3 ore in Stage 2.',
+                            'Road costs wood + brick; Village costs wood + brick + wheat + wool; Town costs 2 wheat + 3 ore. Capital requires wheat, ore and one of each commodity. The first Capital earns one Charter Point.',
                           ),
                           const _Rule(
                             'Trade',
@@ -302,8 +302,8 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                             'Reach 15 VP. Village = 1; Town = 2; Capital = 4. Longest unbroken road of five or more sides earns 2 VP.',
                           ),
                           const _Rule(
-                            'Future stages',
-                            'Paper, cloth, coin, Knights, Town Developments, Strategy Cards, Reaver Fleet and Invasion arrive later.',
+                            'Advanced systems',
+                            'Advance Innovation, Commerce and Governance through five Town Developments each. Recruit, activate, promote and move Knights. Fortifications guard Towns; Reaver Fleet Invasions test shared defence. Strategy Cards arrive in Stage 4.',
                           ),
                           const Text(
                             'Every move is engine-validated and logged for deterministic replay.',

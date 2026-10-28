@@ -25,12 +25,16 @@ class PlayerState {
     this.guardianHonour = 0,
     this.charterPoints = 0,
     this.reactionTokens = 1,
-  }) : buildings = List.unmodifiable(buildings),
+    Map<StrategyDeck, int> developments = const {},
+  }) : developments = Map.unmodifiable(developments),
+       buildings = List.unmodifiable(buildings),
        stores = Map.unmodifiable(stores);
   final String id;
   final List<Structure> buildings;
   final Map<Resource, int> stores;
   final int guardianHonour, charterPoints, reactionTokens;
+  final Map<StrategyDeck, int> developments;
+  int level(StrategyDeck track) => developments[track] ?? 0;
 
   PlayerState copyWith({
     List<Structure>? buildings,
@@ -38,6 +42,7 @@ class PlayerState {
     int? guardianHonour,
     int? charterPoints,
     int? reactionTokens,
+    Map<StrategyDeck, int>? developments,
   }) => PlayerState(
     id: id,
     buildings: buildings ?? this.buildings,
@@ -45,6 +50,7 @@ class PlayerState {
     guardianHonour: guardianHonour ?? this.guardianHonour,
     charterPoints: charterPoints ?? this.charterPoints,
     reactionTokens: reactionTokens ?? this.reactionTokens,
+    developments: developments ?? this.developments,
   );
 }
 
