@@ -3,7 +3,7 @@
 ## What works
 
 - Offline hot-seat and its private handoff/replay remain unchanged.
-- A Dart server process on **Nox** owns each room's 3–4 seats and match.
+- A Dart server process on a trusted private host owns each room's 3–4 seats and match.
   Android clients create/join with a short code, see connected seats, and
   start once full; each socket is bound to exactly one seat.
 - All moves run through the unchanged pure \`MatchEngine.apply\` on the host.
@@ -21,27 +21,23 @@
   advances disconnected seats so standing escrow never blocks indefinitely.
   Standing offers still expire/refund on the proposer's next action turn.
 
-## Nox host and clients
+## Private host and clients
 
-On Nox, from \`/home/brandon/stone-and-banner\`:
+From the repository checkout, choose an interface address reachable by your trusted clients:
 
 \`\`\`sh
-# Waydroid-only, isolated bridge:
-dart run tool/lan_server.dart --bind 192.168.240.1 --port 8765
-
-# Or, for other trusted devices on the same Wi-Fi:
-dart run tool/lan_server.dart --bind 192.168.1.133 --port 8765
+read -r LAN_BIND_IP
+dart run tool/lan_server.dart --bind "$LAN_BIND_IP" --port 8765
 \`\`\`
 
 In the app select **LAN multiplayer room**, enter
-\`ws://192.168.240.1:8765/room\` in Nox Waydroid or the Nox Wi-Fi IP
-(\`ws://192.168.1.133:8765/room\` currently) on other devices, choose
+\`ws://HOST-IP:8765/room\` using that interface address, then choose
 **Create room**, copy the invitation code, and let two or three others
 **Join room**. The creator starts when full. A device can reconnect to its
 seat using its stored recovery token, even after the app restarts, provided
 the host process is still running. The room code is not a seat credential.
 
-Nox currently has a default-drop input firewall and TCP/8765 is not permitted. A trusted LAN or Waydroid client requires a separately authorized, narrowly scoped allow rule for this port and source interface. The temporary Waydroid-only rule used in QA was removed afterwards.
+A trusted LAN or Waydroid client may require a narrowly scoped firewall allowance for TCP/8765 on the host interface. Do not open it to untrusted networks.
 
 The host binds loopback by default. Explicit LAN binding is required.
 Do not forward port 8765 or expose it via a public tunnel. No server is

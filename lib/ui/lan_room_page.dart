@@ -14,7 +14,7 @@ class LanRoomPage extends StatefulWidget {
 
 class _LanRoomPageState extends State<LanRoomPage> {
   late final LanRoomClient client;
-  final address = TextEditingController(text: 'ws://192.168.1.133:8765/room');
+  final address = TextEditingController();
   final name = TextEditingController(text: 'Player');
   final roomCode = TextEditingController();
   final boardSeed = TextEditingController(text: '20261027');
@@ -183,7 +183,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'All players connect to the same Nox server. '
+            'All players connect to the same private LAN host. '
             'Remote internet games are not enabled.',
           ),
           const SizedBox(height: 14),
@@ -193,7 +193,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               labelText: 'Host WebSocket URL',
-              helperText: 'Example: ws://NOX-LAN-IP:8765/room',
+              helperText: 'Example: ws://host.example.test:8765/room',
             ),
           ),
           const SizedBox(height: 14),

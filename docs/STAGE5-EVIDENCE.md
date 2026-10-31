@@ -1,6 +1,6 @@
-# Stage 5 verification — Nox, 29 October 2026 (NZDT)
+# Stage 5 verification — local test host, 29 October 2026 (NZDT)
 
-- Canonical source: Nox /home/brandon/stone-and-banner; desktop/Glass untouched.
+- Canonical source: local test host project checkout; desktop/secondary host untouched.
   Pre-edit main was clean at 3bc47db. Flutter/Dart Material 3 only, Android
   application ID nz.presley.stoneandbanner.
 - Pure match reducer now supports escrowed offers (one per proposer, one counter
@@ -14,13 +14,13 @@
   stale/duplicate response rejection, attack and counter card accounting,
   timeout/round reset, no loops and seeded full-match replay. Widget tests cover
   private handoff, aid preview, trade acceptance and import dialog lifetime.
-- Nox buildq #1671: refreshed Flutter Rules screen golden; passed.
-- Nox buildq #1672: flutter analyze; zero issues.
-- Nox buildq #1673: full flutter test suite; passed.
-- Nox buildq #1674: flutter build apk --release; passed.
+- local test host buildq #1671: refreshed Flutter Rules screen golden; passed.
+- local test host buildq #1672: flutter analyze; zero issues.
+- local test host buildq #1673: full flutter test suite; passed.
+- local test host buildq #1674: flutter build apk --release; passed.
   APK: build/app/outputs/flutter-apk/app-release.apk, 51,161,625 bytes,
   SHA-256 084da81743c6c1c14fb1bda50d42d1d04d88ff93c996dbf05244a79fe63abe73.
-- Nox buildq #1675: adb install -r on Nox Waydroid 192.168.240.2:5555;
+- local test host buildq #1675: adb install -r on local test host Waydroid <TEST_DEVICE_IP>:5555;
   passed. am start -W -n nz.presley.stoneandbanner/.MainActivity returned
   Status: ok, LaunchState: COLD and TotalTime: 183 ms. Activity remained focused.
 - Live release UI: imported the exact 773-byte fixture through Home > Import

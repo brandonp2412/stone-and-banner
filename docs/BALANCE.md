@@ -4,7 +4,7 @@ Stage 7 implements `lib/engine/simulation.dart` and `tool/balance.dart`.
 The production rules remain `MatchBalance.baseline`; experimental immutable
 parameters are serialized in replays, never silently selected in the UI.
 
-## Reproduce on Nox
+## Reproduce on local test host
 
 ```sh
 buildq --wait -- dart run tool/balance.dart 120 90 docs/STAGE7-METRICS.json

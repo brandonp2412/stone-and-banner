@@ -1,4 +1,4 @@
-# Stage 7 evidence — Nox, 29 October 2026 (NZDT)
+# Stage 7 evidence — local test host, 29 October 2026 (NZDT)
 
 - Canonical clean pre-edit `main` was `5cbd57f`; Flutter `lib/` and
   `test/` were verified, root legacy Android left untouched.
@@ -23,13 +23,13 @@
   original rule vocabulary unchanged.
 - buildq **#1726** release APK succeeded: 53,838,525 bytes,
   SHA-256 `0a77ea02b43b0883a5de1bbedd05dcf4a1df2a507d8f3e1e9ffc2c322c784475`.
-  Nox ADB installed it successfully on Waydroid
-  `192.168.240.2:5555`; `.MainActivity` cold-launched in 186 ms
+  local test host ADB installed it successfully on Waydroid
+  `<TEST_DEVICE_IP>:5555`; `.MainActivity` cold-launched in 186 ms
   and remained resumed/foreground.
-- Live release UI: Home opened LAN multiplayer entry (private Nox host form)
+- Live release UI: Home opened LAN multiplayer entry (private local test host host form)
   and returned; an offline three-player match opened its private handoff.
   After Player 1 became ready, tapping a central glowing junction placed
   a legal Village (1/15 VP), and tapping its adjacent side placed a Road.
   The subsequent handoff named Player 2; Player 2 resumed on the board.
   Screenshot: `docs/evidence/stage7_waydroid_board.png`.
-- No Samsung QA, remote server, public store distribution, or Glass use.
+- No Samsung QA, remote server, public store distribution, or secondary host use.

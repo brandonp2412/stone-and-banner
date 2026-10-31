@@ -1,6 +1,6 @@
-# Stage 8 local release evidence — Nox, 29 October 2026 (NZDT)
+# Stage 8 local release evidence — local test host, 29 October 2026 (NZDT)
 
-**Status: verified local Android release candidate, not approved for public distribution.** All source, builds, tests, git and device actions occurred on Nox at /home/brandon/stone-and-banner; Glass remained off. Flutter lib/ and test/ are canonical; legacy root Android source was untouched. Baseline main was fa18243.
+**Status: verified local Android release candidate, not approved for public distribution.** All source, builds, tests, git and device actions occurred on local test host at project checkout; secondary host remained off. Flutter lib/ and test/ are canonical; legacy root Android source was untouched. Baseline main was fa18243.
 
 ## Shipped
 
@@ -10,7 +10,7 @@
 - Compact sbz1: gzip/base64Url replays, bounded decompression, backwards-compatible raw JSON, copy/import controls. Exports contain all private hands: share only with trusted participants.
 - Pure Dart deterministic engine, 3–4-seat offline play, Invasion, Strategy Cards, reactions, player trades, host-authoritative LAN room protocol and 15-VP victory flow remain available. No public server was deployed.
 
-## Automated verification on Nox
+## Automated verification on local test host
 
 | Check | Evidence |
 | --- | --- |
@@ -22,9 +22,9 @@
 
 Reproduce with buildq --wait -- flutter test, buildq --wait -- flutter analyze, buildq --wait -- dart run tool/lan_smoke.dart, and buildq --wait -- flutter build apk --release. tool/stage8_scenarios.dart generates deterministic replay checkpoints; the moves below were performed in the installed release app's UI, not injected directly.
 
-## Nox Waydroid Android release smoke
+## local test host Waydroid Android release smoke
 
-Release APK installed and cold-launched via Nox ADB on **192.168.240.2:5555**; ActivityManager cold-launch about **178 ms**. Tested portrait 432×960 and landscape 1920×1080. Screenshots were captured from the live **release APK**; names below are relative to docs/evidence/.
+Release APK installed and cold-launched via local test host ADB on **<TEST_DEVICE_IP>:5555**; ActivityManager cold-launch about **178 ms**. Tested portrait 432×960 and landscape 1920×1080. Screenshots were captured from the live **release APK**; names below are relative to docs/evidence/.
 
 | Scenario and observed outcome | Screenshot evidence |
 | --- | --- |
@@ -46,7 +46,7 @@ Filtered device logcat for AndroidRuntime:E and Flutter:E returned **no error li
 1. **Signing:** The release-build APK is signed by **CN=Android Debug**. Provision secured production key, provenance and store release checks.
 2. **Network/security:** LAN uses cleartext ws:// and Android cleartext enabled; only trusted local networks are supported. No TLS/authenticated public backend, adversarial audit, hosting approval or internet matchmaking. Never publicly expose the current LAN server.
 3. **Legal/IP/privacy:** Independent trademark, gameplay expression, original-art provenance/licence, privacy disclosures and publication review missing. Source string audit found no third-party board-game marks in canonical Flutter app and docs, but this **does not** establish legal clearance.
-4. **Real devices/accessibility:** No Samsung release install or TalkBack/switch testing; Nox Waydroid only. Contrast under accessibility settings, font scaling, real-device performance and long-session jank remain to be checked.
+4. **Real devices/accessibility:** No Samsung release install or TalkBack/switch testing; local test host Waydroid only. Contrast under accessibility settings, font scaling, real-device performance and long-session jank remain to be checked.
 5. **Balance and deployment:** Prior deterministic simulations exist, but human balance and competitive fairness remain unproven. No public deployment/store upload was attempted.
 
 Stage 8 roadmap checkbox remains unchecked until these external gates are addressed.
