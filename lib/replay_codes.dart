@@ -13,7 +13,13 @@ class ReplayCodes {
 
   static String expand(String raw) {
     final input = raw.trim();
-    if (!input.startsWith(prefix)) return input;
+    if (!input.startsWith(prefix)) {
+      if (input.length > maxDecodedBytes ||
+          utf8.encode(input).length > maxDecodedBytes) {
+        throw const FormatException('Replay exceeds the 1 MB safety limit.');
+      }
+      return input;
+    }
     if (input.length > maxEncodedLength) {
       throw const FormatException('Replay share code is too large.');
     }

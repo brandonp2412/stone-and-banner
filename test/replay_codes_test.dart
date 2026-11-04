@@ -33,5 +33,13 @@ void main() {
     final bomb =
         'sbz1:${base64Url.encode(gzip.encode(utf8.encode('X' * (1024 * 1024 + 1))))}';
     expect(() => ReplayCodes.expand(bomb), throwsFormatException);
+    expect(
+      () => ReplayCodes.expand('x' * (ReplayCodes.maxDecodedBytes + 1)),
+      throwsFormatException,
+    );
+    expect(
+      () => ReplayCodes.expand('é' * (ReplayCodes.maxDecodedBytes ~/ 2 + 1)),
+      throwsFormatException,
+    );
   });
 }

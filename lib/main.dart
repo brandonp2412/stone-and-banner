@@ -314,9 +314,33 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       context: dialogContext,
       builder: (context) => const _ReplayImportDialog(),
     );
-    if (raw == null) return;
+    if (raw == null || !mounted || !dialogContext.mounted) return;
     try {
       final loaded = MatchEngine.importReplay(ReplayCodes.expand(raw));
+      if (savedReplay != null) {
+        final replace = await showDialog<bool>(
+          context: dialogContext,
+          builder: (context) => AlertDialog(
+            title: const Text('Replace saved match?'),
+            content: const Text(
+              'Importing replaces the match saved on this device. '
+              'Copy its replay first if you want to keep it. '
+              'Imported replays continue in hot-seat mode; computer seats are not included in share codes.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep saved match'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Import and replace'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || replace != true) return;
+      }
       ai.pause();
       setState(() {
         match = loaded;
