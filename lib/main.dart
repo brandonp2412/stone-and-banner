@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'engine/ai_turn_coordinator.dart';
 import 'engine/match.dart';
 import 'replay_codes.dart';
 import 'ui/match_screen.dart';
@@ -18,8 +20,75 @@ class StoneBannerApp extends StatefulWidget {
   State<StoneBannerApp> createState() => _StoneBannerAppState();
 }
 
-class _StoneBannerAppState extends State<StoneBannerApp> {
+class _StoneBannerAppState extends State<StoneBannerApp>
+    with WidgetsBindingObserver {
   static const _savedMatchKey = 'stone_banner_local_replay_v1';
+  static const _savedSessionKey = 'stone_banner_local_session_v2';
+  late final AiTurnCoordinator ai;
+  Set<int> aiSeats = <int>{};
+  Set<int> savedAiSeats = <int>{};
+  bool computerOpponents = false;
+  int aiOpponentCount = 1;
+
+  int get humanSeats => seats - (computerOpponents ? aiOpponentCount : 0);
+  bool get soloHumanVsAi => computerOpponents && humanSeats == 1;
+  bool get oneHumanMatch =>
+      match != null &&
+      aiSeats.isNotEmpty &&
+      match!.players.length - aiSeats.length == 1;
+  bool _foreground = true;
+  int aiMoveCount = 0;
+  String? aiError;
+
+  bool get aiActing {
+    final s = match;
+    return s != null &&
+        s.phase != MatchPhase.finished &&
+        aiSeats.contains(s.tactical?.responder ?? s.active);
+  }
+
+  void _syncAi() {
+    if (mounted &&
+        _foreground &&
+        page == Page.board &&
+        !handoff &&
+        aiError == null &&
+        aiActing) {
+      ai.resume();
+    } else {
+      ai.pause();
+    }
+  }
+
+  bool _commitAi(MatchState expected, MatchState next) {
+    if (!mounted ||
+        !_foreground ||
+        page != Page.board ||
+        handoff ||
+        !identical(match, expected) ||
+        !aiActing) {
+      return false;
+    }
+    final oldOwner = expected.tactical?.responder ?? expected.active;
+    final nextOwner = next.tactical?.responder ?? next.active;
+    setState(() {
+      match = next;
+      aiMoveCount++;
+      handoff =
+          oldOwner != nextOwner &&
+          !aiSeats.contains(nextOwner) &&
+          !oneHumanMatch;
+    });
+    _save(next);
+    return true;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _syncAi();
+  }
+
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
   String? savedReplay;
   Future<void> _saveTail = Future<void>.value();
@@ -27,14 +96,45 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    ai = AiTurnCoordinator(
+      read: () => match,
+      commit: _commitAi,
+      isComputerSeat: (seat) => aiSeats.contains(seat),
+      onError: (error) {
+        if (mounted) setState(() => aiError = error.toString());
+      },
+    );
     unawaited(_loadSaved());
   }
 
   Future<void> _loadSaved() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      var replay = prefs.getString(_savedMatchKey);
+      var seats = <int>{};
+      final session = prefs.getString(_savedSessionKey);
+      if (session != null) {
+        try {
+          final data = jsonDecode(session) as Map<String, dynamic>;
+          final encoded = data['replay'];
+          final ids = data['computerSeats'];
+          if (data['version'] == 2 &&
+              encoded is String &&
+              ids is List &&
+              ids.every((id) => id is int && id >= 0)) {
+            replay = encoded;
+            seats = ids.cast<int>().toSet();
+          }
+        } on Object {
+          // Legacy replay remains available if this metadata was damaged.
+        }
+      }
       if (mounted && match == null) {
-        setState(() => savedReplay = prefs.getString(_savedMatchKey));
+        setState(() {
+          savedReplay = replay;
+          savedAiSeats = seats;
+        });
       }
     } on Object {
       if (mounted) fail('Could not load the saved local match.');
@@ -44,11 +144,18 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
   void _save(MatchState state) {
     final replay = MatchEngine.exportReplay(state);
     savedReplay = replay;
+    savedAiSeats = {...aiSeats};
+    final session = jsonEncode({
+      'version': 2,
+      'replay': replay,
+      'computerSeats': (aiSeats.toList()..sort()),
+    });
     // Serialize writes: a slower prior event must never replace a newer replay.
     _saveTail = _saveTail.then((_) async {
       try {
         final prefs = await SharedPreferences.getInstance();
-        if (!await prefs.setString(_savedMatchKey, replay)) {
+        if (!await prefs.setString(_savedSessionKey, session) ||
+            !await prefs.setString(_savedMatchKey, replay)) {
           throw StateError('Storage rejected the replay.');
         }
       } on Object {
@@ -64,11 +171,20 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
     if (replay == null) return;
     try {
       final loaded = MatchEngine.importReplay(replay);
+      ai.pause();
       setState(() {
         match = loaded;
+        aiSeats = savedAiSeats
+            .where((s) => s > 0 && s < loaded.players.length)
+            .toSet();
+        aiMoveCount = 0;
+        aiError = null;
         page = Page.board;
-        handoff = true;
+        handoff =
+            !aiSeats.contains(loaded.tactical?.responder ?? loaded.active) &&
+            !(aiSeats.length == loaded.players.length - 1);
       });
+      _syncAi();
     } on Object catch (e) {
       fail('Saved replay is invalid: $e');
     }
@@ -85,6 +201,8 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
 
   @override
   void dispose() {
+    ai.pause();
+    WidgetsBinding.instance.removeObserver(this);
     seed.dispose();
     for (final n in names) {
       n.dispose();
@@ -98,15 +216,26 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
 
   void start() {
     try {
+      final firstComputer = humanSeats;
       final s = MatchEngine.newGame([
-        for (var i = 0; i < seats; i++) names[i].text.trim(),
+        for (var i = 0; i < seats; i++)
+          i >= firstComputer
+              ? 'Computer ${i - firstComputer + 1}'
+              : names[i].text.trim(),
       ], int.parse(seed.text));
+      ai.pause();
       setState(() {
         match = s;
+        aiSeats = computerOpponents
+            ? {for (var i = firstComputer; i < seats; i++) i}
+            : <int>{};
+        aiMoveCount = 0;
+        aiError = null;
         page = Page.board;
-        handoff = true;
+        handoff = !soloHumanVsAi;
       });
       _save(s);
+      _syncAi();
     } on FormatException {
       fail('Enter a numeric seed.');
     } on StateError catch (e) {
@@ -115,15 +244,21 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
   }
 
   void dispatch(MatchEvent event) {
+    if (page != Page.board || handoff || aiActing || match == null) return;
     try {
-      final s = MatchEngine.apply(match!, event);
+      final previous = match!;
+      final s = MatchEngine.apply(previous, event);
+      final oldOwner = previous.tactical?.responder ?? previous.active;
+      final nextOwner = s.tactical?.responder ?? s.active;
       setState(() {
         handoff =
-            (s.tactical?.responder ?? s.active) !=
-            (match!.tactical?.responder ?? match!.active);
+            oldOwner != nextOwner &&
+            !aiSeats.contains(nextOwner) &&
+            !oneHumanMatch;
         match = s;
       });
       _save(s);
+      _syncAi();
     } on StateError catch (e) {
       fail(e.message);
     }
@@ -137,8 +272,12 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
     if (raw == null) return;
     try {
       final loaded = MatchEngine.importReplay(ReplayCodes.expand(raw));
+      ai.pause();
       setState(() {
         match = loaded;
+        aiSeats = <int>{};
+        aiMoveCount = 0;
+        aiError = null;
         page = Page.board;
         handoff = true;
       });
@@ -174,7 +313,10 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
         builder: (context) => PopScope(
           canPop: page == Page.home,
           onPopInvokedWithResult: (didPop, result) {
-            if (!didPop) setState(() => page = Page.home);
+            if (!didPop) {
+              ai.pause();
+              setState(() => page = Page.home);
+            }
           },
           child: Scaffold(
             appBar: AppBar(
@@ -189,14 +331,20 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
             ),
             bottomNavigationBar: NavigationBar(
               selectedIndex: page.index,
-              onDestinationSelected: (n) => setState(() {
-                final next = Page.values[n];
-                // Re-entering a private board always requires a fresh handoff.
-                if (next == Page.board && page != Page.board && match != null) {
-                  handoff = true;
-                }
-                page = next;
-              }),
+              onDestinationSelected: (n) {
+                ai.pause();
+                setState(() {
+                  final next = Page.values[n];
+                  // Human private hands require consent after every re-entry.
+                  if (next == Page.board &&
+                      page != Page.board &&
+                      match != null) {
+                    handoff = !aiActing && !oneHumanMatch;
+                  }
+                  page = next;
+                });
+                _syncAi();
+              },
               destinations: const [
                 NavigationDestination(
                   icon: Icon(Icons.home_outlined),
@@ -227,8 +375,8 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                                 borderRadius: BorderRadius.circular(18),
                                 child: Image.asset(
                                   'assets/art/stone_banner_crest.jpg',
-                                  width: 104,
-                                  height: 104,
+                                  width: 88,
+                                  height: 88,
                                   fit: BoxFit.cover,
                                   semanticLabel: 'Original Stone & Banner emblem: a standing stone and gold banner',
                                 ),
@@ -258,9 +406,9 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                           ),
                           const SizedBox(height: 12),
                           const Text(
-                            'An original offline pass-and-play strategy game. Claim villages, span the frontier and earn 15 Victory Points.',
+                            'An original offline strategy game. Claim villages, span the frontier and earn 15 Victory Points.',
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 8),
                           if (savedReplay != null) ...[
                             FilledButton.tonalIcon(
                               onPressed: resume,
@@ -271,7 +419,12 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                           ],
                           Card(
                             child: Padding(
-                              padding: const EdgeInsets.all(18),
+                              padding: const EdgeInsets.fromLTRB(
+                                18,
+                                12,
+                                18,
+                                12,
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
@@ -281,7 +434,26 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                                         .textTheme
                                         .titleLarge,
                                   ),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 16),
+                                  SegmentedButton<bool>(
+                                    segments: const [
+                                      ButtonSegment(
+                                        value: false,
+                                        icon: Icon(Icons.groups_outlined),
+                                        label: Text('Hot-seat'),
+                                      ),
+                                      ButtonSegment(
+                                        value: true,
+                                        icon: Icon(Icons.smart_toy_outlined),
+                                        label: Text('Vs AI'),
+                                      ),
+                                    ],
+                                    selected: {computerOpponents},
+                                    onSelectionChanged: (value) => setState(
+                                      () => computerOpponents = value.first,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
                                   SegmentedButton<int>(
                                     segments: const [
                                       ButtonSegment(
@@ -294,37 +466,83 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                                       ),
                                     ],
                                     selected: {seats},
-                                    onSelectionChanged: (v) =>
-                                        setState(() => seats = v.first),
+                                    onSelectionChanged: (v) => setState(() {
+                                      seats = v.first;
+                                      if (aiOpponentCount >= seats) {
+                                        aiOpponentCount = seats - 1;
+                                      }
+                                    }),
                                   ),
-                                  const SizedBox(height: 12),
-                                  for (var i = 0; i < seats; i++) ...[
-                                    TextField(
-                                      controller: names[i],
-                                      textCapitalization:
-                                          TextCapitalization.words,
-                                      decoration: InputDecoration(
-                                        labelText: 'Seat ${i + 1}',
-                                        border: const OutlineInputBorder(),
+                                  if (computerOpponents) ...[
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Computer opponents',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SegmentedButton<int>(
+                                      segments: [
+                                        for (var i = 1; i < seats; i++)
+                                          ButtonSegment(
+                                            value: i,
+                                            label: Text('$i AI'),
+                                          ),
+                                      ],
+                                      selected: {aiOpponentCount},
+                                      onSelectionChanged: (value) => setState(
+                                        () => aiOpponentCount = value.first,
                                       ),
                                     ),
-                                    const SizedBox(height: 10),
-                                  ],
-                                  TextField(
-                                    controller: seed,
-                                    keyboardType: TextInputType.number,
-                                    decoration: const InputDecoration(
-                                      labelText: 'World seed',
-                                      border: OutlineInputBorder(),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      '$humanSeats human${humanSeats == 1 ? '' : 's'} · $aiOpponentCount computer · seeded offline strategy',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall,
                                     ),
-                                  ),
-                                  const SizedBox(height: 14),
+                                  ],
+                                  const SizedBox(height: 16),
                                   FilledButton.icon(
                                     onPressed: start,
                                     icon: const Icon(Icons.play_arrow),
                                     label: Text(
                                       savedReplay == null ? 'Start match' : 'Start new match (replaces saved match)',
                                     ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  ExpansionTile(
+                                    title: const Text('Player names'),
+                                    subtitle: Text(
+                                      computerOpponents
+                                          ? 'Edit ${humanSeats == 1 ? 'your name' : 'human names'}'
+                                          : 'Defaults: Player 1–$seats',
+                                    ),
+                                    tilePadding: EdgeInsets.zero,
+                                    children: [
+                                      for (var i = 0; i < humanSeats; i++) ...[
+                                        TextField(
+                                          controller: names[i],
+                                          textCapitalization:
+                                              TextCapitalization.words,
+                                          decoration: InputDecoration(
+                                            labelText: 'Player ${i + 1}',
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                      ],
+                                      TextField(
+                                        controller: seed,
+                                        keyboardType: TextInputType.number,
+                                        decoration: const InputDecoration(
+                                          labelText: 'World seed',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -352,7 +570,7 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            '3–4 players · Local only · Reproducible seeds and events',
+                            '3–4 players · Offline or LAN · Reproducible matches',
                           ),
                         ],
                       ),
@@ -366,7 +584,7 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                               child: const Text('Create a match'),
                             ),
                           )
-                        : handoff
+                        : handoff || aiActing
                         ? const SizedBox.expand()
                         : MatchView(state: current, onEvent: dispatch),
                   Page.rules => Center(
@@ -416,6 +634,66 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                     ),
                   ),
                 },
+                if (page == Page.board && aiActing && current != null)
+                  Positioned.fill(
+                    child: ColoredBox(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 360),
+                          child: Card(
+                            margin: const EdgeInsets.all(24),
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.smart_toy_outlined,
+                                    size: 40,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    aiError == null
+                                        ? 'Computer turn'
+                                        : 'Computer paused',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineSmall,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    current
+                                        .players[current.tactical?.responder ??
+                                            current.active]
+                                        .id,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (aiError == null) ...[
+                                    const LinearProgressIndicator(),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Move $aiMoveCount · preparing next action',
+                                    ),
+                                  ] else ...[
+                                    Text(aiError!, textAlign: TextAlign.center),
+                                    const SizedBox(height: 8),
+                                    FilledButton(
+                                      onPressed: () {
+                                        setState(() => aiError = null);
+                                        _syncAi();
+                                      },
+                                      child: const Text('Resume computer'),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (page == Page.board && handoff && current != null)
                   Positioned.fill(
                     child: ColoredBox(
@@ -455,8 +733,10 @@ class _StoneBannerAppState extends State<StoneBannerApp> {
                                   ),
                                   const SizedBox(height: 20),
                                   FilledButton.icon(
-                                    onPressed: () =>
-                                        setState(() => handoff = false),
+                                    onPressed: () {
+                                      setState(() => handoff = false);
+                                      _syncAi();
+                                    },
                                     icon: const Icon(Icons.visibility_outlined),
                                     label: const Text("I'm ready"),
                                   ),

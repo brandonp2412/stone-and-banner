@@ -55,6 +55,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Player names'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'wrong');
     await tester.scrollUntilVisible(
       find.text('Start match'),

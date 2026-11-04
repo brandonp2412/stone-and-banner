@@ -312,8 +312,11 @@ class _MatchViewState extends State<MatchView> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => SafeArea(
-        child: FractionallySizedBox(
-          heightFactor: .65,
+        child: SizedBox(
+          height: math.min(
+            MediaQuery.sizeOf(context).height * .65,
+            76 + options.length * 56.0,
+          ),
           child: Column(
             children: [
               Padding(
