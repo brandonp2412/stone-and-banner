@@ -198,3 +198,26 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 - A separate **genuine deterministic replay** from 381 previously accepted engine events (seed 914) was imported through the installed APK's UI. A human chose Upgrade → legal Junction 42; the reducer applied event 382, Bot-0 advanced 12→15 VP, and the actual UI rendered **`Bot-0 wins! 15/15 VP`**. Force-stop/relaunch and Continue preserved the finished state. This is **not** an AI autoplay victory from the live human+AI match and does not prove live UI coverage of Bandit/Invasion/tactical phases.
 - `buildq` #4840: 120 Flutter tests passed; #4826 analyzer clear; #4839 release APK built; #4845 Linux release built and launched in isolated Cage with a captured real window. Generated Linux runner committed for future reproducibility.
 - Visual notes: small-screen Start control remained visible and readable; the legal target list is lengthy and action phase is button-dense below the fold. Earlier stale-build/mistap/import failure screenshots remain in the manifest with honest verdicts. No Samsung/public deployment.
+
+## Slice 10/20 — cross-platform screenshot harness (4 November 2026, NZDT)
+
+- [Reusable Glass/Nox Linux/Waydroid protocol](UI-E2E-PROTOCOL.md),
+  [harness](../tool/e2e_screenshot_harness.py) and
+  [six offline harness tests](../tool/test_e2e_screenshot_harness.py).
+- [Exact run evidence](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-10/RUN-EVIDENCE.md),
+  [12-row Linux screenshot/action manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-10/linux-glass/SCREENSHOT-MANIFEST.md),
+  [9-row Glass Waydroid screenshot/action manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-10/waydroid-glass/SCREENSHOT-MANIFEST.md).
+  All **21 real screenshots** were visually inspected; per-row expected/actual,
+  timestamps, platform/build tags, input coordinates/keys, critique, severity,
+  verdict and retest details are in append-only JSONL and Markdown manifests.
+- Two independently observed **PASS** flows on Glass Waydroid: Home → Vs AI →
+  four seats → three AI selection, and Rules → Home with setup preserved.
+  Linux additionally proved private handoff → Round 1 board (PASS);
+  exploratory Home keyboard traversal had ambiguous focus/route and is LIMITED.
+  One initial Android launch failure is retained and retested; the final Home
+  key restored the Waydroid launcher. No saved game was overwritten.
+- Glass buildq **#4852** isolated Linux release built and screenshot-tested;
+  **#4869** 122 Flutter tests passed; **#4870** analyzer clean;
+  **#4871** Android release APK built only. Six Python harness tests passed.
+  No Nox execution, Samsung, public deployment, or full 3-AI match claimed.
+  Minor focus-visibility/landscape-density and APK-version drift remain.
