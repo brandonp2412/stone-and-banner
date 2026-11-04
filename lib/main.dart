@@ -508,9 +508,22 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                     onPressed: start,
                                     icon: const Icon(Icons.play_arrow),
                                     label: Text(
-                                      savedReplay == null ? 'Start match' : 'Start new match (replaces saved match)',
+                                      savedReplay == null
+                                          ? 'Start match'
+                                          : 'Start new match',
                                     ),
                                   ),
+                                  if (savedReplay != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: Text(
+                                        'Replaces your saved match',
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                    ),
                                   const SizedBox(height: 4),
                                   ExpansionTile(
                                     title: const Text('Player names'),

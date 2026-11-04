@@ -103,6 +103,27 @@ void main() {
     },
   );
 
+  testWidgets('saved-match start action fits one line on a phone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final replay = MatchEngine.exportReplay(
+      MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 20261027),
+    );
+    SharedPreferences.setMockInitialValues({
+      'stone_banner_local_replay_v1': replay,
+    });
+    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpAndSettle();
+    expect(find.text('Start new match'), findsOneWidget);
+    expect(find.text('Replaces your saved match'), findsOneWidget);
+    final button = find.widgetWithText(FilledButton, 'Start new match');
+    expect(tester.getSize(button).height, lessThan(60));
+  });
+
   testWidgets('hot-seat remains all human with private first turn', (
     tester,
   ) async {
