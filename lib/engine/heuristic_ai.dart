@@ -210,6 +210,10 @@ class HeuristicAi {
 
   MatchEvent _tactical(MatchState state, AiLegalActions legal) {
     final window = state.tactical!;
+    final planned = AiActionAdapter.advancedDecision(
+      AiActionAdapter.observe(state, window.responder),
+    );
+    if (planned is RespondTactical) return planned;
     final options = legal.tactical;
     if (window.kind == TacticalKind.bandit ||
         window.kind == TacticalKind.governance) {
@@ -277,6 +281,8 @@ class HeuristicAi {
   }
 
   MatchEvent _action(MatchState state, AiLegalActions legal) {
+    final view = AiActionAdapter.observe(state, state.active);
+    if (view.actionsSinceRoll >= 8) return const EndTurn();
     // Resolve incoming offers using our own inventory and near-term goal.
     final incoming = state.offers.where((o) => o.target == state.active);
     if (incoming.isNotEmpty) {
@@ -316,6 +322,9 @@ class HeuristicAi {
         (e) => e.vertex,
       );
     }
+
+    final advanced = AiActionAdapter.advancedDecision(view);
+    if (advanced != null) return advanced;
 
     // A Town opens productive commodities; Commerce II improves all exchanges.
     final hasTown = state.sites.values.any(

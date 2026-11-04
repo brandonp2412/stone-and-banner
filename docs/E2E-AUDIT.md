@@ -122,3 +122,41 @@ slice, then capture every new AI screen and interaction on Linux/Waydroid.
 Add stronger human-like opponents, defensive Knight planning and larger
 balanced-seat simulations before drawing conclusions about match equity.
 Stage 8 publication, accessibility and physical-device gates remain open.
+
+## Slice 04 — advanced AI strategy (4 November 2026, NZDT)
+
+- Scope: public/own-seat `AiStrategySignals` and a deterministic advanced
+  decision layer in [the legal-action adapter](../lib/engine/ai.dart),
+  [heuristic opponent integration](../lib/engine/heuristic_ai.dart), and
+  [scenario tests](../test/ai_advanced_strategy_test.dart).
+- [Screenshot/action manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-04/SCREENSHOT-MANIFEST.md)
+  and [run evidence](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-04/RUN-EVIDENCE.md)
+  are saved on Glass at
+  `/home/brandon/.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-04/`.
+  **UI screens opened: none; UI interactions: none; screenshots: zero.**
+  This slice changed only pure Dart AI and tests; no Linux/Waydroid app was
+  opened or interacted with, so visual verdict is not applicable.
+- The AI evaluates actual Town/Capital productive pips (without inventing
+  seasonal production multipliers), Town Development track effects, impending
+  Reaver threat, legal Knight activation/promotion/recruitment and enemy Knight
+  displacement, fortification damage absorption, public Invasion aid gap,
+  dry-roll recovery prospects and stock-backed catch-up bank trades. Choices
+  use only public state and the acting seat's private data; actual validity,
+  bank stock, costs and victory remain reducer-owned. No new rules/servers.
+- The heuristic opponent honours a deterministic eight-event action cap.
+  New tests exercise tactical aid/pass, development production and Commerce,
+  Knight/fortification plans, catch-up and empty bank, Aqueduct drought
+  investment, hidden-hand invariance, finished/cap behavior, conservation
+  and deterministic seeded replay.
+- Verification on Glass (Flutter 3.47.6, Dart 3.13.5): buildq **#4770**
+  full `flutter test test/`: **97 passed**; **#4771**
+  `flutter analyze lib test tool`: **no issues**; **#4772**
+  Android `flutter build apk --release`: **passed**, build only;
+  **#4773** seeded benchmark (24 games, seeds 801–824, max 50 rounds)
+  heuristic **7.667 VP/seat**, legal-random rivals **2.604 VP/seat**,
+  **3/24 finished and won by heuristic**. Benchmark is a limited
+  random-opponent comparison, not competitive strength or human balance proof.
+  Post-QA aid-edge and Capital-goal fixes received final reruns as documented in RUN-EVIDENCE.md.
+- No gameplay UI integration, device smoke test, network session, public
+  deployment, Samsung test or visual QA was claimed here. Stage 8 external
+  release gates remain outstanding.
