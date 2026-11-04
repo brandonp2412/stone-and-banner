@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +11,8 @@ void main() {
 
   Future<void> startAi(WidgetTester tester) async {
     await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Vs AI'));
     await tester.pumpAndSettle();
@@ -55,7 +58,9 @@ void main() {
     fail('Computer did not return to human seat within 10 simulated seconds');
   }
 
-  testWidgets('computer setup is private, completes a turn, and resumes', (tester) async {
+  testWidgets('computer setup is private, completes a turn, and resumes', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -87,14 +92,17 @@ void main() {
     await startAi(tester);
     await humanSetup(tester);
     final before = await saved();
-    final eventCount =
-        MatchEngine.importReplay(before['replay'] as String).events.length;
+    final eventCount = MatchEngine.importReplay(before['replay'] as String)
+        .events
+        .length;
     await tester.tap(find.byIcon(Icons.home_outlined));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     final after = await saved();
-    expect(MatchEngine.importReplay(after['replay'] as String).events.length,
-        eventCount);
+    expect(
+      MatchEngine.importReplay(after['replay'] as String).events.length,
+      eventCount,
+    );
     await tester.tap(find.byIcon(Icons.hexagon_outlined));
     await tester.pump();
     expect(find.text('Computer turn'), findsOneWidget);

@@ -221,3 +221,10 @@ Stage 8 publication, accessibility and physical-device gates remain open.
   **#4871** Android release APK built only. Six Python harness tests passed.
   No Nox execution, Samsung, public deployment, or full 3-AI match claimed.
   Minor focus-visibility/landscape-density and APK-version drift remain.
+
+## Slice 11/20 — Home, Rules, offline setup polish (4 November 2026, NZDT)
+
+- [Run and buildq evidence](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-11/RUN-EVIDENCE.md), [53-row action/screenshot/visual verdict manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-11/SCREENSHOT-MANIFEST.md) and adjacent timestamped PNGs. All 53 actual Linux/Glass Waydroid screenshots visually inspected.
+- Home focused into a single New local match CTA, while seat/mode/AI and advanced player/seed setup moved to a dedicated Match setup page. Rules advanced/glossary are progressive disclosure; replay parser text no longer leaks through error snackbar; saved-match replacement prompts confirmation.
+- **PASS:** buildq #4877 Android release, #4882 123 Flutter tests, #4883 analyzer clean, #4884 isolated Linux release; Waydroid start/resume/back/rules/glossary/AI setup/invalid replay and Linux keyboard Home → LAN are screen-evidenced.
+- **LIMITED:** no full LAN session, complete AI match, valid replay import, all board actions, or comprehensive accessibility/landscape test. Initial transient Android launch failure and missed tap retained in manifest. Concurrent board-screen changes intentionally excluded from this slice commit.

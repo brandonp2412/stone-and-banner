@@ -17,6 +17,8 @@ void main() {
 
       await tester.pumpWidget(const StoneBannerApp());
       await tester.pumpAndSettle();
+      await tester.tap(find.text('New local match'));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Start match'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Start match'));

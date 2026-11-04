@@ -55,6 +55,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('New local match'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Player names'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'wrong');
@@ -66,6 +68,24 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start match'));
     await tester.pump();
-    expect(find.text('Enter a numeric seed.'), findsOneWidget);
+    expect(find.text('Enter a numeric world seed.'), findsOneWidget);
+  });
+
+  testWidgets('invalid replay never echoes pasted code or parser internals', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Import replay'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'not_a_replay');
+    await tester.tap(find.text('Load'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Invalid replay code. Check the text and try again.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(find.textContaining('not_a_replay'), findsNothing);
   });
 }

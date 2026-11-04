@@ -50,6 +50,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const StoneBannerApp());
     expect(find.text('Raise a town. Shape a realm.'), findsOneWidget);
+    await tester.tap(find.text('New local match'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Start match'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start match'));
@@ -94,6 +96,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const StoneBannerApp());
+    await tester.tap(find.text('New local match'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Start match'));
     await tester.pumpAndSettle();
     await ready(tester);
@@ -102,9 +106,9 @@ void main() {
 
   testWidgets('rules accessible from navigation', (tester) async {
     await tester.pumpWidget(const StoneBannerApp());
-    await tester.tap(find.byIcon(Icons.menu_book_outlined));
+    await tester.tap(find.text('Rules'));
     await tester.pumpAndSettle();
     expect(find.text('The founding rules'), findsOneWidget);
-    expect(find.text('Claim'), findsOneWidget);
+    expect(find.text('1 · Claim'), findsOneWidget);
   });
 }

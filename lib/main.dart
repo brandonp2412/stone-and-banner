@@ -12,7 +12,7 @@ import 'ui/lan_room_page.dart';
 
 void main() => runApp(const StoneBannerApp());
 
-enum Page { home, board, rules }
+enum Page { home, board, rules, setup }
 
 class StoneBannerApp extends StatefulWidget {
   const StoneBannerApp({super.key});
@@ -185,8 +185,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             !(aiSeats.length == loaded.players.length - 1);
       });
       _syncAi();
-    } on Object catch (e) {
-      fail('Saved replay is invalid: $e');
+    } on Object {
+      fail('Saved replay is invalid. Try importing a backup code.');
     }
   }
 
@@ -211,7 +211,52 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   }
 
   void fail(String text) {
-    messengerKey.currentState?.showSnackBar(SnackBar(content: Text(text)));
+    messengerKey.currentState
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  Future<void> confirmStart(BuildContext dialogContext) async {
+    if (int.tryParse(seed.text.trim()) == null) {
+      fail('Enter a numeric world seed.');
+      return;
+    }
+    final humanNames = [
+      for (var i = 0; i < humanSeats; i++) names[i].text.trim(),
+    ];
+    if (humanNames.any((name) => name.isEmpty)) {
+      fail('Enter a name for each human player.');
+      return;
+    }
+    if (humanNames.map((name) => name.toLowerCase()).toSet().length !=
+        humanNames.length) {
+      fail('Give each human player a different name.');
+      return;
+    }
+    if (savedReplay != null) {
+      final replace = await showDialog<bool>(
+        context: dialogContext,
+        builder: (context) => AlertDialog(
+          title: const Text('Replace saved match?'),
+          content: const Text(
+            'Starting a new match replaces the match stored on this device. '
+            'Copy its replay first if you want to keep it.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep saved match'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Start new match'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || replace != true) return;
+    }
+    start();
   }
 
   void start() {
@@ -282,8 +327,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         handoff = true;
       });
       _save(loaded);
-    } on Object catch (e) {
-      fail('Invalid replay: $e');
+    } on Object {
+      // A code may contain private hands. Never echo it in a visible error.
+      fail('Invalid replay code. Check the text and try again.');
     }
   }
 
@@ -330,7 +376,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
               ),
             ),
             bottomNavigationBar: NavigationBar(
-              selectedIndex: page.index,
+              selectedIndex: page == Page.setup ? 0 : page.index,
               onDestinationSelected: (n) {
                 ai.pause();
                 setState(() {
@@ -390,33 +436,113 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                       'Stone & Banner',
                                       style: Theme.of(context)
                                           .textTheme
-                                          .titleLarge,
+                                          .headlineSmall,
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
-                                      'Raise a town. Shape a realm.',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium,
-                                    ),
+                                    const Text('Raise a town. Shape a realm.'),
                                   ],
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 20),
                           const Text(
-                            'An original offline strategy game. Claim villages, span the frontier and earn 15 Victory Points.',
+                            'Build a realm together, or challenge offline computer opponents. First to 15 Victory Points wins.',
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 24),
                           if (savedReplay != null) ...[
                             FilledButton.tonalIcon(
                               onPressed: resume,
                               icon: const Icon(Icons.restore),
                               label: const Text('Continue saved match'),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                           ],
+                          FilledButton.icon(
+                            onPressed: () => setState(() => page = Page.setup),
+                            icon: const Icon(Icons.add),
+                            label: const Text('New local match'),
+                          ),
+                          const SizedBox(height: 20),
+                          Card(
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
+                              children: [
+                                ListTile(
+                                  leading: const Icon(Icons.menu_book_outlined),
+                                  title: const Text('Learn the rules'),
+                                  subtitle: const Text(
+                                    'A quick guide and glossary',
+                                  ),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () =>
+                                      setState(() => page = Page.rules),
+                                ),
+                                const Divider(height: 1),
+                                ListTile(
+                                  leading: const Icon(Icons.groups_outlined),
+                                  title: const Text('LAN multiplayer'),
+                                  subtitle: const Text(
+                                    'Connect on a trusted local network',
+                                  ),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const LanRoomPage(),
+                                    ),
+                                  ),
+                                ),
+                                const Divider(height: 1),
+                                ListTile(
+                                  leading: const Icon(Icons.history),
+                                  title: const Text('Import replay'),
+                                  subtitle: const Text(
+                                    'Restore a shared match code',
+                                  ),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () => importMatch(context),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            '3–4 seats · Offline first · Deterministic replay',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Page.setup => Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          Row(
+                            children: [
+                              IconButton(
+                                tooltip: 'Back to Home',
+                                onPressed: () =>
+                                    setState(() => page = Page.home),
+                                icon: const Icon(Icons.arrow_back),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Match setup',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Choose who plays. All opponents run locally.',
+                          ),
+                          const SizedBox(height: 16),
                           Card(
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(
@@ -429,7 +555,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   Text(
-                                    'New local match',
+                                    'Game options',
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleLarge,
@@ -505,7 +631,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                   ],
                                   const SizedBox(height: 16),
                                   FilledButton.icon(
-                                    onPressed: start,
+                                    onPressed: () => confirmStart(context),
                                     icon: const Icon(Icons.play_arrow),
                                     label: Text(
                                       savedReplay == null
@@ -561,30 +687,6 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                               ),
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          FilledButton.tonalIcon(
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const LanRoomPage(),
-                              ),
-                            ),
-                            icon: const Icon(Icons.groups_outlined),
-                            label: const Text('LAN multiplayer room'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => setState(() => page = Page.rules),
-                            icon: const Icon(Icons.menu_book_outlined),
-                            label: const Text('Read the rules'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => importMatch(context),
-                            icon: const Icon(Icons.history),
-                            label: const Text('Import replay'),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            '3–4 players · Offline or LAN · Reproducible matches',
-                          ),
                         ],
                       ),
                     ),
@@ -593,7 +695,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     current == null
                         ? Center(
                             child: FilledButton(
-                              onPressed: () => setState(() => page = Page.home),
+                              onPressed: () =>
+                                  setState(() => page = Page.setup),
                               child: const Text('Create a match'),
                             ),
                           )
@@ -610,35 +713,94 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                             'The founding rules',
                             style: Theme.of(context).textTheme.headlineMedium,
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'The essentials',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 12),
+                          const _Rule(
+                            '1 · Claim',
+                            'Each seat places two free Village and Road pairs in a snake draft. Leave a gap between settlements.',
+                          ),
+                          const _Rule(
+                            '2 · Roll',
+                            'Roll numbered dice to earn goods from neighbouring terrain. A seven moves the Bandit.',
+                          ),
+                          const _Rule(
+                            '3 · Build and trade',
+                            'Spend goods to extend roads, found Villages and upgrade to Towns or Capitals. Exchange with the bank or offer a rival trade.',
+                          ),
+                          const _Rule(
+                            '4 · Win',
+                            'First to 15 Victory Points wins. Village = 1, Town = 2, Capital = 4; the longest road of at least five sides earns 2.',
+                          ),
+                          const Divider(height: 24),
+                          ExpansionTile(
+                            title: const Text('Advanced play'),
+                            subtitle: const Text(
+                              'Knights, cards, seasons and reactions',
+                            ),
+                            childrenPadding: const EdgeInsets.fromLTRB(
+                              16,
+                              8,
+                              16,
+                              0,
+                            ),
+                            children: const [
+                              _Rule(
+                                'Town Developments',
+                                'Innovation, Commerce and Governance have five tiers each. Developed Towns can produce paper, cloth and coin.',
+                              ),
+                              _Rule(
+                                'Reaver Fleet and Knights',
+                                'Activate and promote Knights to defend the realm. Fortifications shelter Towns when an Invasion succeeds.',
+                              ),
+                              _Rule(
+                                'Reactions',
+                                'Eligible seats can intercept theft, counter Governance cards or pledge Invasion aid. Pass is always available.',
+                              ),
+                              _Rule(
+                                'Catch-up',
+                                'Seats behind by three points may exchange 3:1 with the bank once a round; drought relief is bounded.',
+                              ),
+                            ],
+                          ),
+                          ExpansionTile(
+                            title: const Text('Glossary'),
+                            subtitle: const Text(
+                              'Goods, structures and turn terms',
+                            ),
+                            childrenPadding: const EdgeInsets.fromLTRB(
+                              16,
+                              8,
+                              16,
+                              0,
+                            ),
+                            children: const [
+                              _Rule(
+                                'Basic goods',
+                                'Wood, brick, wheat, wool and ore pay for roads, structures and Knights.',
+                              ),
+                              _Rule(
+                                'Commodities',
+                                'Paper, cloth and coin come from developed Towns and help build Capitals.',
+                              ),
+                              _Rule(
+                                'Victory Points (VP)',
+                                'A seat’s score. Reach 15 points to win; Charter Points and Guardian’s Honour also count.',
+                              ),
+                              _Rule(
+                                'Bandit',
+                                'A seven relocates the Bandit and may cause discards or theft.',
+                              ),
+                              _Rule(
+                                'Seed and replay',
+                                'The saved world seed and all accepted events reproduce a match exactly.',
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 16),
-                          const _Rule(
-                            'Claim',
-                            'Draft two Villages and adjoining roads per seat, in reverse order on the second pass. Settlements cannot be neighbours.',
-                          ),
-                          const _Rule(
-                            'Roll',
-                            'Matching numbers generate goods: Village one, Town two, Capital three. Developed Towns convert one terrain good to paper (woodland), cloth (meadows) or coin (ridges). On seven, exposed hands discard half and move the Bandit.',
-                          ),
-                          const _Rule(
-                            'Build',
-                            'Road costs wood + brick; Village costs wood + brick + wheat + wool; Town costs 2 wheat + 3 ore. Capital requires wheat, ore and one of each commodity. The first Capital earns one Charter Point.',
-                          ),
-                          const _Rule(
-                            'Trade',
-                            'Bank rate 4:1, or once per round at 3:1 if trailing by at least three points. Rival offers need consent.',
-                          ),
-                          const _Rule(
-                            'Reactions',
-                            'Standing offers reserve goods and can be accepted or countered on recipient turns. Bandit victims with active Knights can intercept; Governance targets can use matching countercards; Invasion allies may pledge aid. One successful tactical response per seat per round; Pass is always available.',
-                          ),
-                          const _Rule(
-                            'Win',
-                            'Reach 15 VP. Village = 1; Town = 2; Capital = 4. Longest unbroken road of five or more sides earns 2 VP.',
-                          ),
-                          const _Rule(
-                            'Advanced systems',
-                            'Advance Innovation, Commerce and Governance through five Town Developments each. Recruit, activate, promote and move Knights. Fortifications guard Towns; Reaver Fleet Invasions test shared defence. Innovation, Commerce and Governance Strategy Cards can be collected and played.',
-                          ),
                           const Text(
                             'Every move is engine-validated and logged for deterministic replay.',
                           ),

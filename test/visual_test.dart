@@ -20,6 +20,12 @@ void main() {
       find.byType(Scaffold),
       matchesGoldenFile('goldens/home.png'),
     );
+    await tester.tap(find.text('New local match'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(Scaffold),
+      matchesGoldenFile('goldens/setup.png'),
+    );
     await tester.tap(find.text('Start match'));
     await tester.pumpAndSettle();
     await tester.tap(find.text("I'm ready"));
@@ -28,7 +34,7 @@ void main() {
       find.byType(Scaffold),
       matchesGoldenFile('goldens/board.png'),
     );
-    await tester.tap(find.byIcon(Icons.menu_book_outlined));
+    await tester.tap(find.text('Rules'));
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(Scaffold),
