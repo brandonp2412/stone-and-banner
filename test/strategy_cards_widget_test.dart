@@ -54,6 +54,9 @@ void main() {
     expect(find.textContaining('Study the next harvest'), findsOneWidget);
     await tester.tap(find.text('Collect 1 wood'));
     await tester.pumpAndSettle();
+    expect(state.current.cards, hasLength(1), reason: 'Selection is not play');
+    await tester.tap(find.text('Play selected card'));
+    await tester.pumpAndSettle();
     expect(state.current.cards, isEmpty);
     expect(state.current.stores[Resource.wood], before + 1);
   });
@@ -87,6 +90,54 @@ void main() {
     expect(find.text('No legal play right now.'), findsOneWidget);
     await tester.tap(find.text('Discard this card'));
     await tester.pumpAndSettle();
+    expect(find.text('Discard this card?'), findsOneWidget);
+    await tester.tap(find.text('Keep card'));
+    await tester.pumpAndSettle();
+    expect(state.current.cards, hasLength(1));
+    await tester.tap(find.text('Discard this card'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard', skipOffstage: false).last);
+    await tester.pumpAndSettle();
     expect(state.current.cards, isEmpty);
+  });
+
+  testWidgets('exchange cards group choices and require confirmation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var state = withCard('open-routes');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, refresh) => MatchView(
+              state: state,
+              onEvent: (event) => refresh(() {
+                state = MatchEngine.apply(state, event);
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.scrollUntilVisible(find.textContaining('Strategy hand'), 250);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open Routes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose what to give'), findsOneWidget);
+    final group = find.textContaining('Give 1 ').first;
+    await tester.tap(group);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose a legal target or exchange'), findsOneWidget);
+    await tester.tap(find.textContaining('receive 1 ').first);
+    await tester.pumpAndSettle();
+    expect(state.current.cards, hasLength(1));
+    await tester.tap(find.text('Play selected card'));
+    await tester.pumpAndSettle();
+    expect(state.current.cards, isEmpty);
+    expect(tester.takeException(), isNull);
   });
 }
