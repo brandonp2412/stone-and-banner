@@ -77,3 +77,48 @@ that file was not changed in slice 02.
   be needed to support those actions without exposing rival hands.
 - Earlier Stage 8 signing, accessibility, security, IP and publication gates
   remain open; see [Stage 8 evidence](STAGE8-EVIDENCE.md).
+
+
+## Slice 03 — offline heuristic strategy (4 November 2026, NZDT)
+
+- Scope: [AI strategy](../lib/engine/heuristic_ai.dart),
+  [seeded tests](../test/heuristic_ai_test.dart), and
+  [reproducible benchmark](../tool/ai_strategy_benchmark.dart).
+- [Screenshot manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-03/SCREENSHOT-MANIFEST.md)
+  and [run evidence](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-03/RUN-EVIDENCE.md)
+  are saved on Glass under
+  `/home/brandon/.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-03/`.
+  **UI screens opened: none; UI interactions: none; screenshots: zero.**
+  This was an engine-only implementation/QA slice; no visual inspection,
+  Waydroid installation, or on-device AI interaction is claimed.
+- The deterministic `HeuristicAi` evaluates productive numbered terrain,
+  output variety, opening settlement spacing, road access to future sites,
+  Village/Town/Capital VP, Commerce development, bank trade surpluses, and
+  tactical response options. The policy consumes the committed
+  `AiActionAdapter` whitelist and the test/benchmark dispatch through
+  `AiActionAdapter.applySelected`; no new dice or reducer rule was added.
+  Rival hidden hands and hidden-target-dependent Bandit/card moves are not
+  consulted.
+- `buildq` **#4741**: 85 tests passed (7 new strategy tests including
+  seeded setup comparison, VP upgrade/capital, resource conservation,
+  private-inventory invariance and replay). **#4742**: full
+  `flutter analyze lib test tool` passed, no issues. **#4744**:
+  `flutter build apk --release` passed (54,398,538 bytes,
+  SHA-256 `3f57b11e25d17e00780a2a1ceb8348a8f169831c603f38ee6d7340a43f4df372`);
+  built only, not installed.
+- `buildq` **#4743**: 24 seeded games (601–624, up to 65 rounds), heuristic
+  seat average **10.375 VP**, legal-random opponents average **2.542 VP per
+  seat**. The heuristic won **9** matches; **15** had no winner by the
+  round cap. Actions included 154 roads, 101 villages, 418 upgrades,
+  and 434 bank exchanges. This shows a nontrivial legal move policy
+  outperforming that seeded random baseline on score, **not** human-level
+  strength or an overall competitive win-rate claim.
+- Verification used Glass's isolated Flutter 3.47.6 / Dart 3.13.5 SDK,
+  because the default wrapper currently reports Dart 3.13.4 and cannot
+  satisfy the repository's `^3.13.5` constraint.
+
+Remaining: integrate AI seat selection and turn-running UI in a later
+slice, then capture every new AI screen and interaction on Linux/Waydroid.
+Add stronger human-like opponents, defensive Knight planning and larger
+balanced-seat simulations before drawing conclusions about match equity.
+Stage 8 publication, accessibility and physical-device gates remain open.
