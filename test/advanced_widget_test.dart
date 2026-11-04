@@ -53,6 +53,8 @@ void main() {
     );
     await tester.scrollUntilVisible(find.text('Town Developments'), 300);
     expect(find.text('Town Developments'), findsOneWidget);
+    await tester.tap(find.text('Town Developments'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Scriptorium'), findsOneWidget);
     await tester.ensureVisible(find.text('Develop').first);
     await tester.pumpAndSettle();
@@ -64,6 +66,10 @@ void main() {
       for (var v = 0; v < s.topology.vertices.length; v++)
         if (MatchEngine.legalRecruit(s, v)) v,
     ].first;
+    await tester.ensureVisible(find.text('Knights & defence'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Knights & defence'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Recruit Knight'), -250);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Recruit Knight'));

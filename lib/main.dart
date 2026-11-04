@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'engine/ai_turn_coordinator.dart';
@@ -357,6 +358,10 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     }
   }
 
+  bool _needsWrappedChoices(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < 360 ||
+      MediaQuery.textScalerOf(context).scale(1) > 1.35;
+
   @override
   Widget build(BuildContext context) {
     final current = match;
@@ -388,566 +393,667 @@ class _StoneBannerAppState extends State<StoneBannerApp>
               setState(() => page = Page.home);
             }
           },
-          child: Scaffold(
-            appBar: AppBar(
-              centerTitle: true,
-              title: const Text(
-                'STONE & BANNER',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.7,
+          child: Focus(
+            autofocus: true,
+            skipTraversal: true,
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.escape &&
+                  (page != Page.home || Navigator.of(context).canPop())) {
+                Navigator.of(context).maybePop();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Scaffold(
+              appBar: AppBar(
+                centerTitle: true,
+                title: const Text(
+                  'STONE & BANNER',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.7,
+                  ),
                 ),
               ),
-            ),
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: page == Page.setup ? 0 : page.index,
-              onDestinationSelected: (n) {
-                ai.pause();
-                setState(() {
-                  final next = Page.values[n];
-                  // Human private hands require consent after every re-entry.
-                  if (next == Page.board &&
-                      page != Page.board &&
-                      match != null) {
-                    handoff = !aiActing && !oneHumanMatch;
-                  }
-                  page = next;
-                });
-                _syncAi();
-              },
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  label: 'Home',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.hexagon_outlined),
-                  label: 'Board',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.menu_book_outlined),
-                  label: 'Rules',
-                ),
-              ],
-            ),
-            body: Stack(
-              children: [
-                switch (page) {
-                  Page.home => Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 680),
-                      child: ListView(
-                        padding: const EdgeInsets.all(20),
-                        children: [
-                          Row(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(18),
-                                child: Image.asset(
-                                  'assets/art/stone_banner_crest.jpg',
-                                  width: 88,
-                                  height: 88,
-                                  fit: BoxFit.cover,
-                                  semanticLabel: 'Original Stone & Banner emblem: a standing stone and gold banner',
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Stone & Banner',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .headlineSmall,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    const Text('Raise a town. Shape a realm.'),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            'Build a realm together, or challenge offline computer opponents. First to 15 Victory Points wins.',
-                          ),
-                          const SizedBox(height: 24),
-                          if (savedReplay != null) ...[
-                            FilledButton.tonalIcon(
-                              onPressed: resume,
-                              icon: const Icon(Icons.restore),
-                              label: const Text('Continue saved match'),
-                            ),
-                            const SizedBox(height: 10),
-                          ],
-                          FilledButton.icon(
-                            onPressed: () => setState(() => page = Page.setup),
-                            icon: const Icon(Icons.add),
-                            label: const Text('New local match'),
-                          ),
-                          const SizedBox(height: 20),
-                          Card(
-                            clipBehavior: Clip.antiAlias,
-                            child: Column(
+              bottomNavigationBar: NavigationBar(
+                selectedIndex: page == Page.setup ? 0 : page.index,
+                onDestinationSelected: (n) {
+                  ai.pause();
+                  setState(() {
+                    final next = Page.values[n];
+                    // Human private hands require consent after every re-entry.
+                    if (next == Page.board &&
+                        page != Page.board &&
+                        match != null) {
+                      handoff = !aiActing && !oneHumanMatch;
+                    }
+                    page = next;
+                  });
+                  _syncAi();
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    label: 'Home',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.hexagon_outlined),
+                    label: 'Board',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.menu_book_outlined),
+                    label: 'Rules',
+                  ),
+                ],
+              ),
+              body: Stack(
+                children: [
+                  switch (page) {
+                    Page.home => Center(
+                      key: const ValueKey('stone-home-page'),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 680),
+                        child: ListView(
+                          padding: const EdgeInsets.all(20),
+                          children: [
+                            Row(
                               children: [
-                                ListTile(
-                                  leading: const Icon(Icons.menu_book_outlined),
-                                  title: const Text('Learn the rules'),
-                                  subtitle: const Text(
-                                    'A quick guide and glossary',
-                                  ),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () =>
-                                      setState(() => page = Page.rules),
-                                ),
-                                const Divider(height: 1),
-                                ListTile(
-                                  leading: const Icon(Icons.groups_outlined),
-                                  title: const Text('LAN multiplayer'),
-                                  subtitle: const Text(
-                                    'Connect on a trusted local network',
-                                  ),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) => const LanRoomPage(),
-                                    ),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(18),
+                                  child: Image.asset(
+                                    'assets/art/stone_banner_crest.jpg',
+                                    width: 88,
+                                    height: 88,
+                                    fit: BoxFit.cover,
+                                    semanticLabel: 'Original Stone & Banner emblem: a standing stone and gold banner',
                                   ),
                                 ),
-                                const Divider(height: 1),
-                                ListTile(
-                                  leading: const Icon(Icons.history),
-                                  title: const Text('Import replay'),
-                                  subtitle: const Text(
-                                    'Restore a shared match code',
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Stone & Banner',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .headlineSmall,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'Raise a town. Shape a realm.',
+                                      ),
+                                    ],
                                   ),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => importMatch(context),
                                 ),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            '3–4 seats · Offline first · Deterministic replay',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Page.setup => Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 680),
-                      child: ListView(
-                        padding: const EdgeInsets.all(20),
-                        children: [
-                          Row(
-                            children: [
-                              IconButton(
-                                tooltip: 'Back to Home',
-                                onPressed: () =>
-                                    setState(() => page = Page.home),
-                                icon: const Icon(Icons.arrow_back),
+                            const SizedBox(height: 16),
+                            if (savedReplay != null) ...[
+                              FilledButton.tonalIcon(
+                                onPressed: resume,
+                                icon: const Icon(Icons.restore),
+                                label: const Text('Continue saved match'),
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Match setup',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall,
-                              ),
+                              const SizedBox(height: 10),
                             ],
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Choose who plays. All opponents run locally.',
-                          ),
-                          const SizedBox(height: 16),
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                18,
-                                12,
-                                18,
-                                12,
-                              ),
+                            FilledButton.icon(
+                              onPressed: () =>
+                                  setState(() => page = Page.setup),
+                              icon: const Icon(Icons.add),
+                              label: const Text('New local match'),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Build a realm together, or challenge offline computer opponents. First to 15 Victory Points wins.',
+                            ),
+                            const SizedBox(height: 20),
+                            Card(
+                              clipBehavior: Clip.antiAlias,
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Text(
-                                    'Game options',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge,
+                                  ListTile(
+                                    leading: const Icon(
+                                      Icons.menu_book_outlined,
+                                    ),
+                                    title: const Text('Learn the rules'),
+                                    subtitle: const Text(
+                                      'A quick guide and glossary',
+                                    ),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () =>
+                                        setState(() => page = Page.rules),
                                   ),
-                                  const SizedBox(height: 16),
-                                  SegmentedButton<bool>(
-                                    segments: const [
-                                      ButtonSegment(
-                                        value: false,
-                                        icon: Icon(Icons.groups_outlined),
-                                        label: Text('Hot-seat'),
-                                      ),
-                                      ButtonSegment(
-                                        value: true,
-                                        icon: Icon(Icons.smart_toy_outlined),
-                                        label: Text('Vs AI'),
-                                      ),
-                                    ],
-                                    selected: {computerOpponents},
-                                    onSelectionChanged: (value) => setState(
-                                      () => computerOpponents = value.first,
+                                  const Divider(height: 1),
+                                  ListTile(
+                                    leading: const Icon(Icons.groups_outlined),
+                                    title: const Text('LAN multiplayer'),
+                                    subtitle: const Text(
+                                      'Connect on a trusted local network',
                                     ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  SegmentedButton<int>(
-                                    segments: const [
-                                      ButtonSegment(
-                                        value: 3,
-                                        label: Text('3 players'),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () => Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => const LanRoomPage(),
                                       ),
-                                      ButtonSegment(
-                                        value: 4,
-                                        label: Text('4 players'),
-                                      ),
-                                    ],
-                                    selected: {seats},
-                                    onSelectionChanged: (v) => setState(() {
-                                      seats = v.first;
-                                      if (aiOpponentCount >= seats) {
-                                        aiOpponentCount = seats - 1;
-                                      }
-                                    }),
-                                  ),
-                                  if (computerOpponents) ...[
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Computer opponents',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleSmall,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    SegmentedButton<int>(
-                                      segments: [
-                                        for (var i = 1; i < seats; i++)
-                                          ButtonSegment(
-                                            value: i,
-                                            label: Text('$i AI'),
-                                          ),
-                                      ],
-                                      selected: {aiOpponentCount},
-                                      onSelectionChanged: (value) => setState(
-                                        () => aiOpponentCount = value.first,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      '$humanSeats human${humanSeats == 1 ? '' : 's'} · $aiOpponentCount computer · seeded offline strategy',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall,
-                                    ),
-                                  ],
-                                  const SizedBox(height: 16),
-                                  FilledButton.icon(
-                                    onPressed: () => confirmStart(context),
-                                    icon: const Icon(Icons.play_arrow),
-                                    label: Text(
-                                      savedReplay == null
-                                          ? 'Start match'
-                                          : 'Start new match',
                                     ),
                                   ),
-                                  if (savedReplay != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 6),
-                                      child: Text(
-                                        'Replaces your saved match',
-                                        textAlign: TextAlign.center,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall,
-                                      ),
+                                  const Divider(height: 1),
+                                  ListTile(
+                                    leading: const Icon(Icons.history),
+                                    title: const Text('Import replay'),
+                                    subtitle: const Text(
+                                      'Restore a shared match code',
                                     ),
-                                  const SizedBox(height: 4),
-                                  ExpansionTile(
-                                    title: const Text('Player names'),
-                                    subtitle: Text(
-                                      computerOpponents
-                                          ? 'Edit ${humanSeats == 1 ? 'your name' : 'human names'}'
-                                          : 'Defaults: Player 1–$seats',
-                                    ),
-                                    tilePadding: EdgeInsets.zero,
-                                    children: [
-                                      for (var i = 0; i < humanSeats; i++) ...[
-                                        TextField(
-                                          controller: names[i],
-                                          textCapitalization:
-                                              TextCapitalization.words,
-                                          decoration: InputDecoration(
-                                            labelText: 'Player ${i + 1}',
-                                            border: const OutlineInputBorder(),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                      ],
-                                      TextField(
-                                        controller: seed,
-                                        keyboardType: TextInputType.number,
-                                        decoration: const InputDecoration(
-                                          labelText: 'World seed',
-                                          border: OutlineInputBorder(),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                    ],
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () => importMatch(context),
                                   ),
                                 ],
                               ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 12),
+                            Text(
+                              '3–4 seats · Offline first · Deterministic replay',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  Page.board =>
-                    current == null
-                        ? Center(
-                            child: FilledButton(
-                              onPressed: () =>
-                                  setState(() => page = Page.setup),
-                              child: const Text('Create a match'),
-                            ),
-                          )
-                        : handoff || aiActing
-                        ? const SizedBox.expand()
-                        : MatchView(state: current, onEvent: dispatch),
-                  Page.rules => Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 680),
-                      child: ListView(
-                        padding: const EdgeInsets.all(20),
-                        children: [
-                          Text(
-                            'The founding rules',
-                            style: Theme.of(context).textTheme.headlineMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'The essentials',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 12),
-                          const _Rule(
-                            '1 · Claim',
-                            'Each seat places two free Village and Road pairs in a snake draft. Leave a gap between settlements.',
-                          ),
-                          const _Rule(
-                            '2 · Roll',
-                            'Roll numbered dice to earn goods from neighbouring terrain. A seven moves the Bandit.',
-                          ),
-                          const _Rule(
-                            '3 · Build and trade',
-                            'Spend goods to extend roads, found Villages and upgrade to Towns or Capitals. Exchange with the bank or offer a rival trade.',
-                          ),
-                          const _Rule(
-                            '4 · Win',
-                            'First to 15 Victory Points wins. Village = 1, Town = 2, Capital = 4; the longest road of at least five sides earns 2.',
-                          ),
-                          const Divider(height: 24),
-                          ExpansionTile(
-                            title: const Text('Advanced play'),
-                            subtitle: const Text(
-                              'Knights, cards, seasons and reactions',
-                            ),
-                            childrenPadding: const EdgeInsets.fromLTRB(
-                              16,
-                              8,
-                              16,
-                              0,
-                            ),
-                            children: const [
-                              _Rule(
-                                'Town Developments',
-                                'Innovation, Commerce and Governance have five tiers each. Developed Towns can produce paper, cloth and coin.',
-                              ),
-                              _Rule(
-                                'Reaver Fleet and Knights',
-                                'Activate and promote Knights to defend the realm. Fortifications shelter Towns when an Invasion succeeds.',
-                              ),
-                              _Rule(
-                                'Reactions',
-                                'Eligible seats can intercept theft, counter Governance cards or pledge Invasion aid. Pass is always available.',
-                              ),
-                              _Rule(
-                                'Catch-up',
-                                'Seats behind by three points may exchange 3:1 with the bank once a round; drought relief is bounded.',
-                              ),
-                            ],
-                          ),
-                          ExpansionTile(
-                            title: const Text('Glossary'),
-                            subtitle: const Text(
-                              'Goods, structures and turn terms',
-                            ),
-                            childrenPadding: const EdgeInsets.fromLTRB(
-                              16,
-                              8,
-                              16,
-                              0,
-                            ),
-                            children: const [
-                              _Rule(
-                                'Basic goods',
-                                'Wood, brick, wheat, wool and ore pay for roads, structures and Knights.',
-                              ),
-                              _Rule(
-                                'Commodities',
-                                'Paper, cloth and coin come from developed Towns and help build Capitals.',
-                              ),
-                              _Rule(
-                                'Victory Points (VP)',
-                                'A seat’s score. Reach 15 points to win; Charter Points and Guardian’s Honour also count.',
-                              ),
-                              _Rule(
-                                'Bandit',
-                                'A seven relocates the Bandit and may cause discards or theft.',
-                              ),
-                              _Rule(
-                                'Seed and replay',
-                                'The saved world seed and all accepted events reproduce a match exactly.',
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Every move is engine-validated and logged for deterministic replay.',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                },
-                if (page == Page.board && aiActing && current != null)
-                  Positioned.fill(
-                    child: ColoredBox(
-                      color: Theme.of(context).colorScheme.surface,
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 360),
-                          child: Card(
-                            margin: const EdgeInsets.all(24),
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.smart_toy_outlined,
-                                    size: 40,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    aiError == null
-                                        ? 'Computer turn'
-                                        : 'Computer paused',
+                    Page.setup => Center(
+                      key: const ValueKey('stone-setup-page'),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 680),
+                        child: ListView(
+                          padding: const EdgeInsets.all(20),
+                          children: [
+                            Row(
+                              children: [
+                                IconButton(
+                                  tooltip: 'Back to Home',
+                                  onPressed: () =>
+                                      setState(() => page = Page.home),
+                                  icon: const Icon(Icons.arrow_back),
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'Match setup',
+                                    softWrap: true,
                                     style: Theme.of(context)
                                         .textTheme
                                         .headlineSmall,
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    current
-                                        .players[current.tactical?.responder ??
-                                            current.active]
-                                        .id,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  if (aiError == null) ...[
-                                    const LinearProgressIndicator(),
-                                    const SizedBox(height: 8),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Choose who plays. All opponents run locally.',
+                            ),
+                            const SizedBox(height: 16),
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  18,
+                                  12,
+                                  18,
+                                  12,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
                                     Text(
-                                      'Move $aiMoveCount · preparing next action',
+                                      'Game options',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge,
                                     ),
-                                  ] else ...[
-                                    Text(aiError!, textAlign: TextAlign.center),
-                                    const SizedBox(height: 8),
-                                    FilledButton(
-                                      onPressed: () {
-                                        setState(() => aiError = null);
-                                        _syncAi();
-                                      },
-                                      child: const Text('Resume computer'),
+                                    const SizedBox(height: 16),
+                                    if (_needsWrappedChoices(context))
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          ChoiceChip(
+                                            label: const Text('Hot-seat'),
+                                            selected: !computerOpponents,
+                                            onSelected: (_) => setState(
+                                              () => computerOpponents = false,
+                                            ),
+                                          ),
+                                          ChoiceChip(
+                                            label: const Text('Vs AI'),
+                                            selected: computerOpponents,
+                                            onSelected: (_) => setState(
+                                              () => computerOpponents = true,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    else
+                                      SegmentedButton<bool>(
+                                        segments: const [
+                                          ButtonSegment(
+                                            value: false,
+                                            icon: Icon(Icons.groups_outlined),
+                                            label: Text('Hot-seat'),
+                                          ),
+                                          ButtonSegment(
+                                            value: true,
+                                            icon: Icon(
+                                              Icons.smart_toy_outlined,
+                                            ),
+                                            label: Text('Vs AI'),
+                                          ),
+                                        ],
+                                        selected: {computerOpponents},
+                                        onSelectionChanged: (value) => setState(
+                                          () => computerOpponents = value.first,
+                                        ),
+                                      ),
+                                    const SizedBox(height: 16),
+                                    if (_needsWrappedChoices(context))
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          for (final count in [3, 4])
+                                            ChoiceChip(
+                                              label: Text('$count players'),
+                                              selected: seats == count,
+                                              onSelected: (_) => setState(() {
+                                                seats = count;
+                                                if (aiOpponentCount >= seats) {
+                                                  aiOpponentCount = seats - 1;
+                                                }
+                                              }),
+                                            ),
+                                        ],
+                                      )
+                                    else
+                                      SegmentedButton<int>(
+                                        segments: const [
+                                          ButtonSegment(
+                                            value: 3,
+                                            label: Text('3 players'),
+                                          ),
+                                          ButtonSegment(
+                                            value: 4,
+                                            label: Text('4 players'),
+                                          ),
+                                        ],
+                                        selected: {seats},
+                                        onSelectionChanged: (v) => setState(() {
+                                          seats = v.first;
+                                          if (aiOpponentCount >= seats) {
+                                            aiOpponentCount = seats - 1;
+                                          }
+                                        }),
+                                      ),
+                                    if (computerOpponents) ...[
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Computer opponents',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      if (_needsWrappedChoices(context))
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: [
+                                            for (var i = 1; i < seats; i++)
+                                              ChoiceChip(
+                                                label: Text('$i AI'),
+                                                selected: aiOpponentCount == i,
+                                                onSelected: (_) => setState(
+                                                  () => aiOpponentCount = i,
+                                                ),
+                                              ),
+                                          ],
+                                        )
+                                      else
+                                        SegmentedButton<int>(
+                                          segments: [
+                                            for (var i = 1; i < seats; i++)
+                                              ButtonSegment(
+                                                value: i,
+                                                label: Text('$i AI'),
+                                              ),
+                                          ],
+                                          selected: {aiOpponentCount},
+                                          onSelectionChanged: (value) =>
+                                              setState(
+                                                () => aiOpponentCount =
+                                                    value.first,
+                                              ),
+                                        ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        '$humanSeats human${humanSeats == 1 ? '' : 's'} · $aiOpponentCount computer · seeded offline strategy',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                    ],
+                                    const SizedBox(height: 16),
+                                    FilledButton.icon(
+                                      onPressed: () => confirmStart(context),
+                                      icon: const Icon(Icons.play_arrow),
+                                      label: Text(
+                                        savedReplay == null
+                                            ? 'Start match'
+                                            : 'Start new match',
+                                      ),
+                                    ),
+                                    if (savedReplay != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 6),
+                                        child: Text(
+                                          'Replaces your saved match',
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                      ),
+                                    const SizedBox(height: 4),
+                                    ExpansionTile(
+                                      title: const Text('Player names'),
+                                      subtitle: Text(
+                                        computerOpponents
+                                            ? 'Edit ${humanSeats == 1 ? 'your name' : 'human names'}'
+                                            : 'Defaults: Player 1–$seats',
+                                      ),
+                                      tilePadding: EdgeInsets.zero,
+                                      children: [
+                                        for (
+                                          var i = 0;
+                                          i < humanSeats;
+                                          i++
+                                        ) ...[
+                                          TextField(
+                                            controller: names[i],
+                                            textCapitalization:
+                                                TextCapitalization.words,
+                                            decoration: InputDecoration(
+                                              labelText: 'Player ${i + 1}',
+                                              border:
+                                                  const OutlineInputBorder(),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 10),
+                                        ],
+                                        TextField(
+                                          controller: seed,
+                                          keyboardType: TextInputType.number,
+                                          decoration: const InputDecoration(
+                                            labelText: 'World seed',
+                                            border: OutlineInputBorder(),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                      ],
                                     ),
                                   ],
-                                ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Page.board =>
+                      current == null
+                          ? Center(
+                              child: FilledButton(
+                                onPressed: () =>
+                                    setState(() => page = Page.setup),
+                                child: const Text('Create a match'),
+                              ),
+                            )
+                          : handoff || aiActing
+                          ? const SizedBox.expand()
+                          : MatchView(state: current, onEvent: dispatch),
+                    Page.rules => Center(
+                      key: const ValueKey('stone-rules-page'),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 680),
+                        child: ListView(
+                          padding: const EdgeInsets.all(20),
+                          children: [
+                            Text(
+                              'The founding rules',
+                              style: Theme.of(context).textTheme.headlineMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'The essentials',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 12),
+                            const _Rule(
+                              '1 · Claim',
+                              'Each seat places two free Village and Road pairs in a snake draft. Leave a gap between settlements.',
+                            ),
+                            const _Rule(
+                              '2 · Roll',
+                              'Roll numbered dice to earn goods from neighbouring terrain. A seven moves the Bandit.',
+                            ),
+                            const _Rule(
+                              '3 · Build and trade',
+                              'Spend goods to extend roads, found Villages and upgrade to Towns or Capitals. Exchange with the bank or offer a rival trade.',
+                            ),
+                            const _Rule(
+                              '4 · Win',
+                              'First to 15 Victory Points wins. Village = 1, Town = 2, Capital = 4; the longest road of at least five sides earns 2.',
+                            ),
+                            const Divider(height: 24),
+                            ExpansionTile(
+                              title: const Text('Advanced play'),
+                              subtitle: const Text(
+                                'Knights, cards, seasons and reactions',
+                              ),
+                              childrenPadding: const EdgeInsets.fromLTRB(
+                                16,
+                                8,
+                                16,
+                                0,
+                              ),
+                              children: const [
+                                _Rule(
+                                  'Town Developments',
+                                  'Innovation, Commerce and Governance have five tiers each. Developed Towns can produce paper, cloth and coin.',
+                                ),
+                                _Rule(
+                                  'Reaver Fleet and Knights',
+                                  'Activate and promote Knights to defend the realm. Fortifications shelter Towns when an Invasion succeeds.',
+                                ),
+                                _Rule(
+                                  'Reactions',
+                                  'Eligible seats can intercept theft, counter Governance cards or pledge Invasion aid. Pass is always available.',
+                                ),
+                                _Rule(
+                                  'Catch-up',
+                                  'Seats behind by three points may exchange 3:1 with the bank once a round; drought relief is bounded.',
+                                ),
+                              ],
+                            ),
+                            ExpansionTile(
+                              title: const Text('Glossary'),
+                              subtitle: const Text(
+                                'Goods, structures and turn terms',
+                              ),
+                              childrenPadding: const EdgeInsets.fromLTRB(
+                                16,
+                                8,
+                                16,
+                                0,
+                              ),
+                              children: const [
+                                _Rule(
+                                  'Basic goods',
+                                  'Wood, brick, wheat, wool and ore pay for roads, structures and Knights.',
+                                ),
+                                _Rule(
+                                  'Commodities',
+                                  'Paper, cloth and coin come from developed Towns and help build Capitals.',
+                                ),
+                                _Rule(
+                                  'Victory Points (VP)',
+                                  'A seat’s score. Reach 15 points to win; Charter Points and Guardian’s Honour also count.',
+                                ),
+                                _Rule(
+                                  'Bandit',
+                                  'A seven relocates the Bandit and may cause discards or theft.',
+                                ),
+                                _Rule(
+                                  'Seed and replay',
+                                  'The saved world seed and all accepted events reproduce a match exactly.',
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Every move is engine-validated and logged for deterministic replay.',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  },
+                  if (page == Page.board && aiActing && current != null)
+                    Positioned.fill(
+                      child: ColoredBox(
+                        color: Theme.of(context).colorScheme.surface,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 360),
+                            child: Card(
+                              margin: const EdgeInsets.all(24),
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.smart_toy_outlined,
+                                      size: 40,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      aiError == null
+                                          ? 'Computer turn'
+                                          : 'Computer paused',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .headlineSmall,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      current
+                                          .players[current
+                                                  .tactical
+                                                  ?.responder ??
+                                              current.active]
+                                          .id,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    if (aiError == null) ...[
+                                      const LinearProgressIndicator(),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Move $aiMoveCount · preparing next action',
+                                      ),
+                                    ] else ...[
+                                      Text(
+                                        aiError!,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      FilledButton(
+                                        onPressed: () {
+                                          setState(() => aiError = null);
+                                          _syncAi();
+                                        },
+                                        child: const Text('Resume computer'),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                if (page == Page.board && handoff && current != null)
-                  Positioned.fill(
-                    child: ColoredBox(
-                      color: Theme.of(context).colorScheme.surface,
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 400),
-                          child: Card(
-                            margin: const EdgeInsets.all(24),
-                            child: Padding(
-                              padding: const EdgeInsets.all(28),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.lock_outline, size: 42),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Pass the device',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .headlineMedium,
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    current
-                                        .players[current.tactical?.responder ??
-                                            current.active]
-                                        .id,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge,
-                                  ),
-                                  Text(
-                                    current.tactical == null
-                                        ? 'Your turn'
-                                        : 'Private tactical response',
-                                  ),
-                                  const SizedBox(height: 20),
-                                  FilledButton.icon(
-                                    onPressed: () {
-                                      setState(() => handoff = false);
-                                      _syncAi();
-                                    },
-                                    icon: const Icon(Icons.visibility_outlined),
-                                    label: const Text("I'm ready"),
-                                  ),
-                                ],
+                  if (page == Page.board && handoff && current != null)
+                    Positioned.fill(
+                      child: ColoredBox(
+                        color: Theme.of(context).colorScheme.surface,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 400),
+                            child: Card(
+                              margin: const EdgeInsets.all(24),
+                              child: Padding(
+                                padding: const EdgeInsets.all(28),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.lock_outline, size: 42),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Pass the device',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .headlineMedium,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      current
+                                          .players[current
+                                                  .tactical
+                                                  ?.responder ??
+                                              current.active]
+                                          .id,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge,
+                                    ),
+                                    Text(
+                                      current.tactical == null
+                                          ? 'Your turn'
+                                          : 'Private tactical response',
+                                    ),
+                                    const SizedBox(height: 20),
+                                    FilledButton.icon(
+                                      onPressed: () {
+                                        setState(() => handoff = false);
+                                        _syncAi();
+                                      },
+                                      icon: const Icon(
+                                        Icons.visibility_outlined,
+                                      ),
+                                      label: const Text("I'm ready"),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

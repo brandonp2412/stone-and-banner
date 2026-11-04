@@ -237,6 +237,14 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 - Final Nox buildq **#4536**: 128 Flutter tests passed; **#4537** analyzer clean; **#4535** Linux release passed; **#4538** Android APK built with Nox JDK 21 environment override. No Android APK installation claimed.
 - **Limits:** Glass connector HTTP 429; Nox Waydroid user 10 already shared with Slice 12, so no Waydroid UI actions/screenshots. Exactly one named card got live Linux detail/play captures, not all 54 dialogs; tactics were reducer-tested, not live UI-tested. No Samsung or public release.
 
+## Slice 18/20 — accessibility, navigation and responsive UI (4 November 2026 NZDT)
+
+- [33-row real Linux/Waydroid read-only screenshot/action visual manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-18/SCREENSHOT-MANIFEST.md) and [build/test/limitations handoff](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-18/RUN-EVIDENCE.md) saved on Nox. Every Linux screen/open/navigation/action captured; all 33 PNGs visually inspected and given an explicit PASS, FAIL or LIMITED verdict with follow-up decision.
+- Setup is responsive at high text scale and very narrow widths; Main Home CTA now visible earlier. Page-specific keys repair Rules scroll-offset leakage; Escape keyboard back respects navigation/modal rules. Match actions prioritise full-width End turn and collapse secondary Knight/development complexity.
+- Nox buildq **#4562: 137 full tests pass**, **#4566: analyzer zero issues**, **#4564: Linux release**, **#4565: Android release APK built but not installed**; Home golden updated via **#4561**. The earlier #4563 analyzer lint was fixed.
+- Actual isolated Linux desktop 1280×800 and 390×844 viewport Home→setup→AI→Rules→Escape/Board-empty visually proved, plus CTA hover/focus checks; 320×640/1.6× light and 390×844/2.0× dark layout/keyboard assertions were **widget tests**, not actual themed-device screenshot proof.
+- **Limits:** Glass unavailable/off; Nox Waydroid Android user 11 in use, untouched. One read-only screenshot is of old APK. Dark GTK/DPI attempts produced pixel-identical normal-light captures, so actual dark/large-text visual QA, phone safe areas/orientation/touch semantics and TalkBack remain unverified. Focus outline subtle. No Samsung or public release.
+
 ## Slice 17/20 — persistence, replay, crash recovery (4 November 2026 NZDT)
 
 - [35-row real Linux screenshot/action and visual-review manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-17/SCREENSHOT-MANIFEST.md) and [exact build/test handoff](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-17/RUN-EVIDENCE.md) saved on Nox. Every opened Linux screen/action captured; all 35 PNGs individually inspected, including black/clipped/transitional captures followed by corrected frames.
