@@ -48,7 +48,9 @@ void main() {
       final session = await saved();
       final state = MatchEngine.importReplay(session['replay'] as String);
       if ((state.tactical?.responder ?? state.active) == 0 &&
-          find.text('Computer turn').evaluate().isEmpty) return;
+          find.text('Computer turn').evaluate().isEmpty) {
+        return;
+      }
     }
     fail('Computer did not return to human seat within 10 simulated seconds');
   }

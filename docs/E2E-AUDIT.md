@@ -182,3 +182,11 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 - Tests: pure coordinator #4781 passed; focused widget integration #4833 passed after concurrent setup UI change; full suite #4808 passed (116 tests) before subsequent concurrent setup controls; final full-suite #4836 passed after setup controls and golden refresh #4835. Linux release APK build #4810 passed and installed solely on Glass Waydroid.
 - Visual change: compact target chooser modal (before screenshot 07, after screenshot 16). Remaining issue: human action panel remains too dense at 1792×1008 (screenshot 19).
 - See also local [run evidence](/home/brandon/.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-06/RUN-EVIDENCE.md). No Samsung or public deployment.
+
+## Slice 07/20 — human versus AI setup UX (4 Nov 2026)
+
+- Material 3 mode selector for **Hot-seat / Vs AI**; 3-player games support **1–2 AI seats** and 4-player games **1–3 AI seats**. Human names are editable, computer seats named deterministically, and Start is visible above collapsed name/seed options. There is no unsupported difficulty setting.
+- A solo human no longer receives a redundant privacy gate when play returns from a computer seat; multi-human pass-and-play handoffs and LAN entry remain.
+- Glass buildq **#4829**: 3 focused setup tests passed; **#4837**: **119 full Flutter tests passed**; **#4843**: analyzer no issues; **#4830**: Android release APK built and installed on Glass Waydroid.
+- Original checkout has no Linux desktop host (**#4823** failed). Isolated nonrepo Linux scaffold built successfully (**#4842**), and its actual headless Wayland app was keyboard-operated and screenshot-reviewed. Mode selection and private handoff were observed; name typing was not tested.
+- [21-row per-action screenshot/visual manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-07/SCREENSHOT-MANIFEST.md) and [exact run evidence](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-07/RUN-EVIDENCE.md) on Glass. First black frames were marked failed and recaptured. Shared Glass Waydroid was concurrently controlled, so 3-AI tap, Android keyboard input and complete human-AI game were **not** claimed. No Samsung or public deployment.
