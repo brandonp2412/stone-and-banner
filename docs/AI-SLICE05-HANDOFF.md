@@ -10,9 +10,9 @@
 
 ## Verified on Glass
 
-Initial isolated checks: `buildq` **#4775** **94 tests passed**, **#4776** analyzer zero issues, **#4777** release APK built. After rebasing onto concurrent Slice 04: **#4778** `flutter test --no-pub test --reporter expanded` **106 passed**, **#4779** `flutter analyze --no-pub` **zero issues**, **#4780** release APK **built successfully** (**54,398,538 bytes**, SHA-256 `b779d9e93f843f52a30ac50ce85572a30d7c71b81bfcf7782bf4747695631475`). Full command/error history is in the [run evidence](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-05/RUN-EVIDENCE.md).
+Initial isolated checks: `buildq` **#4775** **94 tests passed**, **#4776** analyzer zero issues, **#4777** release APK built. After rebasing onto concurrent Slice 04: **#4778** `flutter test --no-pub test --reporter expanded` **106 passed**, **#4779** `flutter analyze --no-pub` **zero issues**, **#4780** release APK **built successfully** (**54,398,538 bytes**, SHA-256 `b779d9e93f843f52a30ac50ce85572a30d7c71b81bfcf7782bf4747695631475`). Full command/error history is in the [run evidence](evidence/glass_existing/stone-banner-ai-e2e-05/RUN-EVIDENCE.md).
 
-The [screenshot manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-05/SCREENSHOT-MANIFEST.md) explicitly records **zero opened screens, zero UI interactions, and zero screenshots** for this engine-only slice. No Android installation, visual QA, live human/AI interaction, Samsung activity or public deployment is claimed.
+The [screenshot manifest](evidence/glass_existing/stone-banner-ai-e2e-05/SCREENSHOT-MANIFEST.md) explicitly records **zero opened screens, zero UI interactions, and zero screenshots** for this engine-only slice. No Android installation, visual QA, live human/AI interaction, Samsung activity or public deployment is claimed.
 
 ## Remaining gates
 
