@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'advanced.dart';
+import 'ai_cards.dart';
 import 'board.dart';
 import 'cards.dart';
 import 'game.dart';
@@ -21,6 +22,7 @@ class AiTurnView {
     required this.publicScores,
     required this.ownGoods,
     required this.ownCards,
+    required this.publicOffers,
     required this.legalActions,
     required this.actionsSinceRoll,
     required this.strategy,
@@ -31,6 +33,9 @@ class AiTurnView {
   final List<int> publicScores;
   final Map<Resource, int> ownGoods;
   final List<HeldCard> ownCards;
+
+  /// Public escrowed offers; no concealed inventories are included.
+  final List<TradeProposal> publicOffers;
   final List<MatchEvent> legalActions;
   final int _seed;
   final AiStrategySignals strategy;
@@ -163,6 +168,7 @@ abstract final class AiActionAdapter {
       ]),
       ownGoods: Map.unmodifiable(player.stores),
       ownCards: List.unmodifiable(player.cards),
+      publicOffers: List.unmodifiable(state.offers),
       legalActions: List.unmodifiable(distinct.values),
       actionsSinceRoll: _actionsSinceRoll(state),
       strategy: _strategySignals(state, seat),
@@ -471,6 +477,25 @@ abstract final class AiActionAdapter {
         if ((s.current.stores[offer.want] ?? 0) >= offer.wantCount) {
           actions.add(RespondTrade(s.active, true, offerId: offer.id));
         }
+        if (!offer.isCounter && !s.offers.any((o) => o.proposer == s.active)) {
+          // A counter uses an explicitly visible offered good. Never inspect
+          // the proposer's private stores to decide what they can afford.
+          for (final give in Resource.values) {
+            if (give == offer.give || (s.current.stores[give] ?? 0) == 0) {
+              continue;
+            }
+            actions.add(
+              ProposeTrade(
+                offer.proposer,
+                give,
+                1,
+                offer.give,
+                1,
+                counterOf: offer.id,
+              ),
+            );
+          }
+        }
       }
       if (offer.proposer == s.active) {
         actions.add(WithdrawTrade(offer.id));
@@ -517,8 +542,23 @@ abstract final class AiActionAdapter {
   /// At most eight post-roll events are selected before End Turn is forced.
   static MatchEvent? decide(AiTurnView view) {
     if (view.legalActions.isEmpty) return null;
+    final reaction = AiCardStrategy.tactical(view);
+    if (reaction != null) return reaction;
+    if (view.phase == MatchPhase.actions) {
+      if (view.actionsSinceRoll >= 8) {
+        return view.legalActions.whereType<EndTurn>().first;
+      }
+      final answer = AiCardStrategy.incomingOffer(view);
+      if (answer != null) return answer;
+    }
     final advanced = advancedDecision(view);
     if (advanced != null) return advanced;
+    if (view.phase == MatchPhase.actions) {
+      final card = AiCardStrategy.playCard(view);
+      if (card != null) return card;
+      final offer = AiCardStrategy.propose(view);
+      if (offer != null) return offer;
+    }
     final key = _mix(
       view._seed ^
           ((view.seat + 1) * 0x9e3779b9) ^

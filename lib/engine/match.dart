@@ -1595,14 +1595,20 @@ class MatchEngine {
         for (final resource in Resource.values)
           for (var n = 0; n < (target.stores[resource] ?? 0); n++) resource,
       ];
-      final index = _random(s.seed ^ s.rollCount ^ (move.tile << 16) ^ victim);
-      final stolen = goods[index % goods.length];
-      final from = Map<Resource, int>.of(target.stores);
-      final to = Map<Resource, int>.of(s.current.stores);
-      from[stolen] = from[stolen]! - 1;
-      to[stolen] = (to[stolen] ?? 0) + 1;
-      players[victim] = target.copyWith(stores: from);
-      players[s.active] = s.current.copyWith(stores: to);
+      // A timeout/pass must always settle, even if a restored or externally
+      // validated reaction target no longer has a stealable good.
+      if (goods.isNotEmpty) {
+        final index = _random(
+          s.seed ^ s.rollCount ^ (move.tile << 16) ^ victim,
+        );
+        final stolen = goods[index % goods.length];
+        final from = Map<Resource, int>.of(target.stores);
+        final to = Map<Resource, int>.of(s.current.stores);
+        from[stolen] = from[stolen]! - 1;
+        to[stolen] = (to[stolen] ?? 0) + 1;
+        players[victim] = target.copyWith(stores: from);
+        players[s.active] = s.current.copyWith(stores: to);
+      }
     }
     return s.copyWith(
       players: players,

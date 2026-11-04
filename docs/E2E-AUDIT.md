@@ -160,3 +160,9 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 - No gameplay UI integration, device smoke test, network session, public
   deployment, Samsung test or visual QA was claimed here. Stage 8 external
   release gates remain outstanding.
+
+## Slice 05 — AI strategy cards and bounded reactions (4 November 2026, NZDT)
+
+- [Factual handoff](AI-SLICE05-HANDOFF.md), [screenshot manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-05/SCREENSHOT-MANIFEST.md) and [Glass run evidence](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-05/RUN-EVIDENCE.md).
+- Source: `lib/engine/ai_cards.dart`, adapter and heuristic integration, empty Bandit-victim reducer guard, and nine new regression tests. Draws remain deterministic reducer events; no rival concealed data is consulted.
+- `buildq` **#4775** passed 94 tests, **#4776** analyzer passed, **#4777** release APK built. No UI screen was opened, no interaction performed, no screenshot produced; no visual QA or Waydroid smoke was claimed. Main-branch integration with concurrent Slice 04 remains to be verified.

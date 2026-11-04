@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
 import 'ai.dart';
+import 'ai_cards.dart';
 import 'board.dart';
-import 'cards.dart';
 import 'game.dart';
 import 'match.dart';
 
@@ -209,44 +209,10 @@ class HeuristicAi {
       }, (event) => event.tile * 4 + (event.victim ?? 0));
 
   MatchEvent _tactical(MatchState state, AiLegalActions legal) {
-    final window = state.tactical!;
-    final planned = AiActionAdapter.advancedDecision(
-      AiActionAdapter.observe(state, window.responder),
-    );
-    if (planned is RespondTactical) return planned;
-    final options = legal.tactical;
-    if (window.kind == TacticalKind.bandit ||
-        window.kind == TacticalKind.governance) {
-      for (final action in options) {
-        if (action.choice == TacticalChoice.intercept ||
-            action.choice == TacticalChoice.counter) {
-          return action;
-        }
-      }
-    }
-    if (window.kind == TacticalKind.invasion) {
-      final gap =
-          MatchEngine.invasionStrength(state) -
-          MatchEngine.defenceStrength(state) -
-          state.invasionAid;
-      if (gap > 0 && gap <= 2) {
-        for (final action in options) {
-          if (action.choice == TacticalChoice.aid &&
-              action.good == Resource.ore) {
-            return action;
-          }
-        }
-        if (gap == 1) {
-          for (final action in options) {
-            if (action.choice == TacticalChoice.aid &&
-                action.good == Resource.wheat) {
-              return action;
-            }
-          }
-        }
-      }
-    }
-    return options.first; // Adapter enumerates a legal Pass first.
+    final view = AiActionAdapter.observe(state, state.tactical!.responder);
+    return AiCardStrategy.tactical(view) ??
+        AiActionAdapter.advancedDecision(view) ??
+        legal.tactical.first;
   }
 
   MatchEvent? choose(MatchState state) {
@@ -283,17 +249,8 @@ class HeuristicAi {
   MatchEvent _action(MatchState state, AiLegalActions legal) {
     final view = AiActionAdapter.observe(state, state.active);
     if (view.actionsSinceRoll >= 8) return const EndTurn();
-    // Resolve incoming offers using our own inventory and near-term goal.
-    final incoming = state.offers.where((o) => o.target == state.active);
-    if (incoming.isNotEmpty) {
-      final offer = incoming.first;
-      final goal = _goal(state);
-      final accept =
-          _have(state, offer.want) >= offer.wantCount &&
-          _have(state, offer.give) < (goal[offer.give] ?? 0) &&
-          _have(state, offer.want) - offer.wantCount >= (goal[offer.want] ?? 0);
-      return RespondTrade(state.active, accept, offerId: offer.id);
-    }
+    final answer = AiCardStrategy.incomingOffer(view);
+    if (answer != null) return answer;
 
     final capitals = legal.upgrades
         .where((e) => state.sites[e.vertex]!.structure == Structure.town)
@@ -336,21 +293,8 @@ class HeuristicAi {
       }
     }
 
-    final goal = _goal(state);
-    for (final card in legal.cards) {
-      final definition = state.current.cards[card.handIndex].definition;
-      // Play useful production cards but avoid spending tactical cards blindly.
-      if (definition.power == CardPower.fixedGoods ||
-          definition.power == CardPower.chooseBasic ||
-          definition.power == CardPower.chooseCommodity ||
-          definition.power == CardPower.freeRoad) {
-        if (card.receive != null &&
-            (goal[card.receive] ?? 0) <= _have(state, card.receive!)) {
-          continue;
-        }
-        return card;
-      }
-    }
+    final card = AiCardStrategy.playCard(view);
+    if (card != null) return card;
 
     final trade = _exchange(state, legal);
     if (trade != null) return trade;
@@ -384,6 +328,8 @@ class HeuristicAi {
         return ActivateKnight(inactive.first);
       }
     }
+    final proposal = AiCardStrategy.propose(view);
+    if (proposal != null) return proposal;
     return const EndTurn();
   }
 }
