@@ -273,3 +273,8 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 - Isolated real Linux release imported an authentic 89-event replay through the UI, revealed Bot-1 Round 7 board and captured action-panel density. Blank/missed-focus frames retained.
 - Observed gap: mostly unavailable chips and three disabled Town Development controls crowd the 440px action view. Proposed progressive disclosure remains unimplemented.
 - No source fix, after screenshots, Waydroid action, tests, analyzer, new build or validated commit: Glass connector 429; Nox code-editing connector stalled. No Samsung or public release.
+## Completion 1/8 — mobile human-action UI (5 November 2026 NZDT)
+
+- [Screenshot manifest and visual verdicts](evidence/mobile-actions-20261105/SCREENSHOT-MANIFEST.md), [before/after comparison](evidence/mobile-actions-20261105/comparison-before-after.png), and [exact run evidence](evidence/mobile-actions-20261105/RUN-EVIDENCE.md).
+- Legal build choices and primary Roll/End/Resolve controls now precede the board; unavailable actions are hidden, trades compacted, and focused card/trade/response access remains. Phase changes reset scroll to reveal the next action.
+- Final Glass buildq `#5005`: 142 tests passed; `#5006`: analyzer clean; `#5007`: release APK built. Actual 390 × 844 **Nox Waydroid** after screenshot inspected, with separate QA APK `#5008`; **Glass Waydroid was occupied** and no Samsung/public release test occurred. See manifest for untested gameplay flows.
