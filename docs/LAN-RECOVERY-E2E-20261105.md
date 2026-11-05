@@ -40,6 +40,8 @@ Other active UI, AI, four-player and reconciliation worktrees were not edited.
 | #5052 | `flutter analyze lib test tool` — **no issues** |
 | #5053 | Flutter Linux release — PASS, executable SHA-256 `eebd9cbcd5a9d4dd037fb3e0dcdf95d31e9288a335fa2abf7cc47acaadb044ba` |
 | #5054 | Flutter Android release — PASS, 54,890,298 bytes, SHA-256 `cfbb6b931628dbda8cb5f3c3ce12046818b350c08211742fed5c750212a5fe79` |
+| #5067 | Final full Flutter test folder after broad-directory guard, **141 passed** |
+| #5069 | Final `flutter analyze lib test tool` — **no issues** |
 | #5063 | Third seat joined live GUI room by LAN CLI — PASS |
 
 Intermediate failures were preserved and resolved: #5040 initial test assertion

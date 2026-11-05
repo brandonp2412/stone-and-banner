@@ -268,8 +268,9 @@ Stage 8 publication, accessibility and physical-device gates remain open.
   preserved board/turn and recovery token. Both hidden Linux GUIs and source
   builds are independently identified in that handoff.
 - Glass buildq #5045 wire-restart test passed through revision 18,
-  #5046 existing smoke passed, #5051 all 140 Flutter tests passed, #5052
-  analyzer clean, #5053 Linux and #5054 Android releases built. The GUI
+  #5046 existing smoke passed, #5051 all 140 earlier Flutter tests passed,
+  #5052 analyzer clean, #5053 Linux and #5054 Android releases built;
+  final #5067 **141 tests** and #5069 analyzer **no issues**. The GUI
   cross-machine run did not reach 15 VP; full-game network acceptance remains.
 - No persistent test service, nft port opening, public deployment or physical
   device install was left behind.
