@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 Future<void> main(List<String> args) async {
-  if (args.length != 2) {
-    throw ArgumentError('Usage: dart run tool/lan_join_probe.dart SERVER_URL ROOM');
+  if (args.length != 2 && args.length != 3) {
+    throw ArgumentError(
+      'Usage: dart run tool/lan_join_probe.dart SERVER_URL ROOM [ONE_PLAYER_NAME]',
+    );
   }
-  for (final name in ['Ben', 'Cora']) {
+  for (final name in args.length == 3 ? [args[2]] : ['Ben', 'Cora']) {
     final socket = await WebSocket.connect(args[0]);
     final welcome = socket.firstWhere(
       (item) => (jsonDecode(item as String) as Map)['op'] == 'welcome',

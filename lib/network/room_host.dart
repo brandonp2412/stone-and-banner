@@ -26,6 +26,9 @@ class HostedRoom {
           Random.secure().nextInt(1 << 32) |
           (Random.secure().nextInt(1 << 30) << 32);
 
+  HostedRoom.restored(this.id, this.capacity, this.boardSeed, this.secretSeed)
+    : assert(capacity == 3 || capacity == 4);
+
   final String id;
   final int capacity, boardSeed, secretSeed;
   final seats = <RoomSeat>[];
@@ -195,6 +198,114 @@ class HostedRoom {
       if ((entry['seq'] as int) > sequence) entry,
   ];
 
+  /// Host-only room checkpoint. Never include this in a client response or log.
+  Map<String, Object?> toPrivateJson() => {
+    'format': 'stone-and-banner-room-v1',
+    'id': id,
+    'capacity': capacity,
+    'boardSeed': boardSeed,
+    'secretSeed': secretSeed,
+    'version': version,
+    'seats': [
+      for (final seat in seats) {'name': seat.name, 'token': seat.token},
+    ],
+    'replay': state == null ? null : privateReplay(),
+    'audit': _audit,
+    'responses': {
+      for (final entry in _responses.entries)
+        '${entry.key}': [
+          for (final response in entry.value.entries)
+            {
+              'id': response.key,
+              'canonical': response.value.$1,
+              'reply': response.value.$2,
+            },
+        ],
+    },
+  };
+
+  /// Fail closed on a damaged checkpoint instead of silently replacing a room.
+  static HostedRoom fromPrivateJson(Map<String, dynamic> data) {
+    if (data['format'] != 'stone-and-banner-room-v1') {
+      throw const FormatException('Unknown LAN room checkpoint format.');
+    }
+    final id = data['id'] as String;
+    final capacity = data['capacity'] as int;
+    final boardSeed = data['boardSeed'] as int;
+    final secretSeed = data['secretSeed'] as int;
+    if (!RegExp(r'^[0-9A-F]{8}$').hasMatch(id) ||
+        (capacity != 3 && capacity != 4)) {
+      throw const FormatException('Invalid LAN room identity.');
+    }
+    final room = HostedRoom.restored(id, capacity, boardSeed, secretSeed);
+    for (final raw in data['seats'] as List) {
+      final seat = Map<String, dynamic>.from(raw as Map);
+      final name = seat['name'] as String;
+      final token = seat['token'] as String;
+      if (name.trim() != name ||
+          name.isEmpty ||
+          name.length > 32 ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(token) ||
+          room.seats.any(
+            (other) =>
+                other.name.toLowerCase() == name.toLowerCase() ||
+                other.token == token,
+          ) ||
+          room.seats.length >= capacity) {
+        throw const FormatException('Invalid LAN room seat.');
+      }
+      room.seats.add(RoomSeat(name, token)); // All offline on host restart.
+    }
+    final replay = data['replay'] as String?;
+    if (replay != null) {
+      if (room.seats.length != capacity) {
+        throw const FormatException('Started room has incomplete seats.');
+      }
+      room.state = MatchEngine.importReplay(replay);
+      if (room.state!.seed != secretSeed ||
+          room.state!.board.seed != boardSeed ||
+          room.state!.players.length != capacity ||
+          [for (final p in room.state!.players) p.id].join('\u0000') !=
+              [for (final s in room.seats) s.name].join('\u0000')) {
+        throw const FormatException('LAN room replay identity mismatch.');
+      }
+    }
+    if (room.version != data['version']) {
+      throw const FormatException('LAN room version mismatch.');
+    }
+    for (final raw in data['audit'] as List) {
+      final entry = Map<String, Object?>.from(raw as Map);
+      if (entry['seq'] != room._audit.length + 1) {
+        throw const FormatException('LAN room audit sequence mismatch.');
+      }
+      room._audit.add(entry);
+    }
+    if (room._audit.length != room.version) {
+      throw const FormatException('LAN room audit length mismatch.');
+    }
+    final responseData = Map<String, dynamic>.from(data['responses'] as Map);
+    for (final entry in responseData.entries) {
+      final seat = int.tryParse(entry.key);
+      if (seat == null || seat < 0 || seat >= room.seats.length) {
+        throw const FormatException('Invalid LAN room response seat.');
+      }
+      final cache = <String, (String, Map<String, Object?>)>{};
+      for (final raw in entry.value as List) {
+        final response = Map<String, dynamic>.from(raw as Map);
+        final key = response['id'] as String;
+        if (key.isEmpty || key.length > 128 || cache.containsKey(key)) {
+          throw const FormatException('Invalid LAN request cache.');
+        }
+        cache[key] = (
+          response['canonical'] as String,
+          Map<String, Object?>.from(response['reply'] as Map),
+        );
+      }
+      room._responses[seat] = cache;
+    }
+    return room;
+  }
+
   /// For host-only audit/backup, never transmit or log this to clients.
   String privateReplay() => MatchEngine.exportReplay(state!);
 
@@ -203,6 +314,13 @@ class HostedRoom {
 
 class LanRoomRegistry {
   final rooms = <String, HostedRoom>{};
+
+  void restore(HostedRoom room) {
+    if (rooms.length >= 64 || rooms.containsKey(room.id)) {
+      throw StateError('Duplicate room or host capacity exceeded.');
+    }
+    rooms[room.id] = room;
+  }
 
   HostedRoom create(int capacity, int boardSeed, String name) {
     if (capacity != 3 && capacity != 4) throw StateError('Use 3–4 seats.');

@@ -33,9 +33,10 @@ dart run tool/lan_server.dart --bind "$LAN_BIND_IP" --port 8765
 In the app select **LAN multiplayer room**, enter
 \`ws://HOST-IP:8765/room\` using that interface address, then choose
 **Create room**, copy the invitation code, and let two or three others
-**Join room**. The creator starts when full. A device can reconnect to its
-seat using its stored recovery token, even after the app restarts, provided
-the host process is still running. The room code is not a seat credential.
+**Join room**. The creator starts when full. A device can reconnect to its seat using its stored recovery token after an
+app restart or a host process restart, provided the same host state directory,
+bind address and port are used. Host startup refuses damaged checkpoints rather
+than silently replacing rooms. The room code is not a seat credential.
 
 A trusted LAN or Waydroid client may require a narrowly scoped firewall allowance for TCP/8765 on the host interface. Do not open it to untrusted networks.
 
@@ -61,13 +62,18 @@ deployed publicly, and no matchmaking or internet relay exists.
   intercept the token and take a seat. Use only a trusted private LAN.
   There is no TLS, login, identity verification, abuse protection, room
   moderation or end-to-end secrecy. Not appropriate for public hosting.
-- Server memory is authoritative, including private event history. The host
-  process must remain alive: an OS restart or server crash currently
-  destroys active rooms. There is no durable journal or crash recovery.
-  Client reconnection covers socket/app restart, not a server restart.
-- The server may advance a disconnected player's turn automatically.
-  This is a documented gameplay trade-off; an absent user may lose a turn.
-  In-memory requests are idempotent only for the lifetime of that room.
+- The host persists a private, replay-verified checkpoint with room seats,
+  256-bit recovery tokens, private events and idempotency decisions before
+  acknowledging transitions. Default directory is under the host user's
+  local state; `--state-dir` permits a specified private persistent disk.
+  Back up or restore only on the trusted host; the files are credentials.
+  Recovery after a host restart resets the bounded timers (20s tactical,
+  3m idle) rather than applying wall-clock events retroactively. Power-loss
+  durability is not guaranteed without directory fsync.
+- The host may advance a disconnected player's turn automatically. An absent
+  user may lose a turn. Duplicate request IDs remain idempotent across a
+  host restart when its checkpoint is intact. See
+  [5 Nov 2026 LAN recovery E2E](LAN-RECOVERY-E2E-20261105.md).
 
 ## Verification
 
@@ -85,5 +91,5 @@ loopback WebSocket host and three clients for a create/join/start/move,
 adversarial rejection, fan-out and reconnect probe.
 
 Remaining work for any internet release: authenticated TLS transport,
-persistent server-side storage and recovery, rate limiting, host/fairness
+production-grade storage/backup/power-loss assurance, rate limiting, host/fairness
 auditing, abuse controls, production deployment approval, and Samsung QA.

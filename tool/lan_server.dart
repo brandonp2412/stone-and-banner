@@ -5,25 +5,36 @@ import 'dart:io';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/network/room_host.dart';
 import 'package:stone_and_banner/network/room_protocol.dart';
+import 'package:stone_and_banner/network/room_store.dart';
 
 /// CLI LAN host. Defaults to loopback; explicit --bind required for LAN.
 Future<void> main(List<String> args) async {
   var bind = '127.0.0.1', port = 8765;
+  var stateDir = LanRoomStore.defaultPath();
   for (var i = 0; i < args.length; i++) {
     if (args[i] == '--bind' && i + 1 < args.length) {
       bind = args[++i];
     } else if (args[i] == '--port' && i + 1 < args.length) {
       port = int.parse(args[++i]);
+    } else if (args[i] == '--state-dir' && i + 1 < args.length) {
+      stateDir = args[++i];
     } else {
       throw FormatException(
         'Usage: dart run tool/lan_server.dart '
-        '[--bind 127.0.0.1|LAN_IP] [--port 8765]',
+        '[--bind 127.0.0.1|LAN_IP] [--port 8765] '
+        '[--state-dir PRIVATE_DIRECTORY]',
       );
     }
   }
+  final store = LanRoomStore(Directory(stateDir));
+  final registry = store.load(); // Refuse to start on corrupt room state.
   final host = await HttpServer.bind(InternetAddress(bind), port);
-  final server = _Server();
-  stdout.writeln('Stone & Banner LAN host on $bind:$port (no TLS)');
+  final server = _Server(store, registry);
+  server.resumeTimers();
+  stdout.writeln(
+    'Stone & Banner LAN host on $bind:$port (no TLS); '
+    'restored ${registry.rooms.length} room(s)',
+  );
   await for (final request in host) {
     if (request.uri.path != '/room' ||
         !WebSocketTransformer.isUpgradeRequest(request)) {
@@ -48,9 +59,26 @@ class _Connection {
 }
 
 class _Server {
-  final registry = LanRoomRegistry();
+  _Server(this.store, this.registry);
+  final LanRoomStore store;
+  final LanRoomRegistry registry;
   final connections = <_Connection>{};
   final clocks = <HostedRoom, Timer>{};
+
+  void resumeTimers() {
+    for (final room in registry.rooms.values) {
+      schedule(room); // Deadlines restart on recovery; no wall-clock replay.
+    }
+  }
+
+  void persist(HostedRoom room) {
+    try {
+      store.save(room);
+    } on Object catch (error) {
+      stderr.writeln('Fatal LAN checkpoint write failure: $error');
+      exit(74); // Never acknowledge an unpersisted authoritative event.
+    }
+  }
 
   void attach(WebSocket socket) {
     final conn = _Connection(socket);
@@ -109,6 +137,7 @@ class _Server {
           previous.socket.close(WebSocketStatus.normalClosure, 'Reconnected');
         }
       }
+      persist(room); // Save room creation, seats and recovery tokens first.
       conn.room = room;
       conn.seat = seat;
       room.seats[seat].connected = true;
@@ -128,6 +157,7 @@ class _Server {
       case 'start':
         final fresh = room.state == null;
         room.start(seat);
+        if (fresh) persist(room);
         broadcast(room);
         if (fresh) schedule(room);
       case 'move':
@@ -138,6 +168,7 @@ class _Server {
           msg['base'] as int,
           Map<String, dynamic>.from(msg['event'] as Map),
         );
+        persist(room); // Includes accepted and rejected request-ID decisions.
         conn.send(reply);
         if (reply['ok'] == true) {
           if (room.version != before) {
@@ -196,6 +227,7 @@ class _Server {
       final id = window.id, responder = window.responder;
       clocks[room] = Timer(const Duration(seconds: 20), () {
         if (room.timeout(id, responder)) {
+          persist(room);
           broadcast(room);
           schedule(room);
         }
@@ -204,6 +236,7 @@ class _Server {
       final version = room.version;
       clocks[room] = Timer(const Duration(minutes: 3), () {
         if (room.advanceIdle(version)) {
+          persist(room);
           broadcast(room);
           schedule(room);
         }
