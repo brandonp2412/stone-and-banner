@@ -57,6 +57,27 @@ class MatchView extends StatefulWidget {
 
 class _MatchViewState extends State<MatchView> {
   _Move choice = _Move.inspect;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant MatchView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.phase != widget.state.phase ||
+        oldWidget.state.active != widget.state.active) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scrollController.hasClients) {
+          _scrollController.jumpTo(0);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   int? selectedKnight;
   Size? _boardSize;
   MatchState get s => widget.state;
@@ -358,150 +379,18 @@ class _MatchViewState extends State<MatchView> {
     await tapBoard(position, boardSize);
   }
 
-  Future<void> exchange() async {
-    var give = Resource.wood, take = Resource.brick;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, update) {
-          final rate = MatchEngine.tradeRate(s, s.active);
-          final commerce = s.current.level(StrategyDeck.commerce);
-          final receipt =
-              commerce >= 5 || (commerce >= 3 && take == Resource.cloth)
-              ? 2
-              : 1;
-          final valid =
-              give != take &&
-              (s.current.stores[give] ?? 0) >= rate &&
-              (s.bank[take] ?? 0) >= receipt;
-          return AlertDialog(
-            title: Text('Bank trade · $rate:$receipt'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _GoodInput(
-                  label: 'Give $rate',
-                  resource: give,
-                  change: (r) => update(() => give = r),
-                ),
-                const SizedBox(height: 12),
-                _GoodInput(
-                  label: 'Receive $receipt',
-                  resource: take,
-                  change: (r) => update(() => take = r),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: valid
-                    ? () {
-                        Navigator.pop(context);
-                        send(BankExchange(give, take));
-                      }
-                    : null,
-                child: const Text('Exchange'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+  Future<void> exchange() => _openTrade(_TradeKind.bank);
 
-  Future<void> offer([TradeProposal? counter]) async {
-    var target = counter?.proposer ?? (s.active + 1) % s.players.length;
-    var give = counter?.want ?? Resource.wood;
-    var take = counter?.give ?? Resource.wool;
-    var countGive = counter?.wantCount ?? 1;
-    var countTake = counter?.giveCount ?? 1;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, update) {
-          final valid =
-              give != take && (s.current.stores[give] ?? 0) >= countGive;
-          return AlertDialog(
-            title: Text(
-              counter == null ? 'Standing trade offer' : 'Counteroffer',
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (counter == null)
-                    DropdownButtonFormField<int>(
-                      key: ValueKey(target),
-                      initialValue: target,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Offer to'),
-                      items: [
-                        for (var i = 0; i < s.players.length; i++)
-                          if (i != s.active)
-                            DropdownMenuItem(
-                              value: i,
-                              child: Text(s.players[i].id),
-                            ),
-                      ],
-                      onChanged: (v) => update(() => target = v!),
-                    ),
-                  const SizedBox(height: 12),
-                  _GoodInput(
-                    label: 'You give',
-                    resource: give,
-                    change: (r) => update(() => give = r),
-                  ),
-                  _CountInput(
-                    value: countGive,
-                    change: (n) => update(() => countGive = n),
-                  ),
-                  const SizedBox(height: 12),
-                  _GoodInput(
-                    label: 'You request',
-                    resource: take,
-                    change: (r) => update(() => take = r),
-                  ),
-                  _CountInput(
-                    value: countTake,
-                    change: (n) => update(() => countTake = n),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: valid
-                    ? () {
-                        Navigator.pop(context);
-                        send(
-                          ProposeTrade(
-                            target,
-                            give,
-                            countGive,
-                            take,
-                            countTake,
-                            counterOf: counter?.id,
-                          ),
-                        );
-                      }
-                    : null,
-                child: Text(
-                  counter == null ? 'Escrow and offer' : 'Send counter',
-                ),
-              ),
-            ],
-          );
-        },
+  Future<void> offer([TradeProposal? counter]) =>
+      _openTrade(_TradeKind.player, counter: counter);
+
+  Future<void> _openTrade(_TradeKind kind, {TradeProposal? counter}) async {
+    final event = await Navigator.of(context).push<MatchEvent>(
+      MaterialPageRoute(
+        builder: (_) => _TradeComposer(state: s, kind: kind, counter: counter),
       ),
     );
+    if (mounted && event != null) send(event);
   }
 
   @override
@@ -538,6 +427,7 @@ class _MatchViewState extends State<MatchView> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 680),
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
           children: [
             Row(
@@ -570,6 +460,150 @@ class _MatchViewState extends State<MatchView> {
                 ),
               ],
             ),
+            if (phase == MatchPhase.roll)
+              Card.filled(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Ready to roll',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: () {
+                          final pair = widget.online
+                              ? (0, 0)
+                              : MatchEngine.expectedDice(s);
+                          send(RollDice(pair.$1, pair.$2));
+                        },
+                        icon: const Icon(Icons.casino),
+                        label: const Text('Roll dice'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (phase == MatchPhase.invasion)
+              Card.filled(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Defend against the Reaver Fleet',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Fleet strength ${MatchEngine.invasionStrength(s)} · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid}',
+                      ),
+                      if (s.invasionAid > 0)
+                        Text('Emergency aid +${s.invasionAid} included'),
+                      const Text(
+                        'Active Knights and Fortifications defend. A failed defence can damage a Town or Capital.',
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: () => send(const ResolveInvasion()),
+                        icon: const Icon(Icons.shield_outlined),
+                        label: const Text('Resolve Invasion'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (phase == MatchPhase.actions)
+              Card.filled(
+                key: const ValueKey('mobile-action-panel'),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Your next move',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        choice == _Move.inspect
+                            ? 'Choose a legal build, trade, or finish your turn.'
+                            : instruction,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Inspect'),
+                            selected: choice == _Move.inspect,
+                            onSelected: (_) =>
+                                setState(() => choice = _Move.inspect),
+                          ),
+                          if (MatchEngine.legalEdges(s).isNotEmpty)
+                            ChoiceChip(
+                              label: const Text('Build road'),
+                              selected: choice == _Move.road,
+                              onSelected: (_) =>
+                                  setState(() => choice = _Move.road),
+                            ),
+                          if (MatchEngine.legalVertices(s).isNotEmpty)
+                            ChoiceChip(
+                              label: const Text('Build village'),
+                              selected: choice == _Move.village,
+                              onSelected: (_) =>
+                                  setState(() => choice = _Move.village),
+                            ),
+                          if (MatchEngine.legalUpgrades(s).isNotEmpty)
+                            ChoiceChip(
+                              label: const Text('Upgrade site'),
+                              selected: choice == _Move.upgrade,
+                              onSelected: (_) =>
+                                  setState(() => choice = _Move.upgrade),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => send(const EndTurn()),
+                          icon: const Icon(Icons.check_circle_outline),
+                          label: const Text('End turn'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: exchange,
+                            icon: const Icon(Icons.currency_exchange),
+                            label: const Text('Bank trade'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: offer,
+                            icon: const Icon(Icons.handshake_outlined),
+                            label: const Text('Player trade'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Strategy cards, Knights and Town Developments are below the board.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             Card(
               clipBehavior: Clip.antiAlias,
               child: Padding(
@@ -717,91 +751,14 @@ class _MatchViewState extends State<MatchView> {
                     ),
                   ),
                 ),
-            if (phase == MatchPhase.invasion)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Fleet strength ${MatchEngine.invasionStrength(s)} · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (s.invasionAid > 0)
-                        Text(
-                          'Emergency aid +' +
-                              s.invasionAid.toString() +
-                              ' is included in the defence preview.',
-                        ),
-                      const Text(
-                        'All active Knights and Fortifications defend. '
-                        'A failed defence damages the highest-scoring Town '
-                        'or Capital; a sole leading Knight defender may earn '
-                        "Guardian's Honour.",
-                      ),
-                      const SizedBox(height: 8),
-                      FilledButton.icon(
-                        onPressed: () => send(const ResolveInvasion()),
-                        icon: const Icon(Icons.shield_outlined),
-                        label: const Text('Resolve Invasion'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (phase == MatchPhase.roll)
-              FilledButton.icon(
-                onPressed: () {
-                  final pair = widget.online
-                      ? (0, 0)
-                      : MatchEngine.expectedDice(s);
-                  send(RollDice(pair.$1, pair.$2));
-                },
-                icon: const Icon(Icons.casino),
-                label: const Text('Roll dice'),
-              )
-            else if (phase == MatchPhase.actions) ...[
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Inspect'),
-                    selected: choice == _Move.inspect,
-                    onSelected: (_) => setState(() => choice = _Move.inspect),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Road'),
-                    selected: choice == _Move.road,
-                    onSelected: MatchEngine.legalEdges(s).isNotEmpty
-                        ? (_) => setState(() => choice = _Move.road)
-                        : null,
-                  ),
-                  ChoiceChip(
-                    label: const Text('Village'),
-                    selected: choice == _Move.village,
-                    onSelected: MatchEngine.legalVertices(s).isNotEmpty
-                        ? (_) => setState(() => choice = _Move.village)
-                        : null,
-                  ),
-                  ChoiceChip(
-                    label: const Text('Upgrade'),
-                    selected: choice == _Move.upgrade,
-                    onSelected: MatchEngine.legalUpgrades(s).isNotEmpty
-                        ? (_) => setState(() => choice = _Move.upgrade)
-                        : null,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
+            if (phase == MatchPhase.actions) ...[
               ExpansionTile(
                 title: const Text('Knights & defence'),
                 subtitle: const Text('Fortify, recruit and move Knights'),
                 childrenPadding: const EdgeInsets.only(bottom: 8),
                 children: [
                   Wrap(
-                    spacing: 6,
+                    spacing: 8,
                     runSpacing: 4,
                     children: [
                       for (final entry in <(_Move, String, bool)>[
@@ -845,16 +802,15 @@ class _MatchViewState extends State<MatchView> {
                           ),
                         ),
                       ])
-                        ChoiceChip(
-                          label: Text(entry.$2),
-                          selected: choice == entry.$1,
-                          onSelected: entry.$3
-                              ? (_) => setState(() {
-                                  choice = entry.$1;
-                                  selectedKnight = null;
-                                })
-                              : null,
-                        ),
+                        if (entry.$3)
+                          ChoiceChip(
+                            label: Text(entry.$2),
+                            selected: choice == entry.$1,
+                            onSelected: (_) => setState(() {
+                              choice = entry.$1;
+                              selectedKnight = null;
+                            }),
+                          ),
                     ],
                   ),
                 ],
@@ -905,36 +861,6 @@ class _MatchViewState extends State<MatchView> {
                         ],
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => send(const EndTurn()),
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('End turn'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton(
-                    onPressed: exchange,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                    ),
-                    child: const Text('Bank trade'),
-                  ),
-                  OutlinedButton(
-                    onPressed: offer,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                    ),
-                    child: const Text('Player trade'),
                   ),
                 ],
               ),
@@ -1008,6 +934,238 @@ class _MatchViewState extends State<MatchView> {
                     : 'Last dice: ${s.dice} · Event ${s.events.length}',
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _TradeKind { bank, player }
+
+/// A dedicated route keeps negotiation away from crowded board actions.
+class _TradeComposer extends StatefulWidget {
+  const _TradeComposer({required this.state, required this.kind, this.counter});
+  final MatchState state;
+  final _TradeKind kind;
+  final TradeProposal? counter;
+
+  @override
+  State<_TradeComposer> createState() => _TradeComposerState();
+}
+
+class _TradeComposerState extends State<_TradeComposer> {
+  late int target;
+  late Resource give;
+  late Resource take;
+  late int giveCount;
+  late int takeCount;
+
+  @override
+  void initState() {
+    super.initState();
+    final trade = widget.counter;
+    final s = widget.state;
+    target = trade?.proposer ?? (s.active + 1) % s.players.length;
+    give = trade?.want ?? Resource.wood;
+    take = trade?.give ?? Resource.wool;
+    giveCount = trade?.wantCount ?? 1;
+    takeCount = trade?.giveCount ?? 1;
+    if (trade == null) {
+      final rate = widget.kind == _TradeKind.bank
+          ? MatchEngine.tradeRate(s, s.active)
+          : 1;
+      final payable = Resource.values.where(
+        (good) => (s.current.stores[good] ?? 0) >= rate,
+      );
+      if (payable.isNotEmpty) give = payable.first;
+      if (give == take) {
+        take = Resource.values.firstWhere((good) => good != give);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.state;
+    final bank = widget.kind == _TradeKind.bank;
+    final rate = MatchEngine.tradeRate(s, s.active);
+    final commerce = s.current.level(StrategyDeck.commerce);
+    final receipt = commerce >= 5 || (commerce >= 3 && take == Resource.cloth)
+        ? 2
+        : 1;
+    final required = bank ? rate : giveCount;
+    final available = s.current.stores[give] ?? 0;
+    final bankAvailable = s.bank[take] ?? 0;
+    final valid =
+        give != take &&
+        available >= required &&
+        (!bank || bankAvailable >= receipt) &&
+        (bank || (giveCount > 0 && takeCount > 0 && target != s.active));
+    final title = bank
+        ? 'Bank exchange'
+        : widget.counter == null
+        ? 'Standing offer'
+        : 'Counteroffer';
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              children: [
+                Text(
+                  bank ? 'Trade with the bank at your current rate.' : 'Set the terms. Your goods are reserved in escrow until resolution.',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 24),
+                if (!bank && widget.counter == null) ...[
+                  DropdownButtonFormField<int>(
+                    key: ValueKey(target),
+                    initialValue: target,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Offer to',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (var i = 0; i < s.players.length; i++)
+                        if (i != s.active)
+                          DropdownMenuItem(
+                            value: i,
+                            child: Text(s.players[i].id),
+                          ),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setState(() => target = v);
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                Text('Give', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                _GoodInput(
+                  label: bank ? 'Pay' : 'Place in escrow',
+                  resource: give,
+                  change: (v) => setState(() => give = v),
+                ),
+                if (!bank)
+                  _CountInput(
+                    value: giveCount,
+                    change: (v) => setState(() => giveCount = v),
+                  ),
+                Text(
+                  'Available: ' +
+                      available.toString() +
+                      ' · Required: ' +
+                      required.toString(),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 24),
+                Text('Receive', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                _GoodInput(
+                  label: bank ? 'From bank' : 'Request',
+                  resource: take,
+                  change: (v) => setState(() => take = v),
+                ),
+                if (!bank)
+                  _CountInput(
+                    value: takeCount,
+                    change: (v) => setState(() => takeCount = v),
+                  ),
+                if (bank)
+                  Text(
+                    'Rate ' +
+                        rate.toString() +
+                        ':' +
+                        receipt.toString() +
+                        ' · Bank stock: ' +
+                        bankAvailable.toString(),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                const SizedBox(height: 24),
+                Card.filled(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      bank
+                          ? 'Pay ' +
+                                rate.toString() +
+                                ' ' +
+                                give.name +
+                                ' · Receive ' +
+                                receipt.toString() +
+                                ' ' +
+                                take.name
+                          : 'Reserve ' +
+                                giveCount.toString() +
+                                ' ' +
+                                give.name +
+                                ' · Request ' +
+                                takeCount.toString() +
+                                ' ' +
+                                take.name +
+                                '\nOnly ' +
+                                s.players[target].id +
+                                ' can accept. Private hands stay hidden.',
+                    ),
+                  ),
+                ),
+                if (!valid) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    give == take
+                        ? 'Choose different goods.'
+                        : available < required
+                        ? 'Insufficient goods to offer.'
+                        : bank && bankAvailable < receipt
+                        ? 'Bank stock is too low.'
+                        : 'Check the trade terms.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.all(16),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: valid
+                    ? () => Navigator.of(context).pop<MatchEvent>(
+                        bank
+                            ? BankExchange(give, take)
+                            : ProposeTrade(
+                                target,
+                                give,
+                                giveCount,
+                                take,
+                                takeCount,
+                                counterOf: widget.counter?.id,
+                              ),
+                      )
+                    : null,
+                child: Text(
+                  bank
+                      ? 'Exchange'
+                      : widget.counter == null
+                      ? 'Escrow and offer'
+                      : 'Send counter',
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
