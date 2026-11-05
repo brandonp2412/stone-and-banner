@@ -20,11 +20,14 @@ Future<void> main() async {
   final reserved = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
   final port = reserved.port;
   await reserved.close();
+  final stateDir = await Directory.systemTemp.createTemp('stone-lan-smoke-');
   final process = await Process.start(Platform.resolvedExecutable, [
     'run',
     'tool/lan_server.dart',
     '--port',
     '$port',
+    '--state-dir',
+    stateDir.path,
   ]);
   final clients = <WebSocket>[];
   try {
@@ -128,5 +131,6 @@ Future<void> main() async {
     }
     process.kill();
     await process.exitCode.timeout(const Duration(seconds: 4));
+    await stateDir.delete(recursive: true);
   }
 }

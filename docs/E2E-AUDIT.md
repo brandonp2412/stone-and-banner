@@ -260,6 +260,20 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 - Glass connector HTTP 429; Nox Waydroid bridge TCP verified with temporary narrow firewall rule, then removed. **No Waydroid GUI E2E** and no Samsung/public deployment. Screenshots include black transitional frames retained as failures.
 - Nox buildq **#4549** LAN smoke passed, **#4550** 131 tests passed, **#4551** analyzer clear, **#4552** Linux release passed, **#4554** Android release passed with JDK21 environment-only override after initial #4553 JDK17 path failure. Source unchanged; unresolved UI density, stale room-loss state and host persistence gates remain.
 
+## Completion 6/8 — durable LAN recovery and cross-machine GUI (5 November 2026 NZDT)
+
+- [Full LAN recovery test and screenshots handoff](LAN-RECOVERY-E2E-20261105.md).
+- Glass host + Nox guest on actual private LAN: GUI room create/join/start,
+  four legal opening actions, host process restart and guest app restart,
+  preserved board/turn and recovery token. Both hidden Linux GUIs and source
+  builds are independently identified in that handoff.
+- Glass buildq #5045 wire-restart test passed through revision 18,
+  #5046 existing smoke passed, #5051 all 140 Flutter tests passed, #5052
+  analyzer clean, #5053 Linux and #5054 Android releases built. The GUI
+  cross-machine run did not reach 15 VP; full-game network acceptance remains.
+- No persistent test service, nft port opening, public deployment or physical
+  device install was left behind.
+
 ## Slice 20/20 — final independent release-quality audit (5 November 2026 NZDT)
 
 - [40 ordered Linux screenshot/action/visual-review rows](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-20/SCREENSHOT-MANIFEST.md) and [exact run evidence and acceptance matrix](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-20/RUN-EVIDENCE.md) on Nox fallback.
