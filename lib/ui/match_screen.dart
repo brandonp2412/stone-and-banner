@@ -399,6 +399,15 @@ class _MatchViewState extends State<MatchView> {
       return _TacticalPanel(state: s, onEvent: send, online: widget.online);
     }
     final phase = s.phase;
+    final phaseLabel = switch (phase) {
+      MatchPhase.setupVillage => 'Place village',
+      MatchPhase.setupRoad => 'Place road',
+      MatchPhase.roll => 'Roll dice',
+      MatchPhase.bandit => 'Move Bandit',
+      MatchPhase.actions => 'Your turn',
+      MatchPhase.invasion => 'Defend realm',
+      MatchPhase.finished => 'Game over',
+    };
     final winner = MatchEngine.winner(s);
     final instruction = switch (phase) {
       MatchPhase.setupVillage => 'Tap a glowing junction for a free Village',
@@ -437,7 +446,7 @@ class _MatchViewState extends State<MatchView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Round ${s.round} · ${phase.name}',
+                        'Round ${s.round} · $phaseLabel',
                         style: Theme.of(context).textTheme.labelLarge,
                       ),
                       Text(
@@ -1006,6 +1015,15 @@ class _TradeComposerState extends State<_TradeComposer> {
         available >= required &&
         (!bank || bankAvailable >= receipt) &&
         (bank || (giveCount > 0 && takeCount > 0 && target != s.active));
+    final validationMessage = valid
+        ? null
+        : give == take
+        ? 'Choose different goods.'
+        : available < required
+        ? 'Insufficient goods to offer.'
+        : bank && bankAvailable < receipt
+        ? 'Bank stock is too low.'
+        : 'Check the trade terms.';
     final title = bank
         ? 'Bank exchange'
         : widget.counter == null
@@ -1118,21 +1136,6 @@ class _TradeComposerState extends State<_TradeComposer> {
                     ),
                   ),
                 ),
-                if (!valid) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    give == take
-                        ? 'Choose different goods.'
-                        : available < required
-                        ? 'Insufficient goods to offer.'
-                        : bank && bankAvailable < receipt
-                        ? 'Bank stock is too low.'
-                        : 'Check the trade terms.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -1144,31 +1147,47 @@ class _TradeComposerState extends State<_TradeComposer> {
           heightFactor: 1,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: valid
-                    ? () => Navigator.of(context).pop<MatchEvent>(
-                        bank
-                            ? BankExchange(give, take)
-                            : ProposeTrade(
-                                target,
-                                give,
-                                giveCount,
-                                take,
-                                takeCount,
-                                counterOf: widget.counter?.id,
-                              ),
-                      )
-                    : null,
-                child: Text(
-                  bank
-                      ? 'Exchange'
-                      : widget.counter == null
-                      ? 'Escrow and offer'
-                      : 'Send counter',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (validationMessage != null) ...[
+                  Text(
+                    validationMessage,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: valid
+                        ? () => Navigator.of(context).pop<MatchEvent>(
+                            bank
+                                ? BankExchange(give, take)
+                                : ProposeTrade(
+                                    target,
+                                    give,
+                                    giveCount,
+                                    take,
+                                    takeCount,
+                                    counterOf: widget.counter?.id,
+                                  ),
+                          )
+                        : null,
+                    child: Text(
+                      bank
+                          ? 'Exchange'
+                          : widget.counter == null
+                          ? 'Escrow and offer'
+                          : 'Send counter',
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),

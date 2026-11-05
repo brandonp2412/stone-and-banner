@@ -28,7 +28,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Import replay'));
       await tester.pumpAndSettle();
-      expect(find.text('Paste replay JSON'), findsOneWidget);
+      expect(find.text('Replay code'), findsOneWidget);
       await tester.enterText(find.byType(TextField).last, json);
       await tester.tap(find.text('Load'));
       await tester.pumpAndSettle();

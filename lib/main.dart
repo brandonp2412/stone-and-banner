@@ -1086,8 +1086,9 @@ class _ReplayImportDialogState extends State<_ReplayImportDialog> {
       controller: controller,
       maxLines: 5,
       decoration: const InputDecoration(
-        labelText: 'Paste replay JSON',
-        helperText: 'Compact share codes also work',
+        labelText: 'Replay code',
+        helperText: 'JSON and compact share codes work',
+        helperMaxLines: 2,
         border: OutlineInputBorder(),
       ),
     ),
