@@ -85,6 +85,12 @@ void main() {
     expect(find.text('Bank trade'), findsOneWidget);
     expect(find.text('Player trade'), findsOneWidget);
     expect(
+      (tester.getTopLeft(find.text('Bank trade')).dy -
+              tester.getTopLeft(find.text('Player trade')).dy)
+          .abs(),
+      lessThan(2),
+    );
+    expect(
       tester.getTopLeft(panel).dy,
       lessThan(tester.getTopLeft(find.byType(InteractiveViewer)).dy),
     );

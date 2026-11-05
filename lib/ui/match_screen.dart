@@ -531,7 +531,11 @@ class _MatchViewState extends State<MatchView> {
                       const SizedBox(height: 6),
                       Text(
                         choice == _Move.inspect
-                            ? 'Choose a legal build, trade, or finish your turn.'
+                            ? (MatchEngine.legalEdges(s).isEmpty &&
+                                      MatchEngine.legalVertices(s).isEmpty &&
+                                      MatchEngine.legalUpgrades(s).isEmpty
+                                  ? 'No builds available. Trade or finish your turn.'
+                                  : 'Choose a legal build, trade, or finish your turn.')
                             : instruction,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
@@ -579,19 +583,20 @@ class _MatchViewState extends State<MatchView> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                      Row(
                         children: [
-                          OutlinedButton.icon(
-                            onPressed: exchange,
-                            icon: const Icon(Icons.currency_exchange),
-                            label: const Text('Bank trade'),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: exchange,
+                              child: const Text('Bank trade'),
+                            ),
                           ),
-                          OutlinedButton.icon(
-                            onPressed: offer,
-                            icon: const Icon(Icons.handshake_outlined),
-                            label: const Text('Player trade'),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: offer,
+                              child: const Text('Player trade'),
+                            ),
                           ),
                         ],
                       ),
