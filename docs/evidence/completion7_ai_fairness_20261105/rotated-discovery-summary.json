@@ -1,0 +1,25 @@
+{
+  "policy": "BalanceSimulation track-focused heuristic bots",
+  "rules": "MatchBalance.baseline",
+  "firstSeed": 12000,
+  "lastSeed": 12119,
+  "roundCap": 90,
+  "seedBlocksPerPlayerCount": 120,
+  "games": 840,
+  "durationMs": 47055,
+  "records": "build/ai-fairness-discovery/records.jsonl",
+  "cells": [
+    {
+      "seats": 3,
+      "games": 360,
+      "finished": 299,
+      "firstSeatWins": 106
+    },
+    {
+      "seats": 4,
+      "games": 480,
+      "finished": 433,
+      "firstSeatWins": 99
+    }
+  ]
+}

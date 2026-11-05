@@ -280,21 +280,27 @@ class BalanceSimulation {
     MatchBalance balance = MatchBalance.baseline,
     int seats = 3,
     int maxRounds = 65,
+    List<BalanceBot>? lineup,
   }) {
     if (seats < 3 || seats > 4 || maxRounds < 1) {
       throw ArgumentError('3–4 seats and positive round cap required.');
     }
+    if (lineup != null && lineup.length != seats) {
+      throw ArgumentError('Lineup must contain exactly one bot per seat.');
+    }
     // Rotate tracks independently of trading and defence temperaments,
     // so track win share is not confounded by a single behaviour policy.
-    final bots = List.generate(seats, (i) {
-      final track = StrategyDeck.values[(i + seed % 3) % 3];
-      final temperament = (i + seed ~/ 3) % 3;
-      return BalanceBot(
-        track,
-        trade: temperament != 0,
-        defend: temperament != 1,
-      );
-    });
+    final bots = lineup == null
+        ? List.generate(seats, (i) {
+            final track = StrategyDeck.values[(i + seed % 3) % 3];
+            final temperament = (i + seed ~/ 3) % 3;
+            return BalanceBot(
+              track,
+              trade: temperament != 0,
+              defend: temperament != 1,
+            );
+          })
+        : List<BalanceBot>.unmodifiable(lineup);
     var s = MatchEngine.newGame(
       List.generate(seats, (i) => 'Bot-$i'),
       seed,

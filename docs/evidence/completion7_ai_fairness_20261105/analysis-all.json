@@ -1,0 +1,157 @@
+{
+  "methods": {
+    "rotated": "5000 seeded bootstrap resamples of complete seed blocks",
+    "stability": "Wilson binomial intervals on finished games",
+    "censoring": "capped games excluded from first-seat winner denominator; retained in per-track start denominators"
+  },
+  "rotated": [
+    {
+      "seats": 3,
+      "seed_blocks": 240,
+      "games": 720,
+      "finished": 599,
+      "capped": 121,
+      "first_seat_wins": 197,
+      "first_seat_share": 0.328881469115192,
+      "first_seat_ci95_block_bootstrap": [
+        0.2935153583617747,
+        0.36502546689303905
+      ],
+      "neutral_first_seat_share": 0.3333333333333333,
+      "track_starts": {
+        "innovation": 720,
+        "commerce": 720,
+        "governance": 720
+      },
+      "track_wins": {
+        "innovation": 102,
+        "commerce": 309,
+        "governance": 188
+      },
+      "track_win_per_start": {
+        "innovation": 0.14166666666666666,
+        "commerce": 0.42916666666666664,
+        "governance": 0.2611111111111111
+      },
+      "commerce_minus_innovation": 0.2875,
+      "commerce_minus_innovation_ci95_block_bootstrap": [
+        0.2347222222222222,
+        0.3388888888888889
+      ]
+    },
+    {
+      "seats": 4,
+      "seed_blocks": 240,
+      "games": 960,
+      "finished": 866,
+      "capped": 94,
+      "first_seat_wins": 199,
+      "first_seat_share": 0.22979214780600463,
+      "first_seat_ci95_block_bootstrap": [
+        0.20187793427230047,
+        0.2573099415204678
+      ],
+      "neutral_first_seat_share": 0.25,
+      "track_starts": {
+        "innovation": 1280,
+        "commerce": 1280,
+        "governance": 1280
+      },
+      "track_wins": {
+        "innovation": 113,
+        "commerce": 495,
+        "governance": 258
+      },
+      "track_win_per_start": {
+        "innovation": 0.08828125,
+        "commerce": 0.38671875,
+        "governance": 0.2015625
+      },
+      "commerce_minus_innovation": 0.2984375,
+      "commerce_minus_innovation_ci95_block_bootstrap": [
+        0.26289890519450265,
+        0.3338369854313048
+      ]
+    }
+  ],
+  "stability": [
+    {
+      "seats": 3,
+      "mode": "allAi",
+      "games": 480,
+      "finished": 448,
+      "capped": 32,
+      "first_seat_wins": 200,
+      "first_seat_share_finished": 0.44642857142857145,
+      "first_seat_ci95_wilson": [
+        0.4010445829972501,
+        0.4927234653680327
+      ],
+      "neutral_first_seat_share": 0.3333333333333333,
+      "wins_by_seat": [
+        200,
+        117,
+        131
+      ]
+    },
+    {
+      "seats": 3,
+      "mode": "simulatedHuman",
+      "games": 480,
+      "finished": 415,
+      "capped": 65,
+      "first_seat_wins": 135,
+      "first_seat_share_finished": 0.3253012048192771,
+      "first_seat_ci95_wilson": [
+        0.28200849303969294,
+        0.3717984619635976
+      ],
+      "neutral_first_seat_share": 0.3333333333333333,
+      "wins_by_seat": [
+        135,
+        147,
+        133
+      ]
+    },
+    {
+      "seats": 4,
+      "mode": "allAi",
+      "games": 480,
+      "finished": 480,
+      "capped": 0,
+      "first_seat_wins": 157,
+      "first_seat_share_finished": 0.32708333333333334,
+      "first_seat_ci95_wilson": [
+        0.2866307684421904,
+        0.3702816416588266
+      ],
+      "neutral_first_seat_share": 0.25,
+      "wins_by_seat": [
+        157,
+        94,
+        119,
+        110
+      ]
+    },
+    {
+      "seats": 4,
+      "mode": "simulatedHuman",
+      "games": 480,
+      "finished": 477,
+      "capped": 3,
+      "first_seat_wins": 161,
+      "first_seat_share_finished": 0.33752620545073375,
+      "first_seat_ci95_wilson": [
+        0.29653886254347944,
+        0.38110956573441673
+      ],
+      "neutral_first_seat_share": 0.25,
+      "wins_by_seat": [
+        161,
+        93,
+        101,
+        122
+      ]
+    }
+  ]
+}
