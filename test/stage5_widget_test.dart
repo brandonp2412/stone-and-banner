@@ -53,6 +53,68 @@ Future<void> showMatch(
 }
 
 void main() {
+  testWidgets('bank exchange uses focused route, conserves stock and returns', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var s = drafted().copyWith(phase: MatchPhase.actions);
+    for (var i = 0; i < 4; i++) {
+      s = grant(s, 0, Resource.wood);
+    }
+    var updated = s;
+    final woodBefore = s.players[0].stores[Resource.wood]!;
+    final woolBefore = s.players[0].stores[Resource.wool] ?? 0;
+    final bankWoodBefore = s.bank[Resource.wood]!;
+    final bankWoolBefore = s.bank[Resource.wool]!;
+    await showMatch(tester, s, (v) => updated = v);
+    await tester.scrollUntilVisible(find.text('Bank trade'), 250);
+    await tester.tap(find.text('Bank trade'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bank exchange'), findsOneWidget);
+    expect(find.textContaining('Rate 4:1'), findsOneWidget);
+    expect(find.text('End turn'), findsNothing);
+    expect(find.text('Exchange'), findsOneWidget);
+    await tester.tap(find.text('Exchange'));
+    await tester.pumpAndSettle();
+    expect(updated.players[0].stores[Resource.wood], woodBefore - 4);
+    expect(updated.players[0].stores[Resource.wool], woolBefore + 1);
+    expect(updated.bank[Resource.wood], bankWoodBefore + 4);
+    expect(updated.bank[Resource.wool], bankWoolBefore - 1);
+    expect(find.text('Bank exchange'), findsNothing);
+  });
+
+  testWidgets('standing offer reserves only once on its focused route', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final s = grant(
+      drafted().copyWith(phase: MatchPhase.actions),
+      0,
+      Resource.wood,
+    );
+    var updated = s;
+    final before = s.players[0].stores[Resource.wood]!;
+    await showMatch(tester, s, (v) => updated = v);
+    await tester.scrollUntilVisible(find.text('Player trade'), 250);
+    await tester.tap(find.text('Player trade'));
+    await tester.pumpAndSettle();
+    expect(find.text('Standing offer'), findsOneWidget);
+    expect(find.textContaining('Private hands stay hidden'), findsOneWidget);
+    expect(find.text('End turn'), findsNothing);
+    await tester.tap(find.text('Escrow and offer'));
+    await tester.pumpAndSettle();
+    expect(updated.offers, hasLength(1));
+    expect(updated.offers.single.give, Resource.wood);
+    expect(updated.players[0].stores[Resource.wood], before - 1);
+    expect(find.text('Standing offer'), findsNothing);
+  });
+
   testWidgets(
     'private Bandit response has no acting hand and resolves by touch',
     (tester) async {
