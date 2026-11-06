@@ -358,150 +358,18 @@ class _MatchViewState extends State<MatchView> {
     await tapBoard(position, boardSize);
   }
 
-  Future<void> exchange() async {
-    var give = Resource.wood, take = Resource.brick;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, update) {
-          final rate = MatchEngine.tradeRate(s, s.active);
-          final commerce = s.current.level(StrategyDeck.commerce);
-          final receipt =
-              commerce >= 5 || (commerce >= 3 && take == Resource.cloth)
-              ? 2
-              : 1;
-          final valid =
-              give != take &&
-              (s.current.stores[give] ?? 0) >= rate &&
-              (s.bank[take] ?? 0) >= receipt;
-          return AlertDialog(
-            title: Text('Bank trade · $rate:$receipt'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _GoodInput(
-                  label: 'Give $rate',
-                  resource: give,
-                  change: (r) => update(() => give = r),
-                ),
-                const SizedBox(height: 12),
-                _GoodInput(
-                  label: 'Receive $receipt',
-                  resource: take,
-                  change: (r) => update(() => take = r),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: valid
-                    ? () {
-                        Navigator.pop(context);
-                        send(BankExchange(give, take));
-                      }
-                    : null,
-                child: const Text('Exchange'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+  Future<void> exchange() => _openTrade(_TradeKind.bank);
 
-  Future<void> offer([TradeProposal? counter]) async {
-    var target = counter?.proposer ?? (s.active + 1) % s.players.length;
-    var give = counter?.want ?? Resource.wood;
-    var take = counter?.give ?? Resource.wool;
-    var countGive = counter?.wantCount ?? 1;
-    var countTake = counter?.giveCount ?? 1;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, update) {
-          final valid =
-              give != take && (s.current.stores[give] ?? 0) >= countGive;
-          return AlertDialog(
-            title: Text(
-              counter == null ? 'Standing trade offer' : 'Counteroffer',
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (counter == null)
-                    DropdownButtonFormField<int>(
-                      key: ValueKey(target),
-                      initialValue: target,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Offer to'),
-                      items: [
-                        for (var i = 0; i < s.players.length; i++)
-                          if (i != s.active)
-                            DropdownMenuItem(
-                              value: i,
-                              child: Text(s.players[i].id),
-                            ),
-                      ],
-                      onChanged: (v) => update(() => target = v!),
-                    ),
-                  const SizedBox(height: 12),
-                  _GoodInput(
-                    label: 'You give',
-                    resource: give,
-                    change: (r) => update(() => give = r),
-                  ),
-                  _CountInput(
-                    value: countGive,
-                    change: (n) => update(() => countGive = n),
-                  ),
-                  const SizedBox(height: 12),
-                  _GoodInput(
-                    label: 'You request',
-                    resource: take,
-                    change: (r) => update(() => take = r),
-                  ),
-                  _CountInput(
-                    value: countTake,
-                    change: (n) => update(() => countTake = n),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: valid
-                    ? () {
-                        Navigator.pop(context);
-                        send(
-                          ProposeTrade(
-                            target,
-                            give,
-                            countGive,
-                            take,
-                            countTake,
-                            counterOf: counter?.id,
-                          ),
-                        );
-                      }
-                    : null,
-                child: Text(
-                  counter == null ? 'Escrow and offer' : 'Send counter',
-                ),
-              ),
-            ],
-          );
-        },
+  Future<void> offer([TradeProposal? counter]) =>
+      _openTrade(_TradeKind.player, counter: counter);
+
+  Future<void> _openTrade(_TradeKind kind, {TradeProposal? counter}) async {
+    final event = await Navigator.of(context).push<MatchEvent>(
+      MaterialPageRoute(
+        builder: (_) => _TradeComposer(state: s, kind: kind, counter: counter),
       ),
     );
+    if (mounted && event != null) send(event);
   }
 
   @override
@@ -771,27 +639,24 @@ class _MatchViewState extends State<MatchView> {
                     selected: choice == _Move.inspect,
                     onSelected: (_) => setState(() => choice = _Move.inspect),
                   ),
-                  ChoiceChip(
-                    label: const Text('Road'),
-                    selected: choice == _Move.road,
-                    onSelected: MatchEngine.legalEdges(s).isNotEmpty
-                        ? (_) => setState(() => choice = _Move.road)
-                        : null,
-                  ),
-                  ChoiceChip(
-                    label: const Text('Village'),
-                    selected: choice == _Move.village,
-                    onSelected: MatchEngine.legalVertices(s).isNotEmpty
-                        ? (_) => setState(() => choice = _Move.village)
-                        : null,
-                  ),
-                  ChoiceChip(
-                    label: const Text('Upgrade'),
-                    selected: choice == _Move.upgrade,
-                    onSelected: MatchEngine.legalUpgrades(s).isNotEmpty
-                        ? (_) => setState(() => choice = _Move.upgrade)
-                        : null,
-                  ),
+                  if (MatchEngine.legalEdges(s).isNotEmpty)
+                    ChoiceChip(
+                      label: const Text('Road'),
+                      selected: choice == _Move.road,
+                      onSelected: (_) => setState(() => choice = _Move.road),
+                    ),
+                  if (MatchEngine.legalVertices(s).isNotEmpty)
+                    ChoiceChip(
+                      label: const Text('Village'),
+                      selected: choice == _Move.village,
+                      onSelected: (_) => setState(() => choice = _Move.village),
+                    ),
+                  if (MatchEngine.legalUpgrades(s).isNotEmpty)
+                    ChoiceChip(
+                      label: const Text('Upgrade'),
+                      selected: choice == _Move.upgrade,
+                      onSelected: (_) => setState(() => choice = _Move.upgrade),
+                    ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -838,16 +703,15 @@ class _MatchViewState extends State<MatchView> {
                       ),
                     ),
                   ])
-                    ChoiceChip(
-                      label: Text(entry.$2),
-                      selected: choice == entry.$1,
-                      onSelected: entry.$3
-                          ? (_) => setState(() {
-                              choice = entry.$1;
-                              selectedKnight = null;
-                            })
-                          : null,
-                    ),
+                    if (entry.$3)
+                      ChoiceChip(
+                        label: Text(entry.$2),
+                        selected: choice == entry.$1,
+                        onSelected: (_) => setState(() {
+                          choice = entry.$1;
+                          selectedKnight = null;
+                        }),
+                      ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -992,6 +856,238 @@ class _MatchViewState extends State<MatchView> {
                     : 'Last dice: ${s.dice} · Event ${s.events.length}',
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _TradeKind { bank, player }
+
+/// A dedicated route keeps negotiation away from crowded board actions.
+class _TradeComposer extends StatefulWidget {
+  const _TradeComposer({required this.state, required this.kind, this.counter});
+  final MatchState state;
+  final _TradeKind kind;
+  final TradeProposal? counter;
+
+  @override
+  State<_TradeComposer> createState() => _TradeComposerState();
+}
+
+class _TradeComposerState extends State<_TradeComposer> {
+  late int target;
+  late Resource give;
+  late Resource take;
+  late int giveCount;
+  late int takeCount;
+
+  @override
+  void initState() {
+    super.initState();
+    final trade = widget.counter;
+    final s = widget.state;
+    target = trade?.proposer ?? (s.active + 1) % s.players.length;
+    give = trade?.want ?? Resource.wood;
+    take = trade?.give ?? Resource.wool;
+    giveCount = trade?.wantCount ?? 1;
+    takeCount = trade?.giveCount ?? 1;
+    if (trade == null) {
+      final rate = widget.kind == _TradeKind.bank
+          ? MatchEngine.tradeRate(s, s.active)
+          : 1;
+      final payable = Resource.values.where(
+        (good) => (s.current.stores[good] ?? 0) >= rate,
+      );
+      if (payable.isNotEmpty) give = payable.first;
+      if (give == take) {
+        take = Resource.values.firstWhere((good) => good != give);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.state;
+    final bank = widget.kind == _TradeKind.bank;
+    final rate = MatchEngine.tradeRate(s, s.active);
+    final commerce = s.current.level(StrategyDeck.commerce);
+    final receipt = commerce >= 5 || (commerce >= 3 && take == Resource.cloth)
+        ? 2
+        : 1;
+    final required = bank ? rate : giveCount;
+    final available = s.current.stores[give] ?? 0;
+    final bankAvailable = s.bank[take] ?? 0;
+    final valid =
+        give != take &&
+        available >= required &&
+        (!bank || bankAvailable >= receipt) &&
+        (bank || (giveCount > 0 && takeCount > 0 && target != s.active));
+    final title = bank
+        ? 'Bank exchange'
+        : widget.counter == null
+        ? 'Standing offer'
+        : 'Counteroffer';
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              children: [
+                Text(
+                  bank ? 'Trade with the bank at your current rate.' : 'Set the terms. Your goods are reserved in escrow until resolution.',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 24),
+                if (!bank && widget.counter == null) ...[
+                  DropdownButtonFormField<int>(
+                    key: ValueKey(target),
+                    initialValue: target,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Offer to',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (var i = 0; i < s.players.length; i++)
+                        if (i != s.active)
+                          DropdownMenuItem(
+                            value: i,
+                            child: Text(s.players[i].id),
+                          ),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setState(() => target = v);
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                Text('Give', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                _GoodInput(
+                  label: bank ? 'Pay' : 'Place in escrow',
+                  resource: give,
+                  change: (v) => setState(() => give = v),
+                ),
+                if (!bank)
+                  _CountInput(
+                    value: giveCount,
+                    change: (v) => setState(() => giveCount = v),
+                  ),
+                Text(
+                  'Available: ' +
+                      available.toString() +
+                      ' · Required: ' +
+                      required.toString(),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 24),
+                Text('Receive', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                _GoodInput(
+                  label: bank ? 'From bank' : 'Request',
+                  resource: take,
+                  change: (v) => setState(() => take = v),
+                ),
+                if (!bank)
+                  _CountInput(
+                    value: takeCount,
+                    change: (v) => setState(() => takeCount = v),
+                  ),
+                if (bank)
+                  Text(
+                    'Rate ' +
+                        rate.toString() +
+                        ':' +
+                        receipt.toString() +
+                        ' · Bank stock: ' +
+                        bankAvailable.toString(),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                const SizedBox(height: 24),
+                Card.filled(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      bank
+                          ? 'Pay ' +
+                                rate.toString() +
+                                ' ' +
+                                give.name +
+                                ' · Receive ' +
+                                receipt.toString() +
+                                ' ' +
+                                take.name
+                          : 'Reserve ' +
+                                giveCount.toString() +
+                                ' ' +
+                                give.name +
+                                ' · Request ' +
+                                takeCount.toString() +
+                                ' ' +
+                                take.name +
+                                '\nOnly ' +
+                                s.players[target].id +
+                                ' can accept. Private hands stay hidden.',
+                    ),
+                  ),
+                ),
+                if (!valid) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    give == take
+                        ? 'Choose different goods.'
+                        : available < required
+                        ? 'Insufficient goods to offer.'
+                        : bank && bankAvailable < receipt
+                        ? 'Bank stock is too low.'
+                        : 'Check the trade terms.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.all(16),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: valid
+                    ? () => Navigator.of(context).pop<MatchEvent>(
+                        bank
+                            ? BankExchange(give, take)
+                            : ProposeTrade(
+                                target,
+                                give,
+                                giveCount,
+                                take,
+                                takeCount,
+                                counterOf: widget.counter?.id,
+                              ),
+                      )
+                    : null,
+                child: Text(
+                  bank
+                      ? 'Exchange'
+                      : widget.counter == null
+                      ? 'Escrow and offer'
+                      : 'Send counter',
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
