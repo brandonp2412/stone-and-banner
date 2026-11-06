@@ -1023,6 +1023,7 @@ class MatchEngine {
   /// Empty options never block End Turn or the explicit discard action.
   static List<PlayStrategyCard> legalCardPlays(MatchState s, int handIndex) {
     if (s.phase != MatchPhase.actions ||
+        s.offers.isNotEmpty ||
         handIndex < 0 ||
         handIndex >= s.current.cards.length) {
       return [];

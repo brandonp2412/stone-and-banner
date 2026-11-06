@@ -660,58 +660,68 @@ class _MatchViewState extends State<MatchView> {
                 ],
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
+              ExpansionTile(
+                title: const Text('Knights & defence'),
+                subtitle: const Text('Fortify, recruit and move Knights'),
+                childrenPadding: const EdgeInsets.only(bottom: 8),
                 children: [
-                  for (final entry in <(_Move, String, bool)>[
-                    (
-                      _Move.fortify,
-                      'Fortify',
-                      s.sites.keys.any((v) => MatchEngine.legalFort(s, v)),
-                    ),
-                    (
-                      _Move.recruit,
-                      'Recruit Knight',
-                      [
-                        for (var v = 0; v < s.topology.vertices.length; v++)
-                          if (MatchEngine.legalRecruit(s, v)) v,
-                      ].isNotEmpty,
-                    ),
-                    (
-                      _Move.activate,
-                      'Activate',
-                      s.knights.keys.any(
-                        (v) => MatchEngine.legalActivate(s, v),
-                      ),
-                    ),
-                    (
-                      _Move.promote,
-                      'Promote',
-                      s.knights.keys.any((v) => MatchEngine.legalPromote(s, v)),
-                    ),
-                    (
-                      _Move.knightMove,
-                      'Move Knight',
-                      s.knights.keys.any(
-                        (v) =>
-                            s.knights[v]!.owner == s.active &&
-                            MatchEngine.legalKnightDestinations(
-                              s,
-                              v,
-                            ).isNotEmpty,
-                      ),
-                    ),
-                  ])
-                    if (entry.$3)
-                      ChoiceChip(
-                        label: Text(entry.$2),
-                        selected: choice == entry.$1,
-                        onSelected: (_) => setState(() {
-                          choice = entry.$1;
-                          selectedKnight = null;
-                        }),
-                      ),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final entry in <(_Move, String, bool)>[
+                        (
+                          _Move.fortify,
+                          'Fortify',
+                          s.sites.keys.any((v) => MatchEngine.legalFort(s, v)),
+                        ),
+                        (
+                          _Move.recruit,
+                          'Recruit Knight',
+                          [
+                            for (var v = 0; v < s.topology.vertices.length; v++)
+                              if (MatchEngine.legalRecruit(s, v)) v,
+                          ].isNotEmpty,
+                        ),
+                        (
+                          _Move.activate,
+                          'Activate',
+                          s.knights.keys.any(
+                            (v) => MatchEngine.legalActivate(s, v),
+                          ),
+                        ),
+                        (
+                          _Move.promote,
+                          'Promote',
+                          s.knights.keys.any(
+                            (v) => MatchEngine.legalPromote(s, v),
+                          ),
+                        ),
+                        (
+                          _Move.knightMove,
+                          'Move Knight',
+                          s.knights.keys.any(
+                            (v) =>
+                                s.knights[v]!.owner == s.active &&
+                                MatchEngine.legalKnightDestinations(
+                                  s,
+                                  v,
+                                ).isNotEmpty,
+                          ),
+                        ),
+                      ])
+                        ChoiceChip(
+                          label: Text(entry.$2),
+                          selected: choice == entry.$1,
+                          onSelected: entry.$3
+                              ? (_) => setState(() {
+                                  choice = entry.$1;
+                                  selectedKnight = null;
+                                })
+                              : null,
+                        ),
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -723,66 +733,73 @@ class _MatchViewState extends State<MatchView> {
                     : null,
               ),
               const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Town Developments',
-                        style: Theme.of(context).textTheme.titleMedium,
+              ExpansionTile(
+                title: const Text('Town Developments'),
+                subtitle: const Text('Innovation, Commerce & Governance'),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final track in StrategyDeck.values)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${track.name} · ${s.current.level(track)}/5'
+                                      '${s.current.level(track) < 5 ? " · Next: ${track.tiers[s.current.level(track)]}" : " · Complete"}',
+                                    ),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: MatchEngine.canDevelop(s, track)
+                                        ? () => send(DevelopTown(track))
+                                        : null,
+                                    child: Text(
+                                      s.current.level(track) == 5
+                                          ? 'Max'
+                                          : 'Develop',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
-                      for (final track in StrategyDeck.values)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${track.name} · ${s.current.level(track)}/5'
-                                  '${s.current.level(track) < 5 ? " · Next: ${track.tiers[s.current.level(track)]}" : " · Complete"}',
-                                ),
-                              ),
-                              OutlinedButton(
-                                onPressed: MatchEngine.canDevelop(s, track)
-                                    ? () => send(DevelopTown(track))
-                                    : null,
-                                child: Text(
-                                  s.current.level(track) == 5
-                                      ? 'Max'
-                                      : 'Develop',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => send(const EndTurn()),
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: const Text('End turn'),
                 ),
               ),
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: exchange,
-                      child: const Text('Bank trade'),
+                  OutlinedButton(
+                    onPressed: exchange,
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
                     ),
+                    child: const Text('Bank trade'),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: offer,
-                      child: const Text('Player trade'),
+                  OutlinedButton(
+                    onPressed: offer,
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () => send(const EndTurn()),
-                      child: const Text('End turn'),
-                    ),
+                    child: const Text('Player trade'),
                   ),
                 ],
               ),
