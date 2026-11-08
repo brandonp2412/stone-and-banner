@@ -3,7 +3,9 @@ import 'dart:io';
 
 Future<void> main(List<String> args) async {
   if (args.length != 2) {
-    throw ArgumentError('Usage: dart run tool/lan_join_probe.dart SERVER_URL ROOM');
+    throw ArgumentError(
+      'Usage: dart run tool/lan_join_probe.dart SERVER_URL ROOM',
+    );
   }
   for (final name in ['Ben', 'Cora']) {
     final socket = await WebSocket.connect(args[0]);
