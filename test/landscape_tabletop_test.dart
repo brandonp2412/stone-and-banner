@@ -3,7 +3,22 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/match.dart';
+import 'package:stone_and_banner/network/room_protocol.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
+
+class NonlinearTestScaler extends TextScaler {
+  const NonlinearTestScaler();
+
+  @override
+  double get textScaleFactor => 1.6;
+
+  @override
+  double scale(double size) => size <= 20
+      ? size * 1.6
+      : size < 40
+      ? 32 + (size - 20) * .4
+      : size;
+}
 
 MatchState tableWithSupplies() {
   var state = MatchEngine.newGame(['Ada', 'Ben', 'Cora', 'Dee'], 804);
@@ -39,6 +54,7 @@ Future<void> display(
   double scale = 1,
   bool observing = false,
   ValueChanged<MatchEvent>? onEvent,
+  TextScaler? textScaler,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -51,6 +67,12 @@ Future<void> display(
   )..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))).load();
   await tester.pumpWidget(
     MaterialApp(
+      builder: textScaler == null
+          ? null
+          : (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: child!,
+            ),
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
@@ -73,6 +95,90 @@ Future<void> display(
 }
 
 void main() {
+  testWidgets('all four scores fit the compact standings', (tester) async {
+    await display(tester, const Size(640, 320), tableWithSupplies());
+    expect(find.text(' /15'), findsNWidgets(4));
+    expect(
+      tester.getRect(find.text(' /15').last).right,
+      lessThanOrEqualTo(640 - 42),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact labels fit Android-style nonlinear text scaling', (
+    tester,
+  ) async {
+    await display(
+      tester,
+      const Size(640, 320),
+      tableWithSupplies(),
+      textScaler: const NonlinearTestScaler(),
+    );
+    expect(tester.takeException(), isNull);
+    for (final tab in ['Trade', 'Cards', 'Realm', 'Build']) {
+      await tester.tap(find.text(tab));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: tab);
+    }
+  });
+
+  testWidgets('finished standings identify the winner and disable the turn', (
+    tester,
+  ) async {
+    final before = tableWithSupplies();
+    final players = before.players.toList();
+    players[before.active] = before.current.copyWith(guardianHonour: 13);
+    final state = before.copyWith(phase: MatchPhase.finished, players: players);
+    final events = <MatchEvent>[];
+    await display(tester, const Size(640, 320), state, onEvent: events.add);
+    expect(find.text('Winner'), findsOneWidget);
+    expect(find.text('Taking a turn'), findsNothing);
+    final turn = find.widgetWithText(FilledButton, 'Match complete');
+    expect(tester.widget<FilledButton>(turn).onPressed, isNull);
+    expect(events, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('LAN inventory stays with the viewing seat during rival turns', (
+    tester,
+  ) async {
+    final state = tableWithSupplies();
+    final players = state.players.toList();
+    players[1] = players[1].copyWith(
+      stores: {...players[1].stores, Resource.wood: 7},
+    );
+    final canonical = state.copyWith(players: players);
+    final view = RoomProtocol.view(canonical, 1);
+    final filtered = RoomProtocol.readView(view);
+    expect(filtered.current.stores[Resource.wood], 0);
+    tester.view.physicalSize = const Size(844, 390);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MatchView(
+            state: filtered,
+            online: true,
+            onlineView: view,
+            viewingSeat: 1,
+            observing: true,
+            waitingMessage: 'Waiting for Ada…',
+            onEvent: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byTooltip('wood: 7'), findsOneWidget);
+    expect(find.byTooltip('wood: 0'), findsNothing);
+    expect(find.text('Computer turn'), findsNothing);
+    expect(find.text('End turn'), findsNothing);
+    expect(find.text('Waiting for Ada…'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final variant in [
     (const Size(640, 320), 1.0),
     (const Size(844, 390), 1.0),

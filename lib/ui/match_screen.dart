@@ -10,6 +10,7 @@ import '../engine/game.dart';
 import '../engine/match.dart';
 import '../replay_codes.dart';
 import 'strategy_hand.dart';
+import 'labels.dart';
 
 enum _Move {
   inspect,
@@ -49,6 +50,8 @@ class MatchView extends StatefulWidget {
     this.onResumeAutomation,
     this.online = false,
     this.onlineView,
+    this.viewingSeat,
+    this.waitingMessage,
   });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
@@ -57,6 +60,8 @@ class MatchView extends StatefulWidget {
   final VoidCallback? onResumeAutomation;
   final bool online;
   final Map<String, dynamic>? onlineView;
+  final int? viewingSeat;
+  final String? waitingMessage;
   @override
   State<MatchView> createState() => _MatchViewState();
 }
@@ -66,6 +71,7 @@ class _MatchViewState extends State<MatchView> {
   int? selectedKnight;
   Size? _boardSize;
   MatchState get s => widget.state;
+  PlayerState get inventoryOwner => s.players[widget.viewingSeat ?? s.active];
   _Move get move => switch (s.phase) {
     MatchPhase.setupVillage => _Move.village,
     MatchPhase.setupRoad => _Move.road,
@@ -245,7 +251,7 @@ class _MatchViewState extends State<MatchView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${selected.land.name} · Number ${selected.productionNumber?.toString() ?? '—'}',
+            '${terrainLabel(selected.land)} · Number ${selected.productionNumber?.toString() ?? '—'}',
           ),
           duration: const Duration(seconds: 2),
         ),
@@ -295,12 +301,12 @@ class _MatchViewState extends State<MatchView> {
     String terrain(List<int> tiles) => tiles
         .map(
           (t) =>
-              '${s.board.tiles[t].land.name} ${s.board.tiles[t].productionNumber ?? 'unnumbered'}',
+              '${terrainLabel(s.board.tiles[t].land)} ${s.board.tiles[t].productionNumber ?? 'unnumbered'}',
         )
         .join(', ');
     if (move == _Move.bandit) {
       final tile = s.board.tiles[id];
-      return 'Hex ${id + 1}: ${tile.land.name}, ${tile.productionNumber ?? 'no number'}';
+      return 'Hex ${id + 1}: ${terrainLabel(tile.land)}, ${tile.productionNumber ?? 'no number'}';
     }
     if (move == _Move.road) {
       final edge = s.topology.edges[id];
@@ -408,7 +414,9 @@ class _MatchViewState extends State<MatchView> {
   }
 
   String get _instruction => widget.observing
-      ? 'Watching the next move'
+      ? widget.online
+            ? 'Waiting for players'
+            : 'Watching the next move'
       : s.tactical != null
       ? 'A response is pending'
       : switch (s.phase) {
@@ -437,7 +445,8 @@ class _MatchViewState extends State<MatchView> {
         };
 
   String get _hint => widget.observing
-      ? 'Watch the public board while private hands stay hidden'
+      ? widget.waitingMessage ??
+            'Watch the public board while private hands stay hidden'
       : s.tactical != null
       ? 'Resolve this response to continue the turn'
       : switch (s.phase) {
@@ -490,15 +499,19 @@ class _MatchViewState extends State<MatchView> {
                                         padding: const EdgeInsets.all(16),
                                         child: Column(
                                           children: [
-                                            const Icon(
-                                              Icons.smart_toy_outlined,
+                                            Icon(
+                                              widget.online
+                                                  ? Icons.sync
+                                                  : Icons.smart_toy_outlined,
                                               size: 36,
                                               color: Color(0xffe5c183),
                                             ),
                                             const SizedBox(height: 12),
                                             Text(
                                               widget.automationError == null
-                                                  ? 'Computer turn'
+                                                  ? widget.online
+                                                        ? 'Waiting for players'
+                                                        : 'Computer turn'
                                                   : 'Computer paused',
                                               style: const TextStyle(
                                                 fontSize: 20,
@@ -527,9 +540,11 @@ class _MatchViewState extends State<MatchView> {
                                               ),
                                             ],
                                             const SizedBox(height: 12),
-                                            const Text(
-                                              'Watch the realm grow. Your turn will open automatically.',
-                                              style: TextStyle(fontSize: 12),
+                                            Text(
+                                              widget.waitingMessage ?? 'Watch the realm grow. Your turn will open automatically.',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -562,7 +577,7 @@ class _MatchViewState extends State<MatchView> {
                 },
               ),
             ),
-            if (s.tactical == null && !widget.observing)
+            if (widget.online || (s.tactical == null && !widget.observing))
               _resourceTray()
             else
               const SizedBox(
@@ -577,12 +592,15 @@ class _MatchViewState extends State<MatchView> {
 
   Widget _playerBar() => LayoutBuilder(
     builder: (context, bounds) {
+      final winner = MatchEngine.winner(s);
       final height = math.max(
         _compact ? 48.0 : 52.0,
-        MediaQuery.textScalerOf(context).scale(42),
+        MediaQuery.textScalerOf(context).scale(12) * 1.2 +
+            MediaQuery.textScalerOf(context).scale(10) * 1.2 +
+            24,
       );
       final width = math.max(
-        148.0,
+        128.0,
         (bounds.maxWidth - 50) / s.players.length - 6,
       );
       return Container(
@@ -599,7 +617,11 @@ class _MatchViewState extends State<MatchView> {
               for (var i = 0; i < s.players.length; i++)
                 Semantics(
                   label:
-                      '${s.players[i].id}, ${MatchEngine.score(s, i)} of 15 Victory Points${i == s.active ? ', active player' : ''}',
+                      '${s.players[i].id}, ${MatchEngine.score(s, i)} of 15 Victory Points${i == winner
+                          ? ', winner'
+                          : i == s.active
+                          ? ', active player'
+                          : ''}',
                   child: Container(
                     width: width,
                     margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -644,7 +666,9 @@ class _MatchViewState extends State<MatchView> {
                                 ),
                               ),
                               Text(
-                                i == s.active
+                                i == winner
+                                    ? 'Winner'
+                                    : i == s.active
                                     ? 'Taking a turn'
                                     : 'Realm ${i + 1}',
                                 maxLines: 1,
@@ -687,8 +711,12 @@ class _MatchViewState extends State<MatchView> {
     },
   );
 
-  double get _instructionHeight =>
-      math.max(50, MediaQuery.textScalerOf(context).scale(40) + 10);
+  double get _instructionHeight => math.max(
+    50,
+    MediaQuery.textScalerOf(context).scale(15) * 1.2 +
+        MediaQuery.textScalerOf(context).scale(11) * 1.2 +
+        12,
+  );
 
   Widget _map() => Stack(
     children: [
@@ -825,6 +853,7 @@ class _MatchViewState extends State<MatchView> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 15,
+                        height: 1.2,
                         fontWeight: FontWeight.w700,
                         color: Color(0xffefd6a3),
                       ),
@@ -835,6 +864,7 @@ class _MatchViewState extends State<MatchView> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 11,
+                        height: 1.2,
                         color: Color(0xffabbfc2),
                       ),
                     ),
@@ -1479,7 +1509,9 @@ class _MatchViewState extends State<MatchView> {
   Widget _resourceTray() => Container(
     height: math.max(
       _compact ? 44 : 58,
-      MediaQuery.textScalerOf(context).scale(_compact ? 30 : 38) + 12,
+      MediaQuery.textScalerOf(context).scale(_compact ? 14 : 17) * 1.2 +
+          MediaQuery.textScalerOf(context).scale(_compact ? 9 : 10) * 1.2 +
+          (_compact ? 13 : 17),
     ),
     padding: EdgeInsets.symmetric(horizontal: 8, vertical: _compact ? 4 : 6),
     decoration: const BoxDecoration(
@@ -1499,7 +1531,7 @@ class _MatchViewState extends State<MatchView> {
         for (final r in Resource.values)
           Expanded(
             child: Tooltip(
-              message: '${r.name}: ${s.current.stores[r] ?? 0}',
+              message: '${r.name}: ${inventoryOwner.stores[r] ?? 0}',
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1514,7 +1546,7 @@ class _MatchViewState extends State<MatchView> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      '${s.current.stores[r] ?? 0}',
+                      '${inventoryOwner.stores[r] ?? 0}',
                       style: TextStyle(
                         fontSize: _compact ? 14 : 17,
                         height: 1.2,
@@ -1527,6 +1559,7 @@ class _MatchViewState extends State<MatchView> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: _compact ? 9 : 10,
+                        height: 1.2,
                         color: Color(0xffbac9cc),
                       ),
                     ),

@@ -114,7 +114,9 @@ class _LanRoomPageState extends State<LanRoomPage> {
         ? 'Waiting for ${state.players[activeSeat!].id}…'
         : 'Waiting for players…';
     return Scaffold(
-      appBar: AppBar(title: const Text('LAN multiplayer')),
+      appBar: state == null
+          ? AppBar(title: const Text('LAN multiplayer'))
+          : null,
       body: Column(
         children: [
           if (client.error != null)
@@ -135,34 +137,24 @@ class _LanRoomPageState extends State<LanRoomPage> {
             Expanded(
               child: Stack(
                 children: [
-                  AbsorbPointer(
-                    absorbing: !canAct,
-                    child: MatchView(
-                      state: state,
-                      online: true,
-                      onlineView: client.view,
-                      onEvent: client.dispatch,
+                  MatchView(
+                    state: state,
+                    online: true,
+                    onlineView: client.view,
+                    viewingSeat: seat,
+                    observing: !canAct,
+                    waitingMessage: canAct ? null : wait,
+                    onEvent: client.dispatch,
+                  ),
+                  Positioned(
+                    top: 3 + MediaQuery.paddingOf(context).top,
+                    right: 4 + MediaQuery.paddingOf(context).right,
+                    child: IconButton(
+                      tooltip: 'Leave LAN match',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, size: 20),
                     ),
                   ),
-                  if (!canAct)
-                    Positioned(
-                      top: 8,
-                      left: 12,
-                      right: 12,
-                      child: Card(
-                        color: Theme.of(context).colorScheme.secondaryContainer,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.sync),
-                              const SizedBox(width: 10),
-                              Expanded(child: Text(wait)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),

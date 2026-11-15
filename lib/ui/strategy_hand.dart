@@ -1,4 +1,5 @@
 import '../network/room_protocol.dart';
+import 'labels.dart';
 
 import 'dart:math' as math;
 
@@ -88,9 +89,9 @@ class StrategyHand extends StatelessWidget {
       case CardPower.chooseCommodity:
         return 'Collect ${card.amount} ${option.receive!.name}';
       case CardPower.freeRoad:
-        return 'Build road on edge ${option.vertex}';
+        return 'Build road on edge ${option.vertex! + 1}';
       case CardPower.freeFort:
-        return 'Fortify site ${option.vertex}';
+        return 'Fortify junction ${option.vertex! + 1}';
       case CardPower.swap:
       case CardPower.portSwap:
       case CardPower.leverageSwap:
@@ -98,14 +99,14 @@ class StrategyHand extends StatelessWidget {
         final receive = card.power == CardPower.portSwap ? 2 : 1;
         return 'Give $give ${option.give!.name} · receive $receive ${option.receive!.name}';
       case CardPower.activate:
-        return 'Activate Knight at junction ${option.vertex}';
+        return 'Activate Knight at junction ${option.vertex! + 1}';
       case CardPower.promote:
-        return 'Promote Knight at junction ${option.vertex}';
+        return 'Promote Knight at junction ${option.vertex! + 1}';
       case CardPower.exhaust:
-        return 'Stand down rival Knight at junction ${option.vertex}';
+        return 'Stand down rival Knight at junction ${option.vertex! + 1}';
       case CardPower.moveBandit:
-        return 'Move Bandit to tile ${option.tile} '
-            '(${state.board.tiles[option.tile!].land.name})';
+        return 'Move Bandit to hex ${option.tile! + 1} '
+            '(${terrainLabel(state.board.tiles[option.tile!].land)})';
       case CardPower.seizeGood:
         return 'Take ${option.receive!.name} from '
             '${state.players[option.target!].id}';
