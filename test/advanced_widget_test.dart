@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
@@ -34,7 +32,7 @@ void main() {
   testWidgets('touch a Town Development and recruit Knight on board', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -51,8 +49,12 @@ void main() {
         ),
       ),
     );
-    await tester.scrollUntilVisible(find.text('Town Developments'), 300);
+    await tester.tap(find.text('Realm'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Town Developments'));
     expect(find.text('Town Developments'), findsOneWidget);
+    await tester.ensureVisible(find.text('Town Developments'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Town Developments'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Scriptorium'), findsOneWidget);
@@ -66,24 +68,31 @@ void main() {
       for (var v = 0; v < s.topology.vertices.length; v++)
         if (MatchEngine.legalRecruit(s, v)) v,
     ].first;
-    await tester.ensureVisible(find.text('Knights & defence'));
+    await tester.tap(find.text('Build'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Knights & defence'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Knights & defence'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Recruit Knight'), -250);
+    await tester.scrollUntilVisible(
+      find.text('Recruit Knight'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Recruit Knight'));
     await tester.pumpAndSettle();
     final board = find.byType(InteractiveViewer);
-    await tester.scrollUntilVisible(board, -300);
+    // The map stays visible while the action panel scrolls.
     await tester.pumpAndSettle();
     final size = tester.getSize(board);
     final origin = tester.getTopLeft(board);
-    final radius = math.min(size.width / 9.8, size.height / 9.3);
-    final v = s.topology.vertices[vertex];
     await tester.tapAt(
-      origin +
-          Offset(size.width / 2 + v.x * radius, size.height / 2 + v.y * radius),
+      origin + BoardGeometry(size).vertex(s.topology.vertices[vertex]),
     );
     await tester.pumpAndSettle();
     expect(s.knights[vertex]?.owner, 0);
@@ -106,7 +115,7 @@ void main() {
         ),
       ),
     );
-    await tester.scrollUntilVisible(find.text('Resolve Invasion'), 300);
+    await tester.ensureVisible(find.text('Resolve Invasion'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Fleet strength'), findsOneWidget);
     await tester.tap(find.text('Resolve Invasion'));

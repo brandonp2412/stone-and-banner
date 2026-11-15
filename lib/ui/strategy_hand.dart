@@ -142,10 +142,8 @@ class StrategyHand extends StatelessWidget {
     String? selectedGroup;
     PlayStrategyCard? selectedOption;
 
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, refresh) {
           final visible = grouped
@@ -153,152 +151,114 @@ class StrategyHand extends StatelessWidget {
                     ? <PlayStrategyCard>[]
                     : groups[selectedGroup]!)
               : options;
-          final screenHeight = MediaQuery.sizeOf(sheetContext).height;
-          final compact =
-              !grouped && options.length <= 5 && screenHeight >= 700;
-          return SafeArea(
-            child: SizedBox(
-              height: screenHeight * (compact ? .58 : .78),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+          final heading = options.isEmpty
+              ? 'No legal play right now.'
+              : grouped && selectedGroup == null
+              ? (card.power == CardPower.seizeGood
+                    ? 'Choose a rival'
+                    : 'Choose what to give')
+              : card.power == CardPower.fixedGoods
+              ? 'Effect'
+              : 'Choose a legal target or exchange';
+          final detail = SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 92,
+                  width: 72,
+                  child: CustomPaint(
+                    painter: _CardMotif(
+                      card.track,
+                      card.id.codeUnits.fold<int>(
+                        0,
+                        (value, unit) => value * 31 + unit,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  card.track.name.toUpperCase(),
+                  style: TextStyle(
+                    color: _trackColors[card.track],
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(card.description, style: const TextStyle(fontSize: 13)),
+              ],
+            ),
+          );
+          final decisions = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Text(
+                  heading,
+                  style: Theme.of(sheetContext).textTheme.titleSmall,
+                ),
+              ),
+              if (selectedGroup != null)
+                TextButton.icon(
+                  onPressed: () => refresh(() {
+                    selectedGroup = null;
+                    selectedOption = null;
+                  }),
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: Text(selectedGroup!),
+                ),
+              Expanded(
+                child: options.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text(
+                            'Keep this card for a future turn, or discard it.',
+                          ),
+                        ),
+                      )
+                    : grouped && selectedGroup == null
+                    ? ListView(
+                        children: [
+                          for (final entry in groups.entries)
+                            ListTile(
+                              title: Text(entry.key),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => refresh(() {
+                                selectedGroup = entry.key;
+                                selectedOption = null;
+                              }),
+                            ),
+                        ],
+                      )
+                    : ListView.builder(
+                        itemCount: visible.length,
+                        itemBuilder: (_, i) {
+                          final option = visible[i];
+                          final selected = identical(selectedOption, option);
+                          return ListTile(
+                            selected: selected,
+                            leading: Icon(
+                              selected
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                            ),
+                            title: Text(_optionLabel(card, option)),
+                            onTap: () => refresh(() => selectedOption = option),
+                          );
+                        },
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
                   children: [
-                    Row(
-                      children: [
-                        SizedBox(
-                          height: 92,
-                          width: 72,
-                          child: CustomPaint(
-                            painter: _CardMotif(
-                              card.track,
-                              card.id.codeUnits.fold<int>(
-                                0,
-                                (value, unit) => value * 31 + unit,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                card.track.name.toUpperCase(),
-                                style: TextStyle(
-                                  color: _trackColors[card.track],
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              Text(
-                                card.name,
-                                style: Theme.of(sheetContext)
-                                    .textTheme
-                                    .headlineSmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      card.description,
-                      style: Theme.of(sheetContext).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    if (selectedGroup != null)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () => refresh(() {
-                            selectedGroup = null;
-                            selectedOption = null;
-                          }),
-                          icon: const Icon(Icons.arrow_back),
-                          label: Text(selectedGroup!),
-                        ),
-                      ),
-                    Text(
-                      options.isEmpty
-                          ? 'No legal play right now.'
-                          : grouped && selectedGroup == null
-                          ? (card.power == CardPower.seizeGood
-                                ? 'Choose a rival'
-                                : 'Choose what to give')
-                          : card.power == CardPower.fixedGoods
-                          ? 'Effect'
-                          : 'Choose a legal target or exchange',
-                      style: Theme.of(sheetContext).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: options.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'Keep this card for a future turn, or discard it.',
-                              ),
-                            )
-                          : grouped && selectedGroup == null
-                          ? ListView(
-                              children: [
-                                for (final entry in groups.entries)
-                                  ListTile(
-                                    title: Text(entry.key),
-                                    trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => refresh(() {
-                                      selectedGroup = entry.key;
-                                      selectedOption = null;
-                                    }),
-                                  ),
-                              ],
-                            )
-                          : ListView.builder(
-                              itemCount: visible.length,
-                              itemBuilder: (_, i) {
-                                final option = visible[i];
-                                final selected = identical(
-                                  selectedOption,
-                                  option,
-                                );
-                                return ListTile(
-                                  selected: selected,
-                                  leading: Icon(
-                                    selected
-                                        ? Icons.check_circle
-                                        : Icons.radio_button_unchecked,
-                                    color: _trackColors[card.track],
-                                  ),
-                                  title: Text(_optionLabel(card, option)),
-                                  onTap: () =>
-                                      refresh(() => selectedOption = option),
-                                );
-                              },
-                            ),
-                    ),
-                    if (selectedOption != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          _optionLabel(card, selectedOption!),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(sheetContext).textTheme.bodySmall,
-                        ),
-                      ),
-                    if (options.isNotEmpty)
-                      FilledButton.icon(
-                        onPressed: selectedOption == null
-                            ? null
-                            : () {
-                                final confirmed = selectedOption!;
-                                Navigator.pop(sheetContext);
-                                onEvent(confirmed);
-                              },
-                        icon: const Icon(Icons.check),
-                        label: const Text('Play selected card'),
-                      ),
                     TextButton.icon(
                       onPressed: () async {
                         final confirmed = await showDialog<bool>(
@@ -330,9 +290,70 @@ class StrategyHand extends StatelessWidget {
                       icon: const Icon(Icons.delete_outline),
                       label: const Text('Discard this card'),
                     ),
-                    const SizedBox(height: 10),
+                    if (options.isNotEmpty)
+                      FilledButton.icon(
+                        onPressed: selectedOption == null
+                            ? null
+                            : () {
+                                final confirmed = selectedOption!;
+                                Navigator.pop(sheetContext);
+                                onEvent(confirmed);
+                              },
+                        icon: const Icon(Icons.check),
+                        label: const Text('Play selected card'),
+                      ),
                   ],
                 ),
+              ),
+            ],
+          );
+          return Dialog(
+            insetPadding: const EdgeInsets.all(12),
+            clipBehavior: Clip.antiAlias,
+            child: SizedBox(
+              width: 760,
+              height: MediaQuery.sizeOf(sheetContext).height * .94,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            card.name,
+                            style: Theme.of(sheetContext).textTheme.titleLarge,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close card',
+                          onPressed: () => Navigator.pop(sheetContext),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (_, bounds) => bounds.maxWidth >= 560
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(flex: 2, child: detail),
+                                const VerticalDivider(width: 1),
+                                Expanded(flex: 3, child: decisions),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                Expanded(child: detail),
+                                Expanded(flex: 2, child: decisions),
+                              ],
+                            ),
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -345,20 +366,22 @@ class StrategyHand extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               'Strategy hand · ${state.current.cards.length}/${StrategyCards.handLimit}',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 4),
             Text(
               state.lastCardEvent.isEmpty
                   ? 'Develop Town tracks to qualify for event-die draws.'
                   : state.lastCardEvent,
-              style: Theme.of(context).textTheme.bodySmall,
+              style: const TextStyle(fontSize: 11),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
             for (var i = 0; i < state.current.cards.length; i++)
               Padding(

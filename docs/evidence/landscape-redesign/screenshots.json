@@ -1,0 +1,135 @@
+{
+  "device": "emulator-5580",
+  "avd": "stone_design_api35",
+  "api": 35,
+  "apk_bytes": 55121538,
+  "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3",
+  "screenshots": [
+    {
+      "file": "01-home.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "5105dad4bc337a0d762e32aa0c37b31240b1cf4ef7e290602ab171d9353b6929",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "02-handoff.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "dcd9357e97e1f3d99f445d1a41b5c6901ad4765d38830604db61c3ba8b105d32",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "03-cards.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "5139609fe5f3cfdc5bb6bb33b5a4e87312bd036ae80b2ed2484856628149862f",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "04-card-dialog.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "955ab3497d038eef0d4c8192d6a14d0acfefd23c17853a52512cc04e6636f4c5",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "05-card-played.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "220f1132f6ba51dde4dc8887e7e8fd0695e1897eca248674525dfe214bd5c195",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "06-bank-trade.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "4282a22c9228aebd2b97c814273c38f60c48cc6721f41c706bd84115a42d5f6d",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "07-bank-exchanged.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "d9549a96072b1b8126dba6e25a5f0ff8c472b98f3a4d0c36ee2fafe66d58061e",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "08-private-reaction.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "f93c5ffd9eab8610a912afbf71632277bfe5c2662a10ee22f0f18eb7137288ce",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "09-defence-resolved.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "cbc4a4e0c1020e189af2a328baacf169a199e8e9886f5ca5a44a502a6724bd0c",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "10-victory-before.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "13394332884e9ed34564387564b6ee4ae88e5587269dbda8a87bdea5be5fa04e",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "11-victory.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "a55849b08bb7102400ef288fa40cd2a7d18b71ea3376b7d3c0149b36d65f3eb6",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "12-compact-table.png",
+      "width": 1280,
+      "height": 640,
+      "sha256": "7bd48a8f1267c8df37db1f08bd2134ef1a6c0c88d0f77305fa26d5be5c66989b",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "13-compact-trade.png",
+      "width": 1280,
+      "height": 640,
+      "sha256": "4843bad4a93bfb36d1b11991fd5ee6bdb7ed36fb2414d75788ca81bbb83b5abb",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "14-setup.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "430966b378417be64a4a2b2db190ebf868b6ebc62e201078b34ae629c75e0156",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "15-opening-table.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "28262dacbb3c1e9769b52cd626ab7996752f4525961e34354d51f8aae8c11357",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "16-compact-trade-panel.png",
+      "width": 1280,
+      "height": 640,
+      "sha256": "2f15d9c1b61e04d9b3f3581861c8b4def48c733bd022d73dbfd3dd83efd2ef7e",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "17-village-placed.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "17600a832cf3b4f751968ed470d4fe2467aca8701a2eba3c42418e8152f4cd9d",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    },
+    {
+      "file": "18-next-seat.png",
+      "width": 2340,
+      "height": 1080,
+      "sha256": "09a02738958ca48ce3e445cef10fc37b4acc56a4518b8cc50b0037564ef821c4",
+      "apk_sha256": "75e12caa040b7c1429deb90283089c01b839c416d68a9f0c3370d3ae1b2727f3"
+    }
+  ]
+}

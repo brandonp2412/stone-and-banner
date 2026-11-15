@@ -44,11 +44,17 @@ class MatchView extends StatefulWidget {
     super.key,
     required this.state,
     required this.onEvent,
+    this.observing = false,
+    this.automationError,
+    this.onResumeAutomation,
     this.online = false,
     this.onlineView,
   });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
+  final bool observing;
+  final String? automationError;
+  final VoidCallback? onResumeAutomation;
   final bool online;
   final Map<String, dynamic>? onlineView;
   @override
@@ -75,7 +81,7 @@ class _MatchViewState extends State<MatchView> {
   }
 
   Future<void> tapBoard(Offset tap, Size size) async {
-    final g = _Geometry(size);
+    final g = BoardGeometry(size);
     if (move == _Move.village || move == _Move.upgrade) {
       final legal = move == _Move.village
           ? MatchEngine.legalVertices(s)
@@ -342,7 +348,7 @@ class _MatchViewState extends State<MatchView> {
       ),
     );
     if (!mounted || selected == null) return;
-    final geometry = _Geometry(boardSize);
+    final geometry = BoardGeometry(boardSize);
     final Offset position;
     if (move == _Move.bandit) {
       position = geometry.tile(s.board.tiles[selected].position);
@@ -364,524 +370,1193 @@ class _MatchViewState extends State<MatchView> {
       _openTrade(_TradeKind.player, counter: counter);
 
   Future<void> _openTrade(_TradeKind kind, {TradeProposal? counter}) async {
-    final event = await Navigator.of(context).push<MatchEvent>(
-      MaterialPageRoute(
-        builder: (_) => _TradeComposer(state: s, kind: kind, counter: counter),
+    final event = await showDialog<MatchEvent>(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: 660,
+          height: MediaQuery.sizeOf(context).height * .9,
+          child: _TradeComposer(state: s, kind: kind, counter: counter),
+        ),
       ),
     );
     if (mounted && event != null) send(event);
   }
 
+  bool get _compact => MediaQuery.sizeOf(context).height < 350;
+
+  int _tab = 0;
+  final _camera = TransformationController();
+
+  @override
+  void dispose() {
+    _camera.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant MatchView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.active != s.active ||
+        oldWidget.state.phase != s.phase) {
+      choice = _Move.inspect;
+      selectedKnight = null;
+      if (s.phase != MatchPhase.actions) _tab = 0;
+    }
+  }
+
+  String get _instruction => widget.observing
+      ? 'Watching the next move'
+      : s.tactical != null
+      ? 'A response is pending'
+      : switch (s.phase) {
+          MatchPhase.setupVillage => 'Found your realm',
+          MatchPhase.setupRoad => 'Connect your village',
+          MatchPhase.roll => 'Your turn begins',
+          MatchPhase.bandit => 'Move the Bandit',
+          MatchPhase.invasion => 'Defend the realm',
+          MatchPhase.finished =>
+            '${s.players[MatchEngine.winner(s) ?? s.active].id} wins!',
+          MatchPhase.actions => switch (move) {
+            _Move.inspect => 'Shape your realm',
+            _Move.village => 'Place a village',
+            _Move.road => 'Build a road',
+            _Move.upgrade => 'Upgrade a settlement',
+            _Move.fortify => 'Fortify a town',
+            _Move.recruit => 'Recruit a Knight',
+            _Move.activate => 'Activate a Knight',
+            _Move.promote => 'Promote a Knight',
+            _Move.knightMove =>
+              selectedKnight == null
+                  ? 'Select a Knight'
+                  : 'Choose a destination',
+            _Move.bandit => 'Move the Bandit',
+          },
+        };
+
+  String get _hint => widget.observing
+      ? 'Watch the public board while private hands stay hidden'
+      : s.tactical != null
+      ? 'Resolve this response to continue the turn'
+      : switch (s.phase) {
+          MatchPhase.setupVillage =>
+            'Tap a glowing junction · first placements are free',
+          MatchPhase.setupRoad => 'Tap a glowing edge beside your new village',
+          MatchPhase.roll => 'Roll the dice to collect this turn’s production',
+          MatchPhase.bandit => 'Tap another hex, then choose a neighbour',
+          MatchPhase.invasion => 'Review the fleet and your shared defence',
+          MatchPhase.finished => '15 Victory Points · a realm to remember',
+          MatchPhase.actions => switch (move) {
+            _Move.road =>
+              '${_costLabel(MatchEngine.effectiveRoadCost(s))} · tap a glowing edge',
+            _Move.village =>
+              '${_costLabel(MatchEngine.villageCost)} · tap a glowing junction',
+            _Move.inspect =>
+              'Build, trade or play a card · pinch to zoom the map',
+            _ => 'Tap a glowing target on the map',
+          },
+        };
+
   @override
   Widget build(BuildContext context) {
-    if (s.tactical != null) {
-      return _TacticalPanel(state: s, onEvent: send, online: widget.online);
-    }
     final phase = s.phase;
-    final winner = MatchEngine.winner(s);
-    final instruction = switch (phase) {
-      MatchPhase.setupVillage => 'Tap a glowing junction for a free Village',
-      MatchPhase.setupRoad => 'Tap a glowing side for your free Road',
-      MatchPhase.roll => 'Roll two dice to gather goods',
-      MatchPhase.bandit => 'Tap a new hex to move the Bandit',
-      MatchPhase.finished => 'Victory!',
-      MatchPhase.invasion =>
-        'Reaver Fleet Invasion · review defence and resolve the outcome',
-      MatchPhase.actions => switch (move) {
-        _Move.village => 'Tap a glowing junction · wood + brick + wheat + wool',
-        _Move.road => 'Tap a glowing road · wood + brick',
-        _Move.upgrade => 'Tap your glowing Village or Town to upgrade',
-        _Move.fortify => 'Tap a glowing Town to raise Fortifications',
-        _Move.recruit => 'Tap an open road junction to recruit a Sentinel',
-        _Move.activate => 'Tap your inactive Knight to activate',
-        _Move.promote => 'Tap an active Knight to promote',
-        _Move.knightMove =>
-          selectedKnight == null
-              ? 'Select your active Knight'
-              : 'Tap a glowing destination',
-        _ => 'Pinch to zoom · drag to pan · tap to inspect',
-      },
-    };
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 680),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+    return Material(
+      color: const Color(0xff101e25),
+      child: SafeArea(
+        child: Column(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Round ${s.round} · ${phase.name}',
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                      Text(
-                        winner == null
-                            ? s.current.id
-                            : '${s.players[winner].id} wins!',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ],
-                  ),
-                ),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Text(
-                      '${MatchEngine.score(s, winner ?? s.active)} / 15 VP',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Column(
-                  children: [
-                    Text(
-                      instruction,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    AspectRatio(
-                      aspectRatio: 1.1,
-                      child: LayoutBuilder(
-                        builder: (context, box) {
-                          final size = Size(box.maxWidth, box.maxHeight);
-                          _boardSize = size;
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: InteractiveViewer(
-                              minScale: .8,
-                              maxScale: 3.5,
-                              boundaryMargin: const EdgeInsets.all(100),
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTapUp: (details) =>
-                                    tapBoard(details.localPosition, size),
-                                child: CustomPaint(
-                                  painter: _Painter(s, move, selectedKnight),
-                                  child: const SizedBox.expand(),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (availableTargets.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              OutlinedButton.icon(
-                onPressed: chooseTarget,
-                icon: const Icon(Icons.format_list_numbered),
-                label: const Text('Choose board target from list'),
-              ),
-            ],
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 1,
-              children: [
-                for (final r in Resource.values)
-                  Chip(
-                    visualDensity: VisualDensity.compact,
-                    label: Text('${r.name} ${s.current.stores[r] ?? 0}'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Reaver Fleet ${s.reaverPressure}/3 · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid} · First Capital: ${s.firstCapitalOwner == null ? 'unclaimed' : s.players[s.firstCapitalOwner!].id}',
-            ),
-            if (s.lastInvasion.isNotEmpty) Text(s.lastInvasion),
-            if (phase == MatchPhase.actions && s.offers.isNotEmpty)
-              for (final trade in s.offers)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Offer #' +
-                              trade.id.toString() +
-                              ': ' +
-                              s.players[trade.proposer].id +
-                              ' gives ' +
-                              trade.giveCount.toString() +
-                              ' ' +
-                              trade.give.name +
-                              ' for ' +
-                              trade.wantCount.toString() +
-                              ' ' +
-                              trade.want.name +
-                              ' from ' +
-                              s.players[trade.target].id,
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        if (trade.target == s.active) ...[
-                          const Text(
-                            'Decide this turn; escrow is held until expiry.',
-                          ),
-                          Wrap(
-                            spacing: 8,
-                            children: [
-                              OutlinedButton(
-                                onPressed: () => send(
-                                  RespondTrade(
-                                    s.active,
-                                    false,
-                                    offerId: trade.id,
-                                  ),
-                                ),
-                                child: const Text('Decline'),
-                              ),
-                              FilledButton(
-                                onPressed:
-                                    (s.current.stores[trade.want] ?? 0) >=
-                                        trade.wantCount
-                                    ? () => send(
-                                        RespondTrade(
-                                          s.active,
-                                          true,
-                                          offerId: trade.id,
-                                        ),
-                                      )
-                                    : null,
-                                child: const Text('Accept'),
-                              ),
-                              if (!trade.isCounter &&
-                                  s.offers.every((o) => o.proposer != s.active))
-                                TextButton(
-                                  onPressed: () => offer(trade),
-                                  child: const Text('Counter'),
-                                ),
-                            ],
-                          ),
-                        ] else if (trade.proposer == s.active) ...[
-                          const Text(
-                            'Your goods are reserved until accepted, declined, or expired.',
-                          ),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton(
-                              onPressed: () => send(WithdrawTrade(trade.id)),
-                              child: const Text('Withdraw'),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-            if (phase == MatchPhase.invasion)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
+            _playerBar(),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, bounds) {
+                  final railWidth = bounds.maxWidth < 760 ? 204.0 : 252.0;
+                  return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'Fleet strength ${MatchEngine.invasionStrength(s)} · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (s.invasionAid > 0)
-                        Text(
-                          'Emergency aid +' +
-                              s.invasionAid.toString() +
-                              ' is included in the defence preview.',
-                        ),
-                      const Text(
-                        'All active Knights and Fortifications defend. '
-                        'A failed defence damages the highest-scoring Town '
-                        'or Capital; a sole leading Knight defender may earn '
-                        "Guardian's Honour.",
-                      ),
-                      const SizedBox(height: 8),
-                      FilledButton.icon(
-                        onPressed: () => send(const ResolveInvasion()),
-                        icon: const Icon(Icons.shield_outlined),
-                        label: const Text('Resolve Invasion'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (phase == MatchPhase.roll)
-              FilledButton.icon(
-                onPressed: () {
-                  final pair = widget.online
-                      ? (0, 0)
-                      : MatchEngine.expectedDice(s);
-                  send(RollDice(pair.$1, pair.$2));
-                },
-                icon: const Icon(Icons.casino),
-                label: const Text('Roll dice'),
-              )
-            else if (phase == MatchPhase.actions) ...[
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Inspect'),
-                    selected: choice == _Move.inspect,
-                    onSelected: (_) => setState(() => choice = _Move.inspect),
-                  ),
-                  if (MatchEngine.legalEdges(s).isNotEmpty)
-                    ChoiceChip(
-                      label: const Text('Road'),
-                      selected: choice == _Move.road,
-                      onSelected: (_) => setState(() => choice = _Move.road),
-                    ),
-                  if (MatchEngine.legalVertices(s).isNotEmpty)
-                    ChoiceChip(
-                      label: const Text('Village'),
-                      selected: choice == _Move.village,
-                      onSelected: (_) => setState(() => choice = _Move.village),
-                    ),
-                  if (MatchEngine.legalUpgrades(s).isNotEmpty)
-                    ChoiceChip(
-                      label: const Text('Upgrade'),
-                      selected: choice == _Move.upgrade,
-                      onSelected: (_) => setState(() => choice = _Move.upgrade),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ExpansionTile(
-                title: const Text('Knights & defence'),
-                subtitle: const Text('Fortify, recruit and move Knights'),
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                children: [
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      for (final entry in <(_Move, String, bool)>[
-                        (
-                          _Move.fortify,
-                          'Fortify',
-                          s.sites.keys.any((v) => MatchEngine.legalFort(s, v)),
-                        ),
-                        (
-                          _Move.recruit,
-                          'Recruit Knight',
-                          [
-                            for (var v = 0; v < s.topology.vertices.length; v++)
-                              if (MatchEngine.legalRecruit(s, v)) v,
-                          ].isNotEmpty,
-                        ),
-                        (
-                          _Move.activate,
-                          'Activate',
-                          s.knights.keys.any(
-                            (v) => MatchEngine.legalActivate(s, v),
-                          ),
-                        ),
-                        (
-                          _Move.promote,
-                          'Promote',
-                          s.knights.keys.any(
-                            (v) => MatchEngine.legalPromote(s, v),
-                          ),
-                        ),
-                        (
-                          _Move.knightMove,
-                          'Move Knight',
-                          s.knights.keys.any(
-                            (v) =>
-                                s.knights[v]!.owner == s.active &&
-                                MatchEngine.legalKnightDestinations(
-                                  s,
-                                  v,
-                                ).isNotEmpty,
-                          ),
-                        ),
-                      ])
-                        ChoiceChip(
-                          label: Text(entry.$2),
-                          selected: choice == entry.$1,
-                          onSelected: entry.$3
-                              ? (_) => setState(() {
-                                  choice = entry.$1;
-                                  selectedKnight = null;
-                                })
-                              : null,
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              StrategyHand(
-                state: s,
-                onEvent: send,
-                onlineOptions: widget.online
-                    ? (widget.onlineView?["options"] as Map?)
-                    : null,
-              ),
-              const SizedBox(height: 8),
-              ExpansionTile(
-                title: const Text('Town Developments'),
-                subtitle: const Text('Innovation, Commerce & Governance'),
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final track in StrategyDeck.values)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '${track.name} · ${s.current.level(track)}/5'
-                                      '${s.current.level(track) < 5 ? " · Next: ${track.tiers[s.current.level(track)]}" : " · Complete"}',
-                                    ),
-                                  ),
-                                  OutlinedButton(
-                                    onPressed: MatchEngine.canDevelop(s, track)
-                                        ? () => send(DevelopTown(track))
-                                        : null,
-                                    child: Text(
-                                      s.current.level(track) == 5
-                                          ? 'Max'
-                                          : 'Develop',
-                                    ),
-                                  ),
-                                ],
+                      Expanded(child: _map()),
+                      SizedBox(
+                        width: math.min(railWidth, bounds.maxWidth * .43),
+                        child: Material(
+                          color: const Color(0xff182a31),
+                          child: Column(
+                            children: [
+                              if (s.tactical == null && !widget.observing)
+                                _tabs(),
+                              Expanded(
+                                child: widget.observing
+                                    ? SingleChildScrollView(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          children: [
+                                            const Icon(
+                                              Icons.smart_toy_outlined,
+                                              size: 36,
+                                              color: Color(0xffe5c183),
+                                            ),
+                                            const SizedBox(height: 12),
+                                            Text(
+                                              widget.automationError == null
+                                                  ? 'Computer turn'
+                                                  : 'Computer paused',
+                                              style: const TextStyle(
+                                                fontSize: 20,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              s
+                                                  .players[s
+                                                          .tactical
+                                                          ?.responder ??
+                                                      s.active]
+                                                  .id,
+                                            ),
+                                            const SizedBox(height: 16),
+                                            if (widget.automationError == null)
+                                              const LinearProgressIndicator()
+                                            else ...[
+                                              Text(widget.automationError!),
+                                              FilledButton(
+                                                onPressed:
+                                                    widget.onResumeAutomation,
+                                                child: const Text(
+                                                  'Resume computer',
+                                                ),
+                                              ),
+                                            ],
+                                            const SizedBox(height: 12),
+                                            const Text(
+                                              'Watch the realm grow. Your turn will open automatically.',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : s.tactical != null
+                                    ? _TacticalPanel(
+                                        state: s,
+                                        onEvent: send,
+                                        online: widget.online,
+                                      )
+                                    : ListView(
+                                        key: ValueKey(
+                                          'panel-$_tab-${s.active}',
+                                        ),
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: _compact ? 8 : 12,
+                                          vertical: _compact ? 4 : 12,
+                                        ),
+                                        children: _panelContents(phase),
+                                      ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => send(const EndTurn()),
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('End turn'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton(
-                    onPressed: exchange,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                    ),
-                    child: const Text('Bank trade'),
-                  ),
-                  OutlinedButton(
-                    onPressed: offer,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                    ),
-                    child: const Text('Player trade'),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Standings',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                if (!widget.online)
-                  TextButton.icon(
-                    onPressed: () async {
-                      await Clipboard.setData(
-                        ClipboardData(text: MatchEngine.exportReplay(s)),
-                      );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Replay copied')),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.copy_outlined),
-                    label: const Text('Copy replay'),
-                  ),
-              ],
-            ),
-            if (!widget.online)
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () async {
-                    await Clipboard.setData(
-                      ClipboardData(
-                        text: ReplayCodes.compact(MatchEngine.exportReplay(s)),
-                      ),
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Share code copied; it contains every private hand.',
+                              if (s.tactical == null && !widget.observing)
+                                _turnAction(),
+                            ],
                           ),
                         ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.share_outlined),
-                  label: const Text('Copy compact replay code'),
-                ),
+                      ),
+                    ],
+                  );
+                },
               ),
-            for (var i = 0; i < s.players.length; i++)
-              Row(
-                children: [
-                  Icon(Icons.flag, color: seatColors[i], size: 19),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(s.players[i].id)),
-                  Text(
-                    '${MatchEngine.score(s, i)} VP · Road ${MatchEngine.longestRoad(s, i)}',
-                  ),
-                  if (s.longestRoadHolder == i) const Icon(Icons.military_tech),
-                ],
-              ),
-            if (s.dice != null)
-              Text(
-                widget.online
-                    ? 'Last dice: ${s.dice} · Event ${widget.onlineView?['eventCount']}'
-                    : 'Last dice: ${s.dice} · Event ${s.events.length}',
+            ),
+            if (s.tactical == null && !widget.observing)
+              _resourceTray()
+            else
+              const SizedBox(
+                height: 48,
+                child: Center(child: Text('Private hands are concealed')),
               ),
           ],
         ),
       ),
     );
   }
+
+  Widget _playerBar() => LayoutBuilder(
+    builder: (context, bounds) {
+      final height = math.max(
+        _compact ? 48.0 : 52.0,
+        MediaQuery.textScalerOf(context).scale(42),
+      );
+      final width = math.max(
+        148.0,
+        (bounds.maxWidth - 50) / s.players.length - 6,
+      );
+      return Container(
+        height: height,
+        padding: const EdgeInsets.fromLTRB(8, 5, 42, 5),
+        decoration: const BoxDecoration(
+          color: Color(0xff14242b),
+          border: Border(bottom: BorderSide(color: Color(0xff34464a))),
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var i = 0; i < s.players.length; i++)
+                Semantics(
+                  label:
+                      '${s.players[i].id}, ${MatchEngine.score(s, i)} of 15 Victory Points${i == s.active ? ', active player' : ''}',
+                  child: Container(
+                    width: width,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: i == s.active
+                          ? seatColors[i].withValues(alpha: .13)
+                          : const Color(0xff1c2e35),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: i == s.active
+                            ? seatColors[i]
+                            : const Color(0xff30434a),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          i == s.active
+                              ? Icons.flag_rounded
+                              : Icons.shield_outlined,
+                          size: 20,
+                          color: seatColors[i],
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                s.players[i].id,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                i == s.active
+                                    ? 'Taking a turn'
+                                    : 'Realm ${i + 1}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  height: 1.2,
+                                  color: i == s.active
+                                      ? seatColors[i]
+                                      : const Color(0xffa6b6ba),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '${MatchEngine.score(s, i)}',
+                          style: TextStyle(
+                            color: seatColors[i],
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const Text(
+                          ' /15',
+                          style: TextStyle(
+                            fontSize: 10,
+                            height: 1.2,
+                            color: Color(0xffa6b6ba),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  double get _instructionHeight =>
+      math.max(50, MediaQuery.textScalerOf(context).scale(40) + 10);
+
+  Widget _map() => Stack(
+    children: [
+      Positioned.fill(
+        child: LayoutBuilder(
+          builder: (context, box) {
+            // Keep the instruction strip outside the interactive map coordinates.
+            final size = Size(
+              box.maxWidth,
+              math.max(1, box.maxHeight - _instructionHeight),
+            );
+            _boardSize = size;
+            return Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: size.width,
+                height: size.height,
+                child: ClipRect(
+                  child: InteractiveViewer(
+                    transformationController: _camera,
+                    minScale: 1,
+                    maxScale: 3.5,
+                    boundaryMargin: const EdgeInsets.all(80),
+                    child: Semantics(
+                      label: 'Realm map. $_instruction. $_hint',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: s.tactical == null && !widget.observing
+                            ? (details) => tapBoard(details.localPosition, size)
+                            : null,
+                        child: CustomPaint(
+                          painter: _Painter(
+                            s,
+                            widget.observing || s.tactical != null
+                                ? _Move.inspect
+                                : move,
+                            selectedKnight,
+                          ),
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+      Positioned(
+        top: 8,
+        left: 10,
+        child: IgnorePointer(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xe614242b),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              'ROUND ${s.round}\nFleet ${s.reaverPressure}/3 · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid}',
+              style: const TextStyle(
+                color: Color(0xffc4d2cf),
+                fontSize: 10,
+                letterSpacing: .6,
+              ),
+            ),
+          ),
+        ),
+      ),
+      Positioned(
+        right: 6,
+        top: 0,
+        child: IconButton(
+          tooltip: 'Reset map zoom',
+          onPressed: () => _camera.value = Matrix4.identity(),
+          icon: const Icon(Icons.center_focus_strong, size: 20),
+        ),
+      ),
+      if (s.dice != null)
+        Positioned(
+          top: 52,
+          right: 12,
+          child: Semantics(
+            label: 'Last dice total ${s.dice}',
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xf014242b),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xff61716a)),
+              ),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.casino_outlined,
+                    size: 18,
+                    color: Color(0xffe5c183),
+                  ),
+                  Text(
+                    '${s.dice}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xffefd6a3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: _instructionHeight,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 5, 6, 5),
+          decoration: const BoxDecoration(
+            color: Color(0xff14242b),
+            border: Border(top: BorderSide(color: Color(0xff34464a))),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _instruction,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xffefd6a3),
+                      ),
+                    ),
+                    Text(
+                      _hint,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xffabbfc2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (availableTargets.isNotEmpty &&
+                  s.tactical == null &&
+                  !widget.observing)
+                IconButton(
+                  tooltip: 'Choose board target from list',
+                  onPressed: chooseTarget,
+                  icon: const Icon(Icons.format_list_numbered),
+                ),
+              if (choice != _Move.inspect && phaseAllowsChoice)
+                IconButton(
+                  tooltip: 'Cancel selection',
+                  onPressed: () => setState(() {
+                    choice = _Move.inspect;
+                    selectedKnight = null;
+                  }),
+                  icon: const Icon(Icons.close),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+
+  bool get phaseAllowsChoice => s.phase == MatchPhase.actions;
+
+  Widget _tabs() => Row(
+    children: [
+      for (final (index, icon, label) in [
+        (0, Icons.construction_rounded, 'Build'),
+        (1, Icons.swap_horiz_rounded, 'Trade'),
+        (2, Icons.style_outlined, 'Cards'),
+        (3, Icons.castle_outlined, 'Realm'),
+      ])
+        Expanded(
+          child: Tooltip(
+            message: label,
+            child: InkWell(
+              onTap: () => setState(() {
+                _tab = index;
+                if (index != 0) {
+                  choice = _Move.inspect;
+                  selectedKnight = null;
+                }
+              }),
+              child: Container(
+                constraints: BoxConstraints(minHeight: _compact ? 48 : 54),
+                decoration: BoxDecoration(
+                  color: _tab == index ? const Color(0xff2c4145) : null,
+                  border: Border(
+                    bottom: BorderSide(
+                      width: 2,
+                      color: _tab == index
+                          ? const Color(0xffe5c183)
+                          : Colors.transparent,
+                    ),
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 20,
+                      color: _tab == index
+                          ? const Color(0xffefd6a3)
+                          : const Color(0xffa6b6ba),
+                    ),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: _tab == index
+                            ? const Color(0xffefd6a3)
+                            : const Color(0xffa6b6ba),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+
+  Widget _heading(String title, String subtitle) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            color: Color(0xffefd6a3),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: const TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildAction(
+    _Move action,
+    IconData icon,
+    String name,
+    String cost,
+    bool enabled,
+  ) => Expanded(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Tooltip(
+        message: '$name · $cost',
+        child: OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+            minimumSize: Size(0, _compact ? 48 : 64),
+            backgroundColor: choice == action
+                ? const Color(0xff354e4b)
+                : const Color(0xff20343c),
+            side: BorderSide(
+              color: choice == action
+                  ? const Color(0xffe5c183)
+                  : const Color(0xff40565b),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          onPressed: enabled
+              ? () => setState(() {
+                  choice = action;
+                  selectedKnight = null;
+                })
+              : null,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 22),
+              const SizedBox(height: 3),
+              Text(
+                name,
+                maxLines: 1,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  List<Widget> _panelContents(MatchPhase phase) {
+    if (_tab == 0) {
+      return [
+        if (phase != MatchPhase.actions)
+          _heading(
+            _instruction,
+            phase == MatchPhase.actions
+                ? 'Choose a piece, then tap the map.'
+                : phase == MatchPhase.setupVillage ||
+                      phase == MatchPhase.setupRoad
+                ? 'Place your starting pieces to begin.'
+                : _hint,
+          ),
+        if (phase == MatchPhase.setupVillage ||
+            phase == MatchPhase.setupRoad) ...[
+          Icon(
+            phase == MatchPhase.setupVillage
+                ? Icons.holiday_village_rounded
+                : Icons.route_rounded,
+            size: 48,
+            color: seatColors[s.active],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            phase == MatchPhase.setupVillage ? 'Village · free' : 'Road · free',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Glowing marks show every legal placement. You can also choose a target from the list below the map.',
+            style: TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+          ),
+        ],
+        if (phase == MatchPhase.actions) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildAction(
+                _Move.road,
+                Icons.route,
+                'Road',
+                _costLabel(MatchEngine.effectiveRoadCost(s)),
+                MatchEngine.legalEdges(s).isNotEmpty,
+              ),
+              _buildAction(
+                _Move.village,
+                Icons.holiday_village,
+                'Village',
+                _costLabel(MatchEngine.villageCost),
+                MatchEngine.legalVertices(s).isNotEmpty,
+              ),
+              _buildAction(
+                _Move.upgrade,
+                Icons.location_city,
+                'Upgrade',
+                'Village → Town → Capital',
+                MatchEngine.legalUpgrades(s).isNotEmpty,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ExpansionTile(
+            title: const Text('Knights & defence'),
+            subtitle: _compact
+                ? null
+                : const Text('Fortify, recruit and move Knights'),
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 8),
+            children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final entry in <(_Move, String, bool)>[
+                    (
+                      _Move.fortify,
+                      'Fortify',
+                      s.sites.keys.any((v) => MatchEngine.legalFort(s, v)),
+                    ),
+                    (
+                      _Move.recruit,
+                      'Recruit Knight',
+                      [
+                        for (var v = 0; v < s.topology.vertices.length; v++)
+                          if (MatchEngine.legalRecruit(s, v)) v,
+                      ].isNotEmpty,
+                    ),
+                    (
+                      _Move.activate,
+                      'Activate',
+                      s.knights.keys.any(
+                        (v) => MatchEngine.legalActivate(s, v),
+                      ),
+                    ),
+                    (
+                      _Move.promote,
+                      'Promote',
+                      s.knights.keys.any((v) => MatchEngine.legalPromote(s, v)),
+                    ),
+                    (
+                      _Move.knightMove,
+                      'Move Knight',
+                      s.knights.keys.any(
+                        (v) =>
+                            s.knights[v]!.owner == s.active &&
+                            MatchEngine.legalKnightDestinations(
+                              s,
+                              v,
+                            ).isNotEmpty,
+                      ),
+                    ),
+                  ])
+                    ChoiceChip(
+                      label: Text(entry.$2),
+                      selected: choice == entry.$1,
+                      onSelected: entry.$3
+                          ? (_) => setState(() {
+                              choice = entry.$1;
+                              selectedKnight = null;
+                            })
+                          : null,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ],
+        if (phase == MatchPhase.invasion)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Fleet strength ${MatchEngine.invasionStrength(s)} · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (s.invasionAid > 0)
+                    Text(
+                      'Emergency aid +' +
+                          s.invasionAid.toString() +
+                          ' is included in the defence preview.',
+                    ),
+                  const Text(
+                    'All active Knights and Fortifications defend. '
+                    'A failed defence damages the highest-scoring Town '
+                    'or Capital; a sole leading Knight defender may earn '
+                    "Guardian's Honour.",
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+
+        if (phase == MatchPhase.roll)
+          const Text(
+            'Production goes to every eligible settlement. Outcomes use your saved match seed.',
+            style: TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+          ),
+        if (phase == MatchPhase.bandit)
+          const Text(
+            'Choose a different hex. Any theft and response will be resolved before building.',
+            style: TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+          ),
+      ];
+    }
+    if (_tab == 1) {
+      return [
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+          onPressed: phase == MatchPhase.actions ? exchange : null,
+          icon: const Icon(Icons.account_balance_outlined),
+          label: const Text('Bank trade'),
+        ),
+        SizedBox(height: _compact ? 4 : 8),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+          onPressed: phase == MatchPhase.actions ? offer : null,
+          icon: const Icon(Icons.handshake_outlined),
+          label: const Text('Player trade'),
+        ),
+        if (phase != MatchPhase.actions)
+          const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text(
+              'Trading opens after your roll and any pending events.',
+            ),
+          ),
+        if (phase == MatchPhase.actions && s.offers.isNotEmpty)
+          for (final trade in s.offers)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Offer #' +
+                          trade.id.toString() +
+                          ': ' +
+                          s.players[trade.proposer].id +
+                          ' gives ' +
+                          trade.giveCount.toString() +
+                          ' ' +
+                          trade.give.name +
+                          ' for ' +
+                          trade.wantCount.toString() +
+                          ' ' +
+                          trade.want.name +
+                          ' from ' +
+                          s.players[trade.target].id,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    if (trade.target == s.active) ...[
+                      const Text(
+                        'Decide this turn; escrow is held until expiry.',
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => send(
+                              RespondTrade(s.active, false, offerId: trade.id),
+                            ),
+                            child: const Text('Decline'),
+                          ),
+                          FilledButton(
+                            onPressed:
+                                (s.current.stores[trade.want] ?? 0) >=
+                                    trade.wantCount
+                                ? () => send(
+                                    RespondTrade(
+                                      s.active,
+                                      true,
+                                      offerId: trade.id,
+                                    ),
+                                  )
+                                : null,
+                            child: const Text('Accept'),
+                          ),
+                          if (!trade.isCounter &&
+                              s.offers.every((o) => o.proposer != s.active))
+                            TextButton(
+                              onPressed: () => offer(trade),
+                              child: const Text('Counter'),
+                            ),
+                        ],
+                      ),
+                    ] else if (trade.proposer == s.active) ...[
+                      const Text(
+                        'Your goods are reserved until accepted, declined, or expired.',
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: () => send(WithdrawTrade(trade.id)),
+                          child: const Text('Withdraw'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
+        if (s.offers.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 14),
+            child: Text(
+              'No standing offers',
+              style: TextStyle(color: Color(0xffabbfc2)),
+            ),
+          ),
+      ];
+    }
+    if (_tab == 2) {
+      if (phase != MatchPhase.actions) {
+        return [
+          _heading(
+            'Strategy cards',
+            'Roll and resolve pending events before playing cards.',
+          ),
+        ];
+      }
+      return [
+        StrategyHand(
+          state: s,
+          onEvent: send,
+          onlineOptions: widget.online
+              ? (widget.onlineView?['options'] as Map?)
+              : null,
+        ),
+      ];
+    }
+    return [
+      _heading('Your realm', 'Develop your towns and follow the race to 15.'),
+      ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: const Text('Town Developments'),
+        subtitle: const Text(
+          'Innovation, Commerce & Governance',
+          style: TextStyle(fontSize: 11),
+        ),
+        children: [
+          for (final track in StrategyDeck.values)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        '${track.name} · ${s.current.level(track)}/5',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        s.current.level(track) < 5
+                            ? 'Next: ${track.tiers[s.current.level(track)]}'
+                            : 'Complete',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      if (s.current.level(track) < 5)
+                        Text(
+                          _costLabel(
+                            MatchEngine.developmentCost(
+                              s,
+                              track,
+                              s.current.level(track) + 1,
+                            ),
+                          ),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xffabbfc2),
+                          ),
+                        ),
+                      const SizedBox(height: 6),
+                      OutlinedButton(
+                        onPressed: MatchEngine.canDevelop(s, track)
+                            ? () => send(DevelopTown(track))
+                            : null,
+                        child: Text(
+                          s.current.level(track) == 5 ? 'Max' : 'Develop',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      Text(
+        'Reaver Fleet ${s.reaverPressure}/3 · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid}',
+      ),
+      if (s.lastInvasion.isNotEmpty) Text(s.lastInvasion),
+      Text(
+        'First Capital: ${s.firstCapitalOwner == null ? 'unclaimed' : s.players[s.firstCapitalOwner!].id}',
+      ),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Standings', style: Theme.of(context).textTheme.titleMedium),
+          if (!widget.online)
+            TextButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(
+                  ClipboardData(text: MatchEngine.exportReplay(s)),
+                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Replay copied')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy_outlined),
+              label: const Text('Copy replay'),
+            ),
+        ],
+      ),
+      if (!widget.online)
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(
+                ClipboardData(
+                  text: ReplayCodes.compact(MatchEngine.exportReplay(s)),
+                ),
+              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Share code copied; it contains every private hand.',
+                    ),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.share_outlined),
+            label: const Text('Copy compact replay code'),
+          ),
+        ),
+      for (var i = 0; i < s.players.length; i++)
+        Row(
+          children: [
+            Icon(Icons.flag, color: seatColors[i], size: 19),
+            const SizedBox(width: 6),
+            Expanded(child: Text(s.players[i].id)),
+            Text(
+              '${MatchEngine.score(s, i)} VP · Road ${MatchEngine.longestRoad(s, i)}',
+            ),
+            if (s.longestRoadHolder == i) const Icon(Icons.military_tech),
+          ],
+        ),
+      if (s.dice != null)
+        Text(
+          widget.online
+              ? 'Last dice: ${s.dice} · Event ${widget.onlineView?['eventCount']}'
+              : 'Last dice: ${s.dice} · Event ${s.events.length}',
+        ),
+    ];
+  }
+
+  Widget _turnAction() => Container(
+    padding: EdgeInsets.symmetric(horizontal: 10, vertical: _compact ? 2 : 10),
+    decoration: const BoxDecoration(
+      border: Border(top: BorderSide(color: Color(0xff34464a))),
+    ),
+    child: SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 48),
+          backgroundColor: const Color(0xffe5c183),
+          foregroundColor: const Color(0xff28271e),
+        ),
+        onPressed: switch (s.phase) {
+          MatchPhase.roll => () {
+            final pair = widget.online ? (0, 0) : MatchEngine.expectedDice(s);
+            send(RollDice(pair.$1, pair.$2));
+          },
+          MatchPhase.actions => () => send(const EndTurn()),
+          MatchPhase.invasion => () => send(const ResolveInvasion()),
+          _ => null,
+        },
+        icon: Icon(
+          s.phase == MatchPhase.roll
+              ? Icons.casino_outlined
+              : s.phase == MatchPhase.invasion
+              ? Icons.shield_outlined
+              : Icons.check_circle_outline,
+        ),
+        label: Text(
+          s.phase == MatchPhase.roll
+              ? 'Roll dice'
+              : s.phase == MatchPhase.invasion
+              ? 'Resolve Invasion'
+              : s.phase == MatchPhase.actions
+              ? 'End turn'
+              : s.phase == MatchPhase.finished
+              ? 'Match complete'
+              : 'Place on map',
+        ),
+      ),
+    ),
+  );
+
+  Widget _resourceTray() => Container(
+    height: math.max(
+      _compact ? 44 : 58,
+      MediaQuery.textScalerOf(context).scale(_compact ? 30 : 38) + 12,
+    ),
+    padding: EdgeInsets.symmetric(horizontal: 8, vertical: _compact ? 4 : 6),
+    decoration: const BoxDecoration(
+      color: Color(0xff101e25),
+      border: Border(top: BorderSide(color: Color(0xff34464a))),
+    ),
+    child: Row(
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(right: 8),
+          child: Icon(
+            Icons.inventory_2_outlined,
+            size: 20,
+            color: Color(0xffe5c183),
+          ),
+        ),
+        for (final r in Resource.values)
+          Expanded(
+            child: Tooltip(
+              message: '${r.name}: ${s.current.stores[r] ?? 0}',
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xff20323a),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border(
+                    top: BorderSide(color: _goodColor(r), width: 3),
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${s.current.stores[r] ?? 0}',
+                      style: TextStyle(
+                        fontSize: _compact ? 14 : 17,
+                        height: 1.2,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      r.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: _compact ? 9 : 10,
+                        color: Color(0xffbac9cc),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+
+  String _costLabel(Map<Resource, int> cost) =>
+      cost.entries.map((e) => '${e.value} ${e.key.name}').join(' · ');
+
+  Color _goodColor(Resource r) => const [
+    Color(0xff6f9e79),
+    Color(0xffc78369),
+    Color(0xffd7b968),
+    Color(0xff9cbd95),
+    Color(0xffa1b1c4),
+    Color(0xffe3d8b7),
+    Color(0xffbd9dca),
+    Color(0xffe4c976),
+  ][r.index];
 }
 
 enum _TradeKind { bank, player }
 
-/// A dedicated route keeps negotiation away from crowded board actions.
+/// A focused dialog composes a trade while the table remains in place.
 class _TradeComposer extends StatefulWidget {
   const _TradeComposer({required this.state, required this.kind, this.counter});
   final MatchState state;
@@ -946,131 +1621,119 @@ class _TradeComposerState extends State<_TradeComposer> {
         ? 'Standing offer'
         : 'Counteroffer';
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-              children: [
-                Text(
-                  bank ? 'Trade with the bank at your current rate.' : 'Set the terms. Your goods are reserved in escrow until resolution.',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 24),
-                if (!bank && widget.counter == null) ...[
-                  DropdownButtonFormField<int>(
-                    key: ValueKey(target),
-                    initialValue: target,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Offer to',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (var i = 0; i < s.players.length; i++)
-                        if (i != s.active)
-                          DropdownMenuItem(
-                            value: i,
-                            child: Text(s.players[i].id),
-                          ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setState(() => target = v);
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                ],
-                Text('Give', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                _GoodInput(
-                  label: bank ? 'Pay' : 'Place in escrow',
-                  resource: give,
-                  change: (v) => setState(() => give = v),
-                ),
-                if (!bank)
-                  _CountInput(
-                    value: giveCount,
-                    change: (v) => setState(() => giveCount = v),
-                  ),
-                Text(
-                  'Available: ' +
-                      available.toString() +
-                      ' · Required: ' +
-                      required.toString(),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 24),
-                Text('Receive', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                _GoodInput(
-                  label: bank ? 'From bank' : 'Request',
-                  resource: take,
-                  change: (v) => setState(() => take = v),
-                ),
-                if (!bank)
-                  _CountInput(
-                    value: takeCount,
-                    change: (v) => setState(() => takeCount = v),
-                  ),
-                if (bank)
-                  Text(
-                    'Rate ' +
-                        rate.toString() +
-                        ':' +
-                        receipt.toString() +
-                        ' · Bank stock: ' +
-                        bankAvailable.toString(),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                const SizedBox(height: 24),
-                Card.filled(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      bank
-                          ? 'Pay ' +
-                                rate.toString() +
-                                ' ' +
-                                give.name +
-                                ' · Receive ' +
-                                receipt.toString() +
-                                ' ' +
-                                take.name
-                          : 'Reserve ' +
-                                giveCount.toString() +
-                                ' ' +
-                                give.name +
-                                ' · Request ' +
-                                takeCount.toString() +
-                                ' ' +
-                                take.name +
-                                '\nOnly ' +
-                                s.players[target].id +
-                                ' can accept. Private hands stay hidden.',
-                    ),
-                  ),
-                ),
-                if (!valid) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    give == take
-                        ? 'Choose different goods.'
-                        : available < required
-                        ? 'Insufficient goods to offer.'
-                        : bank && bankAvailable < receipt
-                        ? 'Bank stock is too low.'
-                        : 'Check the trade terms.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+      appBar: AppBar(
+        toolbarHeight: 48,
+        title: Text(title),
+        leading: IconButton(
+          tooltip: 'Close trade',
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.close),
         ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        children: [
+          Text(
+            bank
+                ? 'Rate $rate:$receipt · Bank stock: $bankAvailable'
+                : 'Only ${s.players[target].id} can accept. Private hands stay hidden.',
+            style: const TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+          ),
+          const SizedBox(height: 12),
+          if (!bank && widget.counter == null) ...[
+            DropdownButtonFormField<int>(
+              key: ValueKey(target),
+              initialValue: target,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Offer to',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: [
+                for (var i = 0; i < s.players.length; i++)
+                  if (i != s.active)
+                    DropdownMenuItem(value: i, child: Text(s.players[i].id)),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => target = v);
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Give $required',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    _GoodInput(
+                      label: bank ? 'Pay' : 'Place in escrow',
+                      resource: give,
+                      change: (v) => setState(() => give = v),
+                    ),
+                    if (!bank)
+                      _CountInput(
+                        value: giveCount,
+                        change: (v) => setState(() => giveCount = v),
+                      ),
+                    Text(
+                      'Available: $available · Required: $required',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(12, 36, 12, 0),
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  color: Color(0xffe5c183),
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Receive ${bank ? receipt : takeCount}',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    _GoodInput(
+                      label: bank ? 'From bank' : 'Request',
+                      resource: take,
+                      change: (v) => setState(() => take = v),
+                    ),
+                    if (!bank)
+                      _CountInput(
+                        value: takeCount,
+                        change: (v) => setState(() => takeCount = v),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (!valid)
+            Text(
+              give == take
+                  ? 'Choose different goods.'
+                  : available < required
+                  ? 'Insufficient goods to offer.'
+                  : bank && bankAvailable < receipt
+                  ? 'Bank stock is too low.'
+                  : 'Check the trade terms.',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+        ],
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.all(16),
@@ -1111,7 +1774,7 @@ class _TradeComposerState extends State<_TradeComposer> {
   }
 }
 
-/// The entire normal hand/board is hidden for a visiting reaction seat.
+/// Only the public map and this responder’s choices remain visible.
 class _TacticalPanel extends StatelessWidget {
   const _TacticalPanel({
     required this.state,
@@ -1142,147 +1805,84 @@ class _TacticalPanel extends StatelessWidget {
         'One wheat gives +1 defence; one ore gives +2. '
             'Both go to the bank. The aid lasts for this invasion only.',
     };
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(
-              'Response for ' + state.players[responder].id,
-              style: Theme.of(context).textTheme.titleLarge,
+    return ListView(
+      key: ValueKey('response-${w.id}-$responder'),
+      padding: const EdgeInsets.all(12),
+      children: [
+        Text(
+          'Response for ${state.players[responder].id}',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xffe5c183),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (w.kind == TacticalKind.bandit &&
+            MatchEngine.canIntercept(state, responder))
+          FilledButton.icon(
+            onPressed: () => onEvent(
+              RespondTactical(w.id, responder, TacticalChoice.intercept),
             ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 420,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 170),
-                transitionBuilder: (child, animation) =>
-                    FadeTransition(opacity: animation, child: child),
-                child: Card(
-                  key: ValueKey(w.id.toString() + ':' + responder.toString()),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: SingleChildScrollView(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  label,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium,
-                                ),
-                                const SizedBox(height: 10),
-                                Text(detail),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Response allowance: ' +
-                                      (state.reactionsUsed.contains(responder)
-                                          ? 'spent'
-                                          : 'available'),
-                                ),
-                                if (w.kind == TacticalKind.bandit &&
-                                    MatchEngine.canIntercept(state, responder))
-                                  FilledButton.icon(
-                                    onPressed: () => onEvent(
-                                      RespondTactical(
-                                        w.id,
-                                        responder,
-                                        TacticalChoice.intercept,
-                                      ),
-                                    ),
-                                    icon: const Icon(Icons.shield_outlined),
-                                    label: const Text('Intercept with Knight'),
-                                  ),
-                                if (w.kind == TacticalKind.governance)
-                                  for (final i in MatchEngine.counterCards(
-                                    state,
-                                    responder,
-                                    w.card!,
-                                  ))
-                                    FilledButton.icon(
-                                      onPressed: () => onEvent(
-                                        RespondTactical(
-                                          w.id,
-                                          responder,
-                                          TacticalChoice.counter,
-                                          cardIndex: i,
-                                        ),
-                                      ),
-                                      icon: const Icon(Icons.gavel_outlined),
-                                      label: Text(
-                                        'Counter: ' +
-                                            state
-                                                .players[responder]
-                                                .cards[i]
-                                                .definition
-                                                .name,
-                                      ),
-                                    ),
-                                if (w.kind == TacticalKind.invasion)
-                                  for (final good in [
-                                    Resource.wheat,
-                                    Resource.ore,
-                                  ])
-                                    if ((state
-                                                .players[responder]
-                                                .stores[good] ??
-                                            0) >
-                                        0)
-                                      FilledButton.icon(
-                                        onPressed: () => onEvent(
-                                          RespondTactical(
-                                            w.id,
-                                            responder,
-                                            TacticalChoice.aid,
-                                            good: good,
-                                          ),
-                                        ),
-                                        icon: const Icon(
-                                          Icons.volunteer_activism_outlined,
-                                        ),
-                                        label: Text('Pledge 1 ' + good.name),
-                                      ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        OutlinedButton(
-                          onPressed: () => onEvent(
-                            RespondTactical(
-                              w.id,
-                              responder,
-                              TacticalChoice.pass,
-                            ),
-                          ),
-                          child: const Text('Pass'),
-                        ),
-                        if (!online)
-                          TextButton(
-                            onPressed: () =>
-                                onEvent(TimeoutTactical(w.id, responder)),
-                            child: const Text('Skip / timeout fallback'),
-                          ),
-                      ],
-                    ),
-                  ),
+            icon: const Icon(Icons.shield_outlined),
+            label: const Text('Intercept with Knight'),
+          ),
+        if (w.kind == TacticalKind.governance)
+          for (final i in MatchEngine.counterCards(state, responder, w.card!))
+            FilledButton.icon(
+              onPressed: () => onEvent(
+                RespondTactical(
+                  w.id,
+                  responder,
+                  TacticalChoice.counter,
+                  cardIndex: i,
                 ),
               ),
+              icon: const Icon(Icons.gavel_outlined),
+              label: Text(
+                'Counter: ${state.players[responder].cards[i].definition.name}',
+              ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Only this seat’s reaction choices are shown. '
-              'A response or pass returns play to the original turn.',
-            ),
-          ],
+        if (w.kind == TacticalKind.invasion)
+          for (final good in [Resource.wheat, Resource.ore])
+            if ((state.players[responder].stores[good] ?? 0) > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: FilledButton.icon(
+                  onPressed: () => onEvent(
+                    RespondTactical(
+                      w.id,
+                      responder,
+                      TacticalChoice.aid,
+                      good: good,
+                    ),
+                  ),
+                  icon: const Icon(Icons.volunteer_activism_outlined),
+                  label: Text('Pledge 1 ${good.name}'),
+                ),
+              ),
+        OutlinedButton(
+          onPressed: () =>
+              onEvent(RespondTactical(w.id, responder, TacticalChoice.pass)),
+          child: const Text('Pass'),
         ),
-      ),
+        const SizedBox(height: 12),
+        Text(detail, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 8),
+        Text(
+          'Response allowance: ${state.reactionsUsed.contains(responder) ? 'spent' : 'available'}',
+          style: const TextStyle(fontSize: 11),
+        ),
+        if (!online)
+          TextButton(
+            onPressed: () => onEvent(TimeoutTactical(w.id, responder)),
+            child: const Text('Skip / timeout fallback'),
+          ),
+      ],
     );
   }
 }
@@ -1336,15 +1936,26 @@ class _CountInput extends StatelessWidget {
   );
 }
 
-class _Geometry {
-  _Geometry(this.size);
+/// The shared tabletop projection used for painting, hit testing and target lists.
+class BoardGeometry {
+  BoardGeometry(this.size);
   final Size size;
-  double get radius => math.min(size.width / 9.8, size.height / 9.3);
+  static const horizontalScale = 1.28;
+  static const verticalScale = .72;
+  double get radius => math.min(
+    size.width / (9.2 * horizontalScale),
+    size.height / (8.6 * verticalScale),
+  );
   Offset get center => Offset(size.width / 2, size.height / 2);
-  Offset vertex(BoardVertex p) => center + Offset(p.x * radius, p.y * radius);
+  Offset vertex(BoardVertex p) =>
+      center +
+      Offset(p.x * radius * horizontalScale, p.y * radius * verticalScale);
   Offset tile(HexCoord p) =>
       center +
-      Offset(math.sqrt(3) * radius * (p.q + p.r / 2), 1.5 * radius * p.r);
+      Offset(
+        math.sqrt(3) * radius * (p.q + p.r / 2) * horizontalScale,
+        1.5 * radius * p.r * verticalScale,
+      );
 }
 
 class _Painter extends CustomPainter {
@@ -1355,8 +1966,29 @@ class _Painter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final g = _Geometry(size);
-    canvas.drawColor(const Color(0xff1c343d), BlendMode.src);
+    final g = BoardGeometry(size);
+    final bounds = Offset.zero & size;
+    canvas.drawRect(
+      bounds,
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [Color(0xff31545c), Color(0xff152e38), Color(0xff10242e)],
+          radius: .8,
+        ).createShader(bounds),
+    );
+    for (var ring = 0; ring < 5; ring++) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: g.center,
+          width: g.radius * (8.3 + ring * .75) * BoardGeometry.horizontalScale,
+          height: g.radius * (7.7 + ring * .75) * BoardGeometry.verticalScale,
+        ),
+        Paint()
+          ..color = const Color(0xffa4c2bd).withValues(alpha: .055)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+    }
     for (var i = 0; i < state.board.tiles.length; i++) {
       final tile = state.board.tiles[i];
       final c = g.tile(tile.position), radius = g.radius;
@@ -1364,7 +1996,11 @@ class _Painter extends CustomPainter {
       for (var n = 0; n < 6; n++) {
         final angle = (n * 60 - 30) * math.pi / 180;
         final p =
-            c + Offset(radius * math.cos(angle), radius * math.sin(angle));
+            c +
+            Offset(
+              radius * math.cos(angle) * BoardGeometry.horizontalScale,
+              radius * math.sin(angle) * BoardGeometry.verticalScale,
+            );
         if (n == 0) {
           hex.moveTo(p.dx, p.dy);
         } else {
@@ -1372,66 +2008,91 @@ class _Painter extends CustomPainter {
         }
       }
       hex.close();
-      canvas.drawPath(hex, Paint()..color = landColors[tile.land.index]);
+      canvas.drawShadow(hex, const Color(0xff04151c), radius * .14, true);
+      final base = landColors[tile.land.index];
       canvas.drawPath(
         hex,
         Paint()
-          ..color = const Color(0xff213944)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3,
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(base, const Color(0xfff6e6aa), .13)!,
+              Color.lerp(base, const Color(0xff142d32), .24)!,
+            ],
+          ).createShader(Rect.fromCircle(center: c, radius: radius)),
       );
-      // Each hex gets a small native motif, without third-party tiles or art.
-      final motif = Paint()
-        ..color = Colors.white.withValues(alpha: .25)
-        ..strokeWidth = 1.7
-        ..style = PaintingStyle.stroke;
-      if (tile.land == Land.woodland) {
-        for (final dx in [-.45, .45]) {
-          final x = c.dx + dx * radius, y = c.dy - radius * .5;
-          canvas.drawLine(Offset(x, y), Offset(x, y + radius * .32), motif);
-          canvas.drawLine(
-            Offset(x, y),
-            Offset(x - radius * .15, y + radius * .2),
-            motif,
-          );
-          canvas.drawLine(
-            Offset(x, y),
-            Offset(x + radius * .15, y + radius * .2),
-            motif,
-          );
-        }
-      } else if (tile.land == Land.ridges) {
-        final p = Path()
-          ..moveTo(c.dx - radius * .6, c.dy - radius * .35)
-          ..lineTo(c.dx - radius * .3, c.dy - radius * .65)
-          ..lineTo(c.dx, c.dy - radius * .34)
-          ..lineTo(c.dx + radius * .3, c.dy - radius * .62)
-          ..lineTo(c.dx + radius * .6, c.dy - radius * .34);
-        canvas.drawPath(p, motif);
-      } else {
-        for (final dx in [-.5, .38]) {
-          canvas.drawLine(
-            c + Offset(dx * radius, -radius * .5),
-            c + Offset((dx + .18) * radius, -radius * .37),
-            motif,
-          );
-        }
+      canvas.save();
+      canvas.clipPath(hex);
+      canvas.translate(c.dx, c.dy);
+      canvas.scale(BoardGeometry.horizontalScale, BoardGeometry.verticalScale);
+      _terrain(canvas, Offset.zero, radius, tile.land);
+      canvas.restore();
+      canvas.drawPath(
+        hex,
+        Paint()
+          ..color = const Color(0xffb4b28b).withValues(alpha: .60)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6,
+      );
+      if (tile.productionNumber == state.dice &&
+          state.dice != null &&
+          i != state.banditTile) {
+        canvas.drawPath(
+          hex,
+          Paint()
+            ..color = const Color(0xfff4d88e)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.7,
+        );
+      }
+      if (mode == _Move.bandit && i != state.banditTile) {
+        canvas.drawPath(
+          hex,
+          Paint()
+            ..color = const Color(0xffdce9b0)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.5,
+        );
       }
       if (tile.productionNumber case final int number) {
+        canvas.drawShadow(
+          Path()..addOval(Rect.fromCircle(center: c, radius: radius * .35)),
+          Colors.black,
+          radius * .06,
+          true,
+        );
         canvas.drawCircle(
           c,
-          radius * .32,
-          Paint()..color = const Color(0xfffbefda),
+          radius * .35,
+          Paint()..color = const Color(0xfff5e6c4),
         );
+        canvas.drawCircle(
+          c,
+          radius * .30,
+          Paint()
+            ..color = const Color(0xffb6a17c)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = .8,
+        );
+        final ink = number == 6 || number == 8
+            ? const Color(0xffa74637)
+            : const Color(0xff23373c);
         _label(
           canvas,
           '$number',
-          c,
-          radius * .3,
-          number == 6 || number == 8
-              ? const Color(0xffab332f)
-              : const Color(0xff23373c),
+          c - Offset(0, radius * .055),
+          radius * .46,
+          ink,
         );
+        final pips = 6 - (7 - number).abs();
+        for (var dot = 0; dot < pips; dot++) {
+          canvas.drawCircle(
+            c + Offset((dot - (pips - 1) / 2) * radius * .075, radius * .20),
+            radius * .023,
+            Paint()..color = ink,
+          );
+        }
       }
       if (i == state.banditTile) {
         canvas.drawCircle(
@@ -1507,10 +2168,14 @@ class _Painter extends CustomPainter {
       if (legal.contains(v.id)) {
         canvas.drawCircle(
           c,
-          math.max(11, g.radius * .29),
+          math.max(7, g.radius * .22),
           Paint()..color = const Color(0xffaeffdf).withValues(alpha: .45),
         );
-        canvas.drawCircle(c, 6.5, Paint()..color = const Color(0xfff6fff0));
+        canvas.drawCircle(
+          c,
+          math.max(3.5, g.radius * .10),
+          Paint()..color = const Color(0xfff6fff0),
+        );
       }
       final site = state.sites[v.id];
       if (site == null) continue;
@@ -1592,6 +2257,104 @@ class _Painter extends CustomPainter {
         11,
         const Color(0xff102028),
       );
+    }
+  }
+
+  // Geometric marks are fixed decorations for each terrain.
+  // They never read or advance the match's random event stream.
+  void _terrain(Canvas canvas, Offset c, double r, Land land) {
+    final ink = Paint()
+      ..color = const Color(0xff172f31).withValues(alpha: .28)
+      ..strokeWidth = r * .025
+      ..strokeCap = StrokeCap.round;
+    final light = Paint()
+      ..color = const Color(0xfff6e8b4).withValues(alpha: .21)
+      ..strokeWidth = r * .025
+      ..style = PaintingStyle.stroke;
+    for (var row = 0; row < 3; row++) {
+      for (var col = 0; col < 4; col++) {
+        final x = c.dx + (col - 1.5) * r * .43 + (row.isEven ? .12 : -.12) * r;
+        final y = c.dy + (row - 1) * r * .49;
+        final p = Offset(x, y);
+        switch (land) {
+          case Land.woodland:
+            canvas.drawLine(
+              p + Offset(0, r * .04),
+              p + Offset(0, r * .27),
+              ink,
+            );
+            final tree = Path()
+              ..moveTo(x, y - r * .24)
+              ..lineTo(x - r * .16, y + r * .12)
+              ..lineTo(x + r * .16, y + r * .12)
+              ..close();
+            canvas.drawPath(
+              tree,
+              Paint()..color = const Color(0xff1c4c3b).withValues(alpha: .5),
+            );
+            canvas.drawLine(
+              p + Offset(0, -r * .19),
+              p + Offset(-r * .1, r * .07),
+              light,
+            );
+          case Land.ridges:
+            final mountain = Path()
+              ..moveTo(x - r * .25, y + r * .20)
+              ..lineTo(x, y - r * .26)
+              ..lineTo(x + r * .24, y + r * .20)
+              ..close();
+            canvas.drawPath(mountain, ink);
+            canvas.drawPath(
+              Path()
+                ..moveTo(x - r * .09, y - r * .08)
+                ..lineTo(x, y - r * .26)
+                ..lineTo(x + r * .08, y - r * .1),
+              light,
+            );
+          case Land.fields:
+            for (var line = 0; line < 3; line++) {
+              final yy = y + line * r * .065;
+              canvas.drawLine(
+                Offset(x - r * .17, yy),
+                Offset(x + r * .17, yy - r * .13),
+                light,
+              );
+            }
+            canvas.drawLine(
+              p + Offset(0, -r * .14),
+              p + Offset(0, r * .12),
+              ink,
+            );
+          case Land.clayBeds:
+            canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                Rect.fromCenter(center: p, width: r * .33, height: r * .15),
+                Radius.circular(r * .03),
+              ),
+              ink,
+            );
+            canvas.drawLine(
+              p + Offset(-r * .12, -r * .04),
+              p + Offset(r * .12, -r * .04),
+              light,
+            );
+          case Land.meadows:
+            final hill = Path()
+              ..moveTo(x - r * .22, y + r * .1)
+              ..quadraticBezierTo(x, y - r * .2, x + r * .22, y + r * .1);
+            canvas.drawPath(hill, light);
+            canvas.drawLine(
+              p + Offset(-r * .08, r * .16),
+              p + Offset(-r * .04, r * .04),
+              ink,
+            );
+          case Land.barren:
+            final dune = Path()
+              ..moveTo(x - r * .22, y)
+              ..quadraticBezierTo(x, y - r * .12, x + r * .23, y + r * .04);
+            canvas.drawPath(dune, light);
+        }
+      }
     }
   }
 

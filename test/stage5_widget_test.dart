@@ -56,7 +56,7 @@ void main() {
   testWidgets('bank exchange uses focused route, conserves stock and returns', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -70,12 +70,17 @@ void main() {
     final bankWoodBefore = s.bank[Resource.wood]!;
     final bankWoolBefore = s.bank[Resource.wool]!;
     await showMatch(tester, s, (v) => updated = v);
-    await tester.scrollUntilVisible(find.text('Bank trade'), 250);
+    await tester.tap(find.text('Trade'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Bank trade'));
     await tester.tap(find.text('Bank trade'));
     await tester.pumpAndSettle();
     expect(find.text('Bank exchange'), findsOneWidget);
     expect(find.textContaining('Rate 4:1'), findsOneWidget);
-    expect(find.text('End turn'), findsNothing);
+    expect(
+      find.byType(Dialog),
+      findsOneWidget,
+    ); // Negotiation overlays the tabletop.
     expect(find.text('Exchange'), findsOneWidget);
     await tester.tap(find.text('Exchange'));
     await tester.pumpAndSettle();
@@ -89,7 +94,7 @@ void main() {
   testWidgets('standing offer reserves only once on its focused route', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -101,12 +106,21 @@ void main() {
     var updated = s;
     final before = s.players[0].stores[Resource.wood]!;
     await showMatch(tester, s, (v) => updated = v);
-    await tester.scrollUntilVisible(find.text('Player trade'), 250);
+    await tester.tap(find.text('Trade'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Player trade'),
+      80,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.tap(find.text('Player trade'));
     await tester.pumpAndSettle();
     expect(find.text('Standing offer'), findsOneWidget);
     expect(find.textContaining('Private hands stay hidden'), findsOneWidget);
-    expect(find.text('End turn'), findsNothing);
+    expect(
+      find.byType(Dialog),
+      findsOneWidget,
+    ); // Negotiation overlays the tabletop.
     await tester.tap(find.text('Escrow and offer'));
     await tester.pumpAndSettle();
     expect(updated.offers, hasLength(1));
@@ -118,7 +132,7 @@ void main() {
   testWidgets(
     'private Bandit response has no acting hand and resolves by touch',
     (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
+      tester.view.physicalSize = const Size(844, 390);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -154,7 +168,7 @@ void main() {
   testWidgets('invasion aid and pass buttons advance responder without stall', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -186,7 +200,7 @@ void main() {
   testWidgets('standing offer on another turn can be accepted in widget UI', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -210,7 +224,13 @@ void main() {
     }
     var updated = s;
     await showMatch(tester, s, (v) => updated = v);
-    await tester.scrollUntilVisible(find.text('Accept'), 250);
+    await tester.tap(find.text('Trade'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Accept'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.pumpAndSettle();
     expect(find.text('Counter'), findsOneWidget);
     await tester.tap(find.text('Accept'));

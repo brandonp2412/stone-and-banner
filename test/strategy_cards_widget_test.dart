@@ -27,7 +27,7 @@ void main() {
   testWidgets('card detail exposes accessible legal targets and plays card', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -47,7 +47,11 @@ void main() {
         ),
       ),
     );
-    await tester.scrollUntilVisible(find.textContaining('Strategy hand'), 250);
+    await tester.tap(find.text('Cards'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.textContaining('Strategy hand'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Forecast'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Forecast'));
     await tester.pumpAndSettle();
@@ -64,7 +68,7 @@ void main() {
   testWidgets('unplayable card remains dismissible and discardable', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -83,7 +87,11 @@ void main() {
         ),
       ),
     );
-    await tester.scrollUntilVisible(find.textContaining('Strategy hand'), 250);
+    await tester.tap(find.text('Cards'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.textContaining('Strategy hand'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Fortification Plans'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Fortification Plans'));
     await tester.pumpAndSettle();
@@ -104,7 +112,7 @@ void main() {
   testWidgets('exchange cards group choices and require confirmation', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -123,7 +131,11 @@ void main() {
         ),
       ),
     );
-    await tester.scrollUntilVisible(find.textContaining('Strategy hand'), 250);
+    await tester.tap(find.text('Cards'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.textContaining('Strategy hand'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Open Routes'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Open Routes'));
     await tester.pumpAndSettle();

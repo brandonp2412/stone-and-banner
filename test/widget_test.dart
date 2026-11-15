@@ -1,8 +1,7 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/main.dart';
+import 'package:stone_and_banner/ui/match_screen.dart';
 import 'package:stone_and_banner/engine/match.dart';
 
 Future<void> ready(WidgetTester tester) async {
@@ -14,11 +13,8 @@ Future<void> tapVertex(WidgetTester tester, MatchState state, int id) async {
   final found = find.byType(InteractiveViewer);
   final size = tester.getSize(found);
   final origin = tester.getTopLeft(found);
-  final radius = math.min(size.width / 9.8, size.height / 9.3);
-  final v = state.topology.vertices[id];
   await tester.tapAt(
-    origin +
-        Offset(size.width / 2 + v.x * radius, size.height / 2 + v.y * radius),
+    origin + BoardGeometry(size).vertex(state.topology.vertices[id]),
   );
   await tester.pumpAndSettle();
 }
@@ -27,15 +23,13 @@ Future<void> tapEdge(WidgetTester tester, MatchState state, int id) async {
   final found = find.byType(InteractiveViewer);
   final size = tester.getSize(found);
   final origin = tester.getTopLeft(found);
-  final radius = math.min(size.width / 9.8, size.height / 9.3);
+  final g = BoardGeometry(size);
   final e = state.topology.edges[id];
-  final a = state.topology.vertices[e.a], b = state.topology.vertices[e.b];
   await tester.tapAt(
     origin +
-        Offset(
-          size.width / 2 + (a.x + b.x) / 2 * radius,
-          size.height / 2 + (a.y + b.y) / 2 * radius,
-        ),
+        (g.vertex(state.topology.vertices[e.a]) +
+                g.vertex(state.topology.vertices[e.b])) /
+            2,
   );
   await tester.pumpAndSettle();
 }
@@ -44,12 +38,12 @@ void main() {
   testWidgets('full 3-seat placement draft, privacy handoff and seeded roll', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const StoneBannerApp());
-    expect(find.text('Raise a town. Shape a realm.'), findsOneWidget);
+    expect(find.text('Raise a town.\nShape a realm.'), findsOneWidget);
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Start match'));
@@ -69,7 +63,7 @@ void main() {
       final v = MatchEngine.legalVertices(state).first;
       await tapVertex(tester, state, v);
       state = MatchEngine.apply(state, PlaceVillage(v));
-      expect(find.textContaining('glowing side'), findsOneWidget);
+      expect(find.textContaining('glowing edge'), findsOneWidget);
       final edge = MatchEngine.legalEdges(state).first;
       await tapEdge(tester, state, edge);
       state = MatchEngine.apply(state, PlaceRoad(edge));
@@ -101,12 +95,17 @@ void main() {
     await tester.tap(find.text('Start match'));
     await tester.pumpAndSettle();
     await ready(tester);
-    expect(tester.getSize(find.byType(InteractiveViewer)).width, lessThan(680));
+    expect(
+      tester.getSize(find.byType(InteractiveViewer)).width,
+      greaterThan(1200),
+    );
   });
 
   testWidgets('rules accessible from navigation', (tester) async {
     await tester.pumpWidget(const StoneBannerApp());
-    await tester.tap(find.text('Rules'));
+    await tester.ensureVisible(find.text('Learn the rules'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Learn the rules'));
     await tester.pumpAndSettle();
     expect(find.text('The founding rules'), findsOneWidget);
     expect(find.text('1 · Claim'), findsOneWidget);

@@ -13,7 +13,7 @@ void main() {
   testWidgets('three seats allow exactly one AI and preserve hot-seat', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -33,6 +33,8 @@ void main() {
     expect(find.text('3 AI'), findsNothing);
     expect(find.textContaining('2 humans · 1 computer'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Player names'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Player names'));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNWidgets(3)); // two humans + seed
@@ -58,7 +60,7 @@ void main() {
   testWidgets(
     'four seats permit three AI and named solo human goes straight to board',
     (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
+      tester.view.physicalSize = const Size(844, 390);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -69,13 +71,19 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Vs AI'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('4 players'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('4 players'));
       await tester.pumpAndSettle();
       expect(find.text('3 AI'), findsOneWidget);
+      await tester.ensureVisible(find.text('3 AI'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('3 AI'));
       await tester.pumpAndSettle();
       expect(find.textContaining('1 human · 3 computer'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('Player names'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Player names'));
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsNWidgets(2)); // one human + seed
@@ -110,7 +118,7 @@ void main() {
   testWidgets('saved-match start action fits one line on a phone', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -165,7 +173,7 @@ void main() {
   testWidgets('home keeps rules, glossary, setup and back navigation focused', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -174,6 +182,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('New local match'), findsOneWidget);
     expect(find.text('Hot-seat'), findsNothing);
+    await tester.ensureVisible(find.text('Learn the rules'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Learn the rules'));
     await tester.pumpAndSettle();
     expect(find.text('The essentials'), findsOneWidget);
@@ -182,6 +192,8 @@ void main() {
       160,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.text('Glossary'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Glossary'));
     await tester.pumpAndSettle();
     expect(find.text('Basic goods'), findsOneWidget);
@@ -190,18 +202,18 @@ void main() {
       -160,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.text('Advanced play'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Advanced play'));
     await tester.pumpAndSettle();
     expect(find.text('Town Developments'), findsOneWidget);
-    await tester.tap(find.text('Home').last);
+    await tester.tap(find.byTooltip('Back to Home').first);
     await tester.pumpAndSettle();
     expect(find.text('New local match'), findsOneWidget);
-    await tester.tap(find.text('Board').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Create a match'));
+    await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
     expect(find.text('Match setup'), findsOneWidget);
-    await tester.tap(find.byTooltip('Back to Home'));
+    await tester.tap(find.byTooltip('Back to Home').first);
     await tester.pumpAndSettle();
     expect(find.text('New local match'), findsOneWidget);
   });
@@ -210,6 +222,8 @@ void main() {
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Player names'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Player names'));
     await tester.pumpAndSettle();

@@ -10,7 +10,7 @@ void main() {
   testWidgets(
     'accessible legal target list places and restores a private match',
     (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
+      tester.view.physicalSize = const Size(844, 390);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -26,14 +26,16 @@ void main() {
       await tester.tap(find.text("I'm ready"));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Choose board target from list'));
-      await tester.tap(find.text('Choose board target from list'));
+      await tester.ensureVisible(
+        find.byTooltip('Choose board target from list'),
+      );
+      await tester.tap(find.byTooltip('Choose board target from list'));
       await tester.pumpAndSettle();
       expect(find.text('Choose legal board target'), findsOneWidget);
       expect(find.textContaining('Junction 1:'), findsWidgets);
       await tester.tap(find.byType(ListTile).first);
       await tester.pumpAndSettle();
-      expect(find.textContaining('glowing side'), findsOneWidget);
+      expect(find.textContaining('glowing edge'), findsOneWidget);
 
       final prefs = await SharedPreferences.getInstance();
       final replay = prefs.getString('stone_banner_local_replay_v1');
@@ -51,13 +53,15 @@ void main() {
       await tester.tap(find.text('Continue saved match'));
       await tester.pumpAndSettle();
       expect(find.text('Pass the device'), findsOneWidget);
-      expect(find.textContaining('glowing side'), findsNothing);
+      expect(find.textContaining('glowing edge'), findsNothing);
       await tester.tap(find.text("I'm ready"));
       await tester.pumpAndSettle();
-      expect(find.textContaining('glowing side'), findsOneWidget);
+      expect(find.textContaining('glowing edge'), findsOneWidget);
 
-      await tester.ensureVisible(find.text('Choose board target from list'));
-      await tester.tap(find.text('Choose board target from list'));
+      await tester.ensureVisible(
+        find.byTooltip('Choose board target from list'),
+      );
+      await tester.tap(find.byTooltip('Choose board target from list'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Road '), findsWidgets);
       await tester.tap(find.byType(ListTile).first);
@@ -70,9 +74,11 @@ void main() {
       expect(later.events.length, 2);
       expect(later.phase, MatchPhase.setupVillage);
 
-      await tester.tap(find.byIcon(Icons.home_outlined));
+      await tester.tap(find.byTooltip('Match menu'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.hexagon_outlined));
+      await tester.tap(find.text('Home').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue saved match'));
       await tester.pumpAndSettle();
       expect(find.text('Pass the device'), findsOneWidget);
     },

@@ -29,8 +29,10 @@ void main() {
 
   Future<void> humanSetup(WidgetTester tester) async {
     for (var i = 0; i < 2; i++) {
-      await tester.ensureVisible(find.text('Choose board target from list'));
-      await tester.tap(find.text('Choose board target from list'));
+      await tester.ensureVisible(
+        find.byTooltip('Choose board target from list'),
+      );
+      await tester.tap(find.byTooltip('Choose board target from list'));
       await tester.pumpAndSettle();
       await tester.tap(find.byType(ListTile).first);
       await tester.pump();
@@ -61,7 +63,7 @@ void main() {
   testWidgets('computer setup is private, completes a turn, and resumes', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -81,11 +83,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Computer turn'), findsNothing);
     expect(find.text('Pass the device'), findsNothing);
-    expect(find.text('Choose board target from list'), findsOneWidget);
+    expect(find.byTooltip('Choose board target from list'), findsOneWidget);
   });
 
   testWidgets('leaving board cancels an in-flight bot event', (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -95,7 +97,10 @@ void main() {
     final eventCount = MatchEngine.importReplay(before['replay'] as String)
         .events
         .length;
-    await tester.tap(find.byIcon(Icons.home_outlined));
+    await tester.tap(find.byTooltip('Match menu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Home').last);
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     final after = await saved();
@@ -103,7 +108,7 @@ void main() {
       MatchEngine.importReplay(after['replay'] as String).events.length,
       eventCount,
     );
-    await tester.tap(find.byIcon(Icons.hexagon_outlined));
+    await tester.tap(find.text('Continue saved match'));
     await tester.pump();
     expect(find.text('Computer turn'), findsOneWidget);
     await finishAi(tester);

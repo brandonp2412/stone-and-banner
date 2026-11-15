@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/main.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   testWidgets('home, playable board and rules golden snapshots', (
     tester,
   ) async {
     final fonts = FontLoader('NotoSans')
       ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     await fonts.load();
-    tester.view.physicalSize = const Size(390, 844);
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -26,6 +31,8 @@ void main() {
       find.byType(Scaffold),
       matchesGoldenFile('goldens/setup.png'),
     );
+    await tester.ensureVisible(find.text('Start match'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Start match'));
     await tester.pumpAndSettle();
     await tester.tap(find.text("I'm ready"));
@@ -34,7 +41,9 @@ void main() {
       find.byType(Scaffold),
       matchesGoldenFile('goldens/board.png'),
     );
-    await tester.tap(find.text('Rules'));
+    await tester.tap(find.byTooltip('Match menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rules').last);
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(Scaffold),

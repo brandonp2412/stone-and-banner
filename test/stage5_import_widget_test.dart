@@ -9,7 +9,7 @@ void main() {
   testWidgets(
     'Home imports a real pending reaction and hides seat until ready',
     (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
+      tester.view.physicalSize = const Size(844, 390);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -49,13 +49,15 @@ void main() {
   testWidgets('invalid seed shows an error without Navigator/Scaffold crash', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Player names'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Player names'));
     await tester.pumpAndSettle();

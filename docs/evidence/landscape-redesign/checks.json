@@ -1,0 +1,38 @@
+{
+  "5970": {
+    "command": "/home/brandon/quitter/flutter/bin/flutter analyze",
+    "status": {
+      "Done": {
+        "enqueued_at": "2026-11-15T19:21:26.437423447+13:00",
+        "start": "2026-11-15T19:21:26.578281980+13:00",
+        "end": "2026-11-15T19:21:27.829155977+13:00",
+        "result": "Success"
+      }
+    },
+    "summary": "No issues found! (ran in 0.6s)"
+  },
+  "5971": {
+    "command": "/home/brandon/quitter/flutter/bin/flutter test --reporter expanded",
+    "status": {
+      "Done": {
+        "enqueued_at": "2026-11-15T19:21:26.475828799+13:00",
+        "start": "2026-11-15T19:21:27.880431290+13:00",
+        "end": "2026-11-15T19:21:33.642418716+13:00",
+        "result": "Success"
+      }
+    },
+    "summary": "00:04 +148: All tests passed!"
+  },
+  "5972": {
+    "command": "/home/brandon/quitter/flutter/bin/flutter build apk --release",
+    "status": {
+      "Done": {
+        "enqueued_at": "2026-11-15T19:22:31.423576527+13:00",
+        "start": "2026-11-15T19:22:31.587384647+13:00",
+        "end": "2026-11-15T19:22:48.488413258+13:00",
+        "result": "Success"
+      }
+    },
+    "summary": "\u2713 Built build/app/outputs/flutter-apk/app-release.apk (55.1MB)"
+  }
+}

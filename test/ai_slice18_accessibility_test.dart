@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stone_and_banner/engine/match.dart';
+import 'package:stone_and_banner/replay_codes.dart';
 
 void main() {
   for (final variant in <(Size, double, Brightness)>[
-    (const Size(320, 640), 1.6, Brightness.light),
-    (const Size(390, 844), 2.0, Brightness.dark),
+    (const Size(640, 320), 1.6, Brightness.light),
+    (const Size(844, 390), 2.0, Brightness.dark),
     (const Size(1024, 768), 1.0, Brightness.light),
   ]) {
     testWidgets('Home, setup and Rules fit ${variant.$1} at ${variant.$2}x', (
@@ -26,26 +29,28 @@ void main() {
       expect(find.text('New local match'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Home layout overflow');
 
+      await tester.ensureVisible(find.text('New local match'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('New local match'));
       await tester.pumpAndSettle();
       expect(find.text('Match setup'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Setup layout overflow');
 
-      await tester.ensureVisible(find.text('Vs AI'));
-      await tester.pumpAndSettle();
-      await tester.drag(find.byType(ListView).last, const Offset(0, -120));
+      await tester.scrollUntilVisible(
+        find.text('Vs AI'),
+        100,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Vs AI'));
       await tester.pumpAndSettle();
       expect(find.text('Computer opponents'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'AI options overflow');
 
-      await tester.tap(
-        find.descendant(
-          of: find.byType(NavigationBar),
-          matching: find.byIcon(Icons.menu_book_outlined),
-        ),
-      );
+      await tester.tap(find.byTooltip('Back to Home').first);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Learn the rules'));
+      await tester.tap(find.text('Learn the rules'));
       await tester.pumpAndSettle();
       expect(find.text('The founding rules'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Rules overflow');
@@ -67,12 +72,14 @@ void main() {
   ) async {
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Rules'));
+    await tester.tap(find.text('Learn the rules'));
     await tester.pumpAndSettle();
     expect(find.text('The founding rules'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.text('New local match'), findsOneWidget);
+    await tester.ensureVisible(find.text('New local match'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
     expect(find.text('Match setup'), findsOneWidget);
@@ -93,5 +100,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('New local match'), findsOneWidget);
+  });
+  testWidgets('landscape replay input remains usable above the keyboard', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(844, 390);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Import replay'));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.autocorrect, isFalse);
+    expect(field.enableSuggestions, isFalse);
+    await tester.ensureVisible(find.byType(TextField));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(TextField)).height, greaterThan(40));
+    final code = ReplayCodes.compact(
+      MatchEngine.exportReplay(
+        MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 804),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), code);
+    await tester.tap(find.text('Load'));
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    expect(find.text('Pass the device'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
