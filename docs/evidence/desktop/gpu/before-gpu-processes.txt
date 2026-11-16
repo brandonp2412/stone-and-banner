@@ -1,2 +1,0 @@
-0     477538     G      -      -      -      -      -      -    cage
-    0     477545     G      -      -      -      -      -      -    stone_and_banne
