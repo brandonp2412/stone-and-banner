@@ -480,7 +480,13 @@ class _MatchViewState extends State<MatchView> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, bounds) {
-                  final railWidth = bounds.maxWidth < 760 ? 204.0 : 252.0;
+                  final desktop =
+                      bounds.maxWidth >= 1200 && bounds.maxHeight >= 550;
+                  final railWidth = desktop
+                      ? (bounds.maxWidth * .25).clamp(320.0, 420.0)
+                      : bounds.maxWidth < 760
+                      ? 204.0
+                      : 252.0;
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [

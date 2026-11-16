@@ -603,6 +603,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                       ),
                     ),
               body: Stack(
+                fit: StackFit.expand,
                 children: [
                   switch (page) {
                     Page.home => _LandingHall(
@@ -616,7 +617,22 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                         ),
                       ),
                     ),
-                    Page.setup => _setupContent(context),
+                    Page.setup => LayoutBuilder(
+                      builder: (context, bounds) => bounds.maxWidth >= 1200
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(48),
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 1100,
+                                    maxHeight: 640,
+                                  ),
+                                  child: _setupContent(context),
+                                ),
+                              ),
+                            )
+                          : _setupContent(context),
+                    ),
                     Page.board =>
                       current == null
                           ? Center(
@@ -1054,11 +1070,65 @@ class _LandingHall extends StatelessWidget {
           ),
         ),
       );
+      final desktop = box.maxWidth >= 1200 && box.maxHeight >= 650;
       return Material(
         key: const ValueKey('stone-home-page'),
         color: const Color(0xff101e25),
         child: SafeArea(
-          child: box.maxWidth > box.maxHeight
+          child: desktop
+              ? Padding(
+                  padding: const EdgeInsets.all(48),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: artwork,
+                        ),
+                      ),
+                      const SizedBox(width: 48),
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Text(
+                                'WELCOME TO THE TABLE',
+                                style: TextStyle(
+                                  color: Color(0xff8fa9ac),
+                                  letterSpacing: 2,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Expanded(child: menu),
+                            const Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.save_outlined, size: 20),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Your match saves automatically on this device.',
+                                      style: TextStyle(
+                                        color: Color(0xffabbfc2),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : box.maxWidth > box.maxHeight
               ? Row(
                   children: [
                     Expanded(flex: 5, child: artwork),
