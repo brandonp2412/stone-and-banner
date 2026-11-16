@@ -1,0 +1,92 @@
+[
+  {
+    "file": "before-native-debug.png",
+    "size": [
+      898,
+      1080
+    ],
+    "sha256": "8091699457555112cf40056b94fc87f208df284bbfc033fd65dc3f46c25bf62a",
+    "black_pixel_fraction": 0.7390188072259342
+  },
+  {
+    "file": "debug-home-1920.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "sha256": "f58d4c7acad0fb9b7b2b56bcea0ab82224a0e3f67c60e6b58dfef7c459fa34a3",
+    "black_pixel_fraction": 2.4594907407407408e-05
+  },
+  {
+    "file": "release-native-1280.png",
+    "size": [
+      1280,
+      720
+    ],
+    "sha256": "2208b4df67607bf9b8224422ab5e1631e9479b5d3e116755f8c4cbce5725c2bb",
+    "black_pixel_fraction": 0.0
+  },
+  {
+    "file": "release-native-1920.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "sha256": "934f864a0ade8a32f0eb3f7e199d75117794ff5dd0a7297d68565f62b94cf3d0",
+    "black_pixel_fraction": 0.0
+  },
+  {
+    "file": "release-native-board-1920.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "sha256": "0806b20c568abaa5b0680515fd140e962dc71dc17e148cc6df2d9fedadfae15c",
+    "black_pixel_fraction": 0.0
+  },
+  {
+    "file": "release-native-board-resized-1280.png",
+    "size": [
+      1280,
+      720
+    ],
+    "sha256": "b62fcf580ecb9708319fa356140d86a566effd6eaefc3c0827af61891b3d06bb",
+    "black_pixel_fraction": 0.0
+  },
+  {
+    "file": "release-native-board-restored-1920.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "sha256": "f081964c4f244cf887ba433b442767ce94eb0ef12c73e8234dcf4ae4f37cd618",
+    "black_pixel_fraction": 0.0
+  },
+  {
+    "file": "release-native-resize-1920-again.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "sha256": "934f864a0ade8a32f0eb3f7e199d75117794ff5dd0a7297d68565f62b94cf3d0",
+    "black_pixel_fraction": 0.0
+  },
+  {
+    "file": "release-native-resized-back-1280.png",
+    "size": [
+      1280,
+      720
+    ],
+    "sha256": "9a052bb8258a570f4f73ac9d383df7c92fd23145f4ab58f43635cc5b5e606a24",
+    "black_pixel_fraction": 0.0
+  },
+  {
+    "file": "release-native-setup.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "sha256": "14dfec163b22fb319e3018b1443a1cf060e02336f21672efc30c5c18bc3a5ea3",
+    "black_pixel_fraction": 0.0
+  }
+]
