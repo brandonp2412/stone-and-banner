@@ -1,0 +1,95 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stone_and_banner/engine/advanced.dart';
+import 'package:stone_and_banner/engine/game.dart';
+import 'package:stone_and_banner/engine/match.dart';
+import 'package:stone_and_banner/ui/invasion_feedback.dart';
+
+import 'stage5_widget_test.dart' show drafted;
+
+void main() {
+  test('early fleet leaves Villages intact and explains why', () {
+    final before = drafted().copyWith(
+      phase: MatchPhase.invasion,
+      reaverPressure: 3,
+    );
+    final forecast = MatchEngine.invasionForecast(before);
+    final after = MatchEngine.apply(before, const ResolveInvasion());
+    expect(after.lastInvasion, forecast);
+    expect(forecast, contains('No damage: only Villages remain'));
+    expect(after.sites, before.sites);
+    expect(
+      after.players.map((p) => p.stores),
+      before.players.map((p) => p.stores),
+    );
+    expect(after.invasions, before.invasions + 1);
+    expect(after.reaverPressure, 0);
+    expect(before.reaverPressure, 3);
+  });
+
+  test('forecast and result explain Town loss, shield, and Honour', () {
+    final base = drafted().copyWith(
+      phase: MatchPhase.invasion,
+      reaverPressure: 3,
+    );
+    final v = base.sites.keys.first;
+    final town = base.copyWith(
+      sites: {...base.sites, v: Site(0, Structure.town)},
+    );
+    for (final state in [
+      town,
+      town.copyWith(fortified: {v}),
+      base.copyWith(
+        knights: {
+          v: const KnightPiece(0, KnightRank.champion, true, -1),
+          v + 1: const KnightPiece(0, KnightRank.warden, true, -1),
+        },
+      ),
+    ]) {
+      expect(
+        MatchEngine.invasionForecast(state),
+        MatchEngine.apply(state, const ResolveInvasion()).lastInvasion,
+      );
+    }
+    expect(
+      MatchEngine.invasionForecast(town),
+      contains('town downgraded to village'),
+    );
+    expect(MatchEngine.invasionForecast(town), contains('(-1 VP)'));
+    expect(
+      MatchEngine.invasionForecast(town.copyWith(fortified: {v})),
+      contains('lost the Fortification'),
+    );
+  });
+
+  testWidgets(
+    'resolution stays visible across following turns until dismissed',
+    (tester) async {
+      final before = drafted().copyWith(
+        phase: MatchPhase.invasion,
+        reaverPressure: 3,
+      );
+      Future<void> show(MatchState state) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: InvasionFeedback(state: state)),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await show(before);
+      expect(find.text('Invasion resolved'), findsNothing);
+      final after = MatchEngine.apply(before, const ResolveInvasion());
+      await show(after);
+      expect(find.text('Invasion resolved'), findsOneWidget);
+      expect(find.text(after.lastInvasion), findsOneWidget);
+      await show(after.copyWith(active: 1));
+      expect(find.text('Invasion resolved'), findsOneWidget);
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      await show(after.copyWith(active: 2));
+      expect(find.text('Invasion resolved'), findsNothing);
+    },
+  );
+}

@@ -903,6 +903,11 @@ class MatchEngine {
   static int invasionStrength(MatchState s) =>
       4 + s.invasions + (s.reaverPressure > 3 ? s.reaverPressure - 3 : 0);
 
+  /// Uses the same immutable resolution as the recorded event. Aid may still
+  /// change this forecast while a tactical window is open.
+  static String invasionForecast(MatchState s) =>
+      _resolveInvasion(s).lastInvasion;
+
   static int defenceStrength(MatchState s) =>
       s.knights.values
           .where((k) => k.active)
@@ -1488,7 +1493,7 @@ class MatchEngine {
         if (s.fortified.contains(vertex)) {
           result = result.copyWith(fortified: {...s.fortified}..remove(vertex));
           report =
-              'Invasion $threat–$strength. Fortifications at $vertex held, then fell.';
+              'Invasion $threat–$strength. ${s.players[site.owner].id} lost the Fortification at junction $vertex. The ${site.structure.name} and hand goods are safe.';
         } else {
           final next = site.structure == Structure.capital
               ? Structure.town
@@ -1523,10 +1528,14 @@ class MatchEngine {
             result = result.copyWith(players: players, bank: bank);
           }
           report =
-              'Invasion $threat–$strength. ${s.players[site.owner].id} lost a ${site.structure.name} at $vertex.';
+              'Invasion $threat–$strength. ${s.players[site.owner].id}: ${site.structure.name} downgraded to ${next.name} at junction $vertex '
+              '(-${site.structure == Structure.capital ? 2 : 1} VP). '
+              '${s.players[site.owner].level(StrategyDeck.governance) >= 3 ? 'Governance III protected hand goods.' : 'Up to two hand goods were raided.'}';
         }
       } else {
-        report = 'Invasion $threat–$strength. No Town to raid.';
+        report =
+            'Invasion $threat–$strength. No damage: only Villages remain. '
+            'The fleet raids Towns and Capitals; Villages are safe. No Honour awarded.';
       }
     }
     return result.copyWith(

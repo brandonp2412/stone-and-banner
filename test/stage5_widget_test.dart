@@ -189,6 +189,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(updated.invasionAid, 2);
     expect(find.text('Response for Cora'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Pass'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Pass'));
     await tester.pumpAndSettle();
     expect(updated.tactical, isNull);

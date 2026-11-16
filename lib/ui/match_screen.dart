@@ -1925,6 +1925,12 @@ class _TacticalPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
+        if (w.kind == TacticalKind.invasion)
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Expected outcome without more aid'),
+            children: [Text(MatchEngine.invasionForecast(state))],
+          ),
         if (w.kind == TacticalKind.bandit &&
             MatchEngine.canIntercept(state, responder))
           FilledButton.icon(
