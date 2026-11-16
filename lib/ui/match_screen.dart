@@ -11,6 +11,8 @@ import '../engine/match.dart';
 import '../replay_codes.dart';
 import 'strategy_hand.dart';
 import 'labels.dart';
+import 'dice_roll.dart';
+import 'trade_feedback.dart';
 
 enum _Move {
   inspect,
@@ -83,6 +85,20 @@ class _MatchViewState extends State<MatchView> {
     setState(() {
       choice = _Move.inspect;
       selectedKnight = null;
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant MatchView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (s.events.length <= oldWidget.state.events.length) return;
+    final result = latestTradeFeedback(s);
+    if (result == null || result == latestTradeFeedback(oldWidget.state)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(result)));
     });
   }
 
@@ -1235,7 +1251,13 @@ class _MatchViewState extends State<MatchView> {
       ];
     }
     if (_tab == 1) {
+      final result = latestTradeFeedback(s);
       return [
+        if (result != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(result, key: const ValueKey('trade-result')),
+          ),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
           onPressed: phase == MatchPhase.actions ? exchange : null,
@@ -1318,7 +1340,7 @@ class _MatchViewState extends State<MatchView> {
                       ),
                     ] else if (trade.proposer == s.active) ...[
                       const Text(
-                        'Your goods are reserved until accepted, declined, or expired.',
+                        'Waiting for their action turn. Your goods are reserved until accepted, declined, or expired.',
                       ),
                       Align(
                         alignment: Alignment.centerLeft,
@@ -1511,8 +1533,17 @@ class _MatchViewState extends State<MatchView> {
           foregroundColor: const Color(0xff28271e),
         ),
         onPressed: switch (s.phase) {
-          MatchPhase.roll => () {
+          MatchPhase.roll => () async {
+            final before = s;
             final pair = widget.online ? (0, 0) : MatchEngine.expectedDice(s);
+            if (!MediaQuery.disableAnimationsOf(context)) {
+              await showDialog<void>(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) => DiceRoll(first: pair.$1, second: pair.$2),
+              );
+            }
+            if (!mounted || !identical(s, before)) return;
             send(RollDice(pair.$1, pair.$2));
           },
           MatchPhase.actions => () => send(const EndTurn()),
