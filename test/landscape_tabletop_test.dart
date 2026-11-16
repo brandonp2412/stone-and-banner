@@ -265,23 +265,26 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('compact primary build and trade choices fit without scrolling', (
-    tester,
-  ) async {
-    await display(tester, const Size(640, 320), tableWithSupplies());
-    final turnTop = tester.getRect(find.text('End turn')).top;
-    for (final label in ['Road', 'Village', 'Upgrade']) {
-      expect(tester.getRect(find.text(label)).bottom, lessThan(turnTop));
-      expect(find.text(label).hitTestable(), findsOneWidget);
-    }
-    await tester.tap(find.text('Trade'));
-    await tester.pumpAndSettle();
-    for (final label in ['Bank trade', 'Player trade']) {
-      expect(tester.getRect(find.text(label)).bottom, lessThan(turnTop));
-      expect(find.text(label).hitTestable(), findsOneWidget);
-    }
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'compact build choices scroll while trade shortcuts and turn stay reachable',
+    (tester) async {
+      await display(tester, const Size(640, 320), tableWithSupplies());
+      final turnTop = tester.getRect(find.text('End turn')).top;
+      for (final label in ['Road', 'Village', 'Upgrade']) {
+        await tester.ensureVisible(find.text(label));
+        await tester.pumpAndSettle();
+        expect(find.text(label).hitTestable(), findsOneWidget);
+        expect(tester.getRect(find.text('End turn')).top, turnTop);
+      }
+      await tester.tap(find.text('Trade'));
+      await tester.pumpAndSettle();
+      for (final label in ['Bank trade', 'Player trade']) {
+        expect(tester.getRect(find.text(label)).bottom, lessThan(turnTop));
+        expect(find.text(label).hitTestable(), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('card actions wait for the roll and pending events', (
     tester,

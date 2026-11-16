@@ -391,6 +391,9 @@ class _MatchViewState extends State<MatchView> {
     if (mounted && event != null) send(event);
   }
 
+  final _panelScroll = List.generate(4, (_) => ScrollController());
+  bool _panelExpanded = false;
+
   bool get _compact => MediaQuery.sizeOf(context).height < 350;
 
   int _tab = 0;
@@ -399,6 +402,9 @@ class _MatchViewState extends State<MatchView> {
   @override
   void dispose() {
     _camera.dispose();
+    for (final controller in _panelScroll) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -484,21 +490,39 @@ class _MatchViewState extends State<MatchView> {
                       bounds.maxWidth >= 1200 && bounds.maxHeight >= 550;
                   final railWidth = desktop
                       ? (bounds.maxWidth * .25).clamp(320.0, 420.0)
-                      : bounds.maxWidth < 760
-                      ? 204.0
-                      : 252.0;
+                      : _panelExpanded
+                      ? math.min(460.0, bounds.maxWidth * .72)
+                      : math.min(320.0, bounds.maxWidth * .48);
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(child: _map()),
                       SizedBox(
-                        width: math.min(railWidth, bounds.maxWidth * .43),
+                        width: railWidth,
                         child: Material(
                           color: const Color(0xff182a31),
                           child: Column(
                             children: [
                               if (s.tactical == null && !widget.observing)
-                                _tabs(),
+                                Row(
+                                  children: [
+                                    Expanded(child: _tabs()),
+                                    if (!desktop)
+                                      IconButton(
+                                        tooltip: _panelExpanded
+                                            ? 'Narrow action panel'
+                                            : 'Expand action panel',
+                                        onPressed: () => setState(() {
+                                          _panelExpanded = !_panelExpanded;
+                                        }),
+                                        icon: Icon(
+                                          _panelExpanded
+                                              ? Icons.close_fullscreen
+                                              : Icons.open_in_full,
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               Expanded(
                                 child: widget.observing
                                     ? SingleChildScrollView(
@@ -561,15 +585,21 @@ class _MatchViewState extends State<MatchView> {
                                         onEvent: send,
                                         online: widget.online,
                                       )
-                                    : ListView(
-                                        key: ValueKey(
-                                          'panel-$_tab-${s.active}',
+                                    : Scrollbar(
+                                        controller: _panelScroll[_tab],
+                                        thumbVisibility: true,
+                                        interactive: true,
+                                        child: ListView(
+                                          controller: _panelScroll[_tab],
+                                          key: PageStorageKey(
+                                            'panel-$_tab-${s.active}',
+                                          ),
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: _compact ? 8 : 12,
+                                            vertical: _compact ? 4 : 12,
+                                          ),
+                                          children: _panelContents(phase),
                                         ),
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: _compact ? 8 : 12,
-                                          vertical: _compact ? 4 : 12,
-                                        ),
-                                        children: _panelContents(phase),
                                       ),
                               ),
                               if (s.tactical == null && !widget.observing)
@@ -606,7 +636,7 @@ class _MatchViewState extends State<MatchView> {
             24,
       );
       final width = math.max(
-        128.0,
+        128.0 * MediaQuery.textScalerOf(context).scale(12) / 12,
         (bounds.maxWidth - 50) / s.players.length - 6,
       );
       return Container(
@@ -991,49 +1021,46 @@ class _MatchViewState extends State<MatchView> {
     String name,
     String cost,
     bool enabled,
-  ) => Expanded(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Tooltip(
-        message: '$name · $cost',
-        child: OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
-            minimumSize: Size(0, _compact ? 48 : 64),
-            backgroundColor: choice == action
-                ? const Color(0xff354e4b)
-                : const Color(0xff20343c),
-            side: BorderSide(
-              color: choice == action
-                  ? const Color(0xffe5c183)
-                  : const Color(0xff40565b),
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          onPressed: enabled
-              ? () => setState(() {
-                  choice = action;
-                  selectedKnight = null;
-                })
-              : null,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 22),
-              const SizedBox(height: 3),
-              Text(
-                name,
-                maxLines: 1,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        minimumSize: const Size.fromHeight(52),
+        alignment: Alignment.centerLeft,
+        backgroundColor: choice == action
+            ? const Color(0xff354e4b)
+            : const Color(0xff20343c),
+        side: BorderSide(
+          color: choice == action
+              ? const Color(0xffe5c183)
+              : const Color(0xff40565b),
         ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      onPressed: enabled
+          ? () => setState(() {
+              choice = action;
+              selectedKnight = null;
+              _panelExpanded = false;
+            })
+          : null,
+      child: Row(
+        children: [
+          Icon(icon, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(cost, style: const TextStyle(fontSize: 11)),
+              ],
+            ),
+          ),
+          if (choice == action)
+            const Icon(Icons.check_circle_outline, size: 20),
+        ],
       ),
     ),
   );
@@ -1072,8 +1099,8 @@ class _MatchViewState extends State<MatchView> {
           ),
         ],
         if (phase == MatchPhase.actions) ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildAction(
                 _Move.road,
@@ -1100,6 +1127,7 @@ class _MatchViewState extends State<MatchView> {
           ),
           const SizedBox(height: 8),
           ExpansionTile(
+            key: PageStorageKey('knights-${s.active}'),
             title: const Text('Knights & defence'),
             subtitle: _compact
                 ? null
@@ -1337,6 +1365,7 @@ class _MatchViewState extends State<MatchView> {
     return [
       _heading('Your realm', 'Develop your towns and follow the race to 15.'),
       ExpansionTile(
+        key: PageStorageKey('developments-${s.active}'),
         tilePadding: EdgeInsets.zero,
         title: const Text('Town Developments'),
         subtitle: const Text(
