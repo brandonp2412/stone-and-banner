@@ -13,6 +13,7 @@ import 'strategy_hand.dart';
 import 'labels.dart';
 import 'dice_roll.dart';
 import 'trade_feedback.dart';
+import 'invasion_feedback.dart';
 
 enum _Move {
   inspect,
@@ -85,20 +86,6 @@ class _MatchViewState extends State<MatchView> {
     setState(() {
       choice = _Move.inspect;
       selectedKnight = null;
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant MatchView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (s.events.length <= oldWidget.state.events.length) return;
-    final result = latestTradeFeedback(s);
-    if (result == null || result == latestTradeFeedback(oldWidget.state)) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(result)));
     });
   }
 
@@ -427,6 +414,19 @@ class _MatchViewState extends State<MatchView> {
   @override
   void didUpdateWidget(covariant MatchView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final result = latestTradeFeedback(s);
+    if (s.events.length > oldWidget.state.events.length &&
+        result != null &&
+        s.events
+            .skip(oldWidget.state.events.length)
+            .any((e) => e is RespondTrade)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(result)));
+      });
+    }
     if (oldWidget.state.active != s.active ||
         oldWidget.state.phase != s.phase) {
       choice = _Move.inspect;
@@ -499,6 +499,7 @@ class _MatchViewState extends State<MatchView> {
         child: Column(
           children: [
             _playerBar(),
+            InvasionFeedback(state: s),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, bounds) {
@@ -1220,6 +1221,9 @@ class _MatchViewState extends State<MatchView> {
                     'Fleet strength ${MatchEngine.invasionStrength(s)} · Defence ${MatchEngine.defenceStrength(s) + s.invasionAid}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
+                  Text('Expected result: ${MatchEngine.invasionForecast(s)}'),
+                  if (s.tactical != null)
+                    const Text('Emergency aid can still change this result.'),
                   if (s.invasionAid > 0)
                     Text(
                       'Emergency aid +' +
