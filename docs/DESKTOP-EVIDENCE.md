@@ -1,5 +1,7 @@
 # Desktop layout verification — 16 November 2026
 
+**Current rendering status:** the CPU workaround described below has been removed. The pinned upstream engine now renders on the NVIDIA GPU; see [GPU proof and validation](GPU-RENDERING-EVIDENCE.md) and [toolchain setup](TOOLCHAIN.md). Earlier sections are historical evidence.
+
 Changes use the current checkout and retain the deterministic rules unchanged.
 
 - At widths of at least 1200 and home heights of at least 650, Home has a framed crest, separate menu column, and save information. Smaller windows retain the compact layout.

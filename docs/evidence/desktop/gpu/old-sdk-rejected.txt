@@ -1,0 +1,5 @@
+CMake Error at CMakeLists.txt:64 (message):
+  This SDK has not been verified for NVIDIA rendering.  Run
+  ./tool/setup_flutter, then ./tool/flutterw run -d linux.
+
+

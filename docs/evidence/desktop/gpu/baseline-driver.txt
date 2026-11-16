@@ -1,0 +1,3 @@
+00:00:00.050 [INFO] [render/egl.c:374] EGL vendor: NVIDIA
+00:00:00.105 [INFO] [render/gles2/renderer.c:540] GL vendor: NVIDIA Corporation
+00:00:00.105 [INFO] [render/gles2/renderer.c:541] GL renderer: NVIDIA GeForce RTX 4090/PCIe/SSE2

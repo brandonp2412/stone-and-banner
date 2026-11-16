@@ -4,6 +4,8 @@ Original offline-first Android strategy game built in **Flutter/Dart**. The app 
 
 ## Build and test
 
+Linux builds use the project-pinned Flutter SDK to avoid NVIDIA compositor clipping. Run `./tool/setup_flutter` once, then use `./tool/flutterw` in place of `flutter` in the commands below. See [toolchain setup](docs/TOOLCHAIN.md) and [GPU verification](docs/GPU-RENDERING-EVIDENCE.md).
+
 ```sh
 flutter pub get
 flutter analyze

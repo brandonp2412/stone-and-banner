@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Use the repository-pinned SDK. Bootstrap once with tool/setup_flutter.
+set -euo pipefail
+project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+sdk_root="$project_root/flutter"
+expected_revision=$(cat "$project_root/.flutter-revision")
+if [[ ! -x "$sdk_root/bin/flutter" ]]; then
+  echo 'Pinned Flutter SDK missing. Run ./tool/setup_flutter first.' >&2
+  exit 1
+fi
+actual_revision=$(git -C "$sdk_root" rev-parse HEAD)
+if [[ "$actual_revision" != "$expected_revision" ]]; then
+  echo 'Flutter SDK revision differs from .flutter-revision. Run ./tool/setup_flutter.' >&2
+  exit 1
+fi
+exec "$sdk_root/bin/flutter" "$@"
