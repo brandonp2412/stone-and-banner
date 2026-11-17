@@ -46,6 +46,3 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
-
-# Project-local pinned Flutter SDK (see tool/flutterw).
-/flutter/

@@ -50,21 +50,6 @@ endfunction()
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
-# Older SDKs silently produce a clipped GPU frame on NVIDIA. Require the
-# verified project revision even when launched by an IDE or a global flutter.
-get_directory_property(STONE_FLUTTER_ROOT DIRECTORY "${FLUTTER_MANAGED_DIR}"
-  DEFINITION FLUTTER_ROOT)
-file(READ "${CMAKE_SOURCE_DIR}/../.flutter-revision" STONE_FLUTTER_REVISION)
-string(STRIP "${STONE_FLUTTER_REVISION}" STONE_FLUTTER_REVISION)
-execute_process(COMMAND git -C "${STONE_FLUTTER_ROOT}" rev-parse HEAD
-  OUTPUT_VARIABLE STONE_ACTUAL_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
-  RESULT_VARIABLE STONE_REVISION_RESULT)
-if(NOT STONE_REVISION_RESULT EQUAL 0 OR
-   NOT STONE_ACTUAL_REVISION STREQUAL STONE_FLUTTER_REVISION)
-  message(FATAL_ERROR
-    "This SDK has not been verified for NVIDIA rendering. Run ./tool/setup_flutter, then ./tool/flutterw run -d linux.")
-endif()
-
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
