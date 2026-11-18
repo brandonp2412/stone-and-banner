@@ -38,14 +38,14 @@ void main() {
     await tester.tap(find.text("I'm ready"));
     await tester.pumpAndSettle();
     expect(
-      tester.getSize(find.byType(InteractiveViewer)).width,
+      tester.getSize(find.byKey(const ValueKey('realm-map'))).width,
       greaterThan(1400),
     );
     expect(find.text('Build').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
     tester.view.physicalSize = const Size(844, 390);
     await tester.pumpAndSettle();
-    expect(find.byType(InteractiveViewer), findsOneWidget);
+    expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

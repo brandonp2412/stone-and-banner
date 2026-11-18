@@ -1,3 +1,5 @@
+import 'action_helpers.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/advanced.dart';
@@ -70,7 +72,9 @@ void main() {
     final bankWoodBefore = s.bank[Resource.wood]!;
     final bankWoolBefore = s.bank[Resource.wool]!;
     await showMatch(tester, s, (v) => updated = v);
-    await tester.tap(find.text('Trade'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await scrollToAction(tester, 'Player trade');
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Bank trade'));
     await tester.tap(find.text('Bank trade'));
@@ -91,7 +95,7 @@ void main() {
     expect(find.text('Bank exchange'), findsNothing);
   });
 
-  testWidgets('standing offer reserves only once on its focused route', (
+  testWidgets('standing offer leaves goods available on its focused route', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(844, 390);
@@ -106,7 +110,9 @@ void main() {
     var updated = s;
     final before = s.players[0].stores[Resource.wood]!;
     await showMatch(tester, s, (v) => updated = v);
-    await tester.tap(find.text('Trade'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await scrollToAction(tester, 'Player trade');
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Player trade'),
@@ -121,11 +127,11 @@ void main() {
       find.byType(Dialog),
       findsOneWidget,
     ); // Negotiation overlays the tabletop.
-    await tester.tap(find.text('Escrow and offer'));
+    await tester.tap(find.text('Send offer'));
     await tester.pumpAndSettle();
     expect(updated.offers, hasLength(1));
     expect(updated.offers.single.give, Resource.wood);
-    expect(updated.players[0].stores[Resource.wood], before - 1);
+    expect(updated.players[0].stores[Resource.wood], before);
     expect(find.text('Standing offer'), findsNothing);
   });
 
@@ -198,8 +204,8 @@ void main() {
     await tester.tap(find.text('Pass'));
     await tester.pumpAndSettle();
     expect(updated.tactical, isNull);
-    expect(find.text('Resolve Invasion'), findsOneWidget);
-    expect(find.textContaining('Defence 2'), findsWidgets);
+    expect(find.text('Resolve'), findsOneWidget);
+    expect(find.textContaining('Def 2'), findsWidgets);
     expect(find.textContaining('Emergency aid +2'), findsOneWidget);
   });
 
@@ -230,7 +236,9 @@ void main() {
     }
     var updated = s;
     await showMatch(tester, s, (v) => updated = v);
-    await tester.tap(find.text('Trade'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await scrollToAction(tester, 'Player trade');
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Accept'),

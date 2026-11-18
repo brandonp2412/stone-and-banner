@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/cards.dart';
 import 'package:stone_and_banner/engine/match.dart';
@@ -22,9 +21,6 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        await (FontLoader('NotoSans')
-              ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf')))
-            .load();
         final initial = fixtures.holding(fixtures.prepared(), card);
         final accepted = <MatchEvent>[];
         var state = initial;
@@ -83,7 +79,13 @@ void main() {
             matching: find.byType(ListTile),
           );
           expect(choices, findsWidgets);
-          await tester.tap(choices.first);
+          await Scrollable.ensureVisible(
+            tester.element(choices.first),
+            alignment: .1,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+          );
+          await tester.pumpAndSettle();
+          tester.widget<ListTile>(choices.first).onTap!();
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         }

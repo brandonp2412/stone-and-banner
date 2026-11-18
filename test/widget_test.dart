@@ -10,7 +10,7 @@ Future<void> ready(WidgetTester tester) async {
 }
 
 Future<void> tapVertex(WidgetTester tester, MatchState state, int id) async {
-  final found = find.byType(InteractiveViewer);
+  final found = find.byKey(const ValueKey('realm-map'));
   final size = tester.getSize(found);
   final origin = tester.getTopLeft(found);
   await tester.tapAt(
@@ -20,7 +20,7 @@ Future<void> tapVertex(WidgetTester tester, MatchState state, int id) async {
 }
 
 Future<void> tapEdge(WidgetTester tester, MatchState state, int id) async {
-  final found = find.byType(InteractiveViewer);
+  final found = find.byKey(const ValueKey('realm-map'));
   final size = tester.getSize(found);
   final origin = tester.getTopLeft(found);
   final g = BoardGeometry(size);
@@ -96,7 +96,7 @@ void main() {
     await tester.pumpAndSettle();
     await ready(tester);
     expect(
-      tester.getSize(find.byType(InteractiveViewer)).width,
+      tester.getSize(find.byKey(const ValueKey('realm-map'))).width,
       greaterThan(1200),
     );
   });

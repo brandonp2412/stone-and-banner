@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/main.dart';
+import 'package:stone_and_banner/ui/resource_icon.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
   testWidgets('home, playable board and rules golden snapshots', (
     tester,
   ) async {
+    await tester.runAsync(loadResourceIcons);
     final fonts = FontLoader('NotoSans')
       ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     await fonts.load();
@@ -19,7 +21,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpWidget(StoneBannerApp(worldSeedFactory: () => 20261027));
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(Scaffold),
@@ -41,7 +43,22 @@ void main() {
       find.byType(Scaffold),
       matchesGoldenFile('goldens/board.png'),
     );
-    await tester.tap(find.byTooltip('Match menu'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(Scaffold),
+      matchesGoldenFile('goldens/actions.png'),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Rules'),
+      250,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('mobile-action-hub')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rules').last);
     await tester.pumpAndSettle();

@@ -1,5 +1,6 @@
+import 'action_helpers.dart';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/match.dart';
@@ -62,9 +63,6 @@ Future<void> display(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-  await (FontLoader(
-    'NotoSans',
-  )..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))).load();
   await tester.pumpWidget(
     MaterialApp(
       builder: textScaler == null
@@ -89,9 +87,25 @@ Future<void> display(
   );
   if (observing) {
     await tester.pump(const Duration(milliseconds: 100));
+  } else if (state.phase == MatchPhase.finished) {
+    // The finale intentionally has looping confetti/particles, so it cannot
+    // pumpAndSettle. Advance past its finite entrance animation instead.
+    await tester.pump(const Duration(milliseconds: 1200));
   } else {
     await tester.pumpAndSettle();
   }
+}
+
+Future<void> selectMobileCategory(WidgetTester tester, String category) async {
+  await scrollToAction(
+    tester,
+    {
+      'Build': 'Road',
+      'Trade': 'Player trade',
+      'Cards': 'Cards',
+      'Realm': 'Your realm',
+    }[category]!,
+  );
 }
 
 void main() {
@@ -115,9 +129,10 @@ void main() {
       textScaler: const NonlinearTestScaler(),
     );
     expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
     for (final tab in ['Trade', 'Cards', 'Realm', 'Build']) {
-      await tester.tap(find.text(tab));
-      await tester.pumpAndSettle();
+      await selectMobileCategory(tester, tab);
       expect(tester.takeException(), isNull, reason: tab);
     }
   });
@@ -132,9 +147,10 @@ void main() {
     final events = <MatchEvent>[];
     await display(tester, const Size(640, 320), state, onEvent: events.add);
     expect(find.text('Winner'), findsOneWidget);
+    expect(find.byKey(const ValueKey('match-finale-dialog')), findsOneWidget);
     expect(find.text('Taking a turn'), findsNothing);
-    final turn = find.widgetWithText(FilledButton, 'Match complete');
-    expect(tester.widget<FilledButton>(turn).onPressed, isNull);
+    // The finished match no longer shows a cramped disabled turn button.
+    expect(find.widgetWithText(FilledButton, 'Match complete'), findsNothing);
     expect(events, isEmpty);
     expect(tester.takeException(), isNull);
   });
@@ -183,30 +199,59 @@ void main() {
     (const Size(640, 320), 1.0),
     (const Size(844, 390), 1.0),
     (const Size(844, 390), 1.6),
-    (const Size(1024, 768), 2.0),
   ]) {
-    testWidgets('map and turn action stay fixed across panels at $variant', (
+    testWidgets('mobile stack returns to same board at $variant', (
       tester,
     ) async {
       await display(tester, variant.$1, tableWithSupplies(), scale: variant.$2);
-      final originalMap = tester.getRect(find.byType(InteractiveViewer));
-      final originalTurn = tester.getRect(find.text('End turn'));
+      final originalMap = tester.getRect(
+        find.byKey(const ValueKey('realm-map')),
+      );
       expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
       for (final tab in ['Trade', 'Cards', 'Realm', 'Build']) {
-        await tester.tap(find.text(tab));
-        await tester.pumpAndSettle();
-        expect(tester.getRect(find.byType(InteractiveViewer)), originalMap);
-        expect(tester.getRect(find.text('End turn')), originalTurn);
-        expect(
-          tester.takeException(),
-          isNull,
-          reason: '$tab panel at $variant',
-        );
+        await selectMobileCategory(tester, tab);
+        expect(find.text('End turn'), findsNothing);
+        expect(tester.takeException(), isNull, reason: tab);
       }
+      await tester.tap(find.byTooltip('Back to map'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byKey(const ValueKey('realm-map'))),
+        originalMap,
+      );
+      expect(find.text('End turn').hitTestable(), findsOneWidget);
     });
   }
 
-  testWidgets('target list dispatches the selected junction after map zoom', (
+  testWidgets('setup button opens legal choices instead of being disabled', (
+    tester,
+  ) async {
+    final initial = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 804);
+    MatchEvent? event;
+    await display(
+      tester,
+      const Size(844, 390),
+      initial,
+      onEvent: (value) => event = value,
+    );
+    expect(find.text('Site').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Site'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose legal board target'), findsOneWidget);
+    final first = find
+        .descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byType(ListTile),
+        )
+        .first;
+    tester.widget<ListTile>(first).onTap!();
+    await tester.pumpAndSettle();
+    expect(event, isA<PlaceVillage>());
+  });
+
+  testWidgets('target list dispatches the selected junction with a fixed map', (
     tester,
   ) async {
     final state = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 804);
@@ -217,11 +262,8 @@ void main() {
       state,
       onEvent: (value) => event = value,
     );
-    final viewer = tester.widget<InteractiveViewer>(
-      find.byType(InteractiveViewer),
-    );
-    viewer.transformationController!.value = Matrix4.diagonal3Values(2, 2, 1);
-    await tester.pump();
+    expect(find.byType(InteractiveViewer), findsNothing);
+    expect(find.byTooltip('Reset map zoom'), findsNothing);
     await tester.tap(find.byTooltip('Choose board target from list'));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(ListTile).first);
@@ -251,11 +293,12 @@ void main() {
         observing: true,
         onEvent: events.add,
       );
-      expect(find.text('Computer turn'), findsOneWidget);
-      expect(find.text('Private hands are concealed'), findsOneWidget);
+      expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
+      expect(find.text('Watch the realm grow.'), findsNothing);
+      expect(find.text('Private hands are concealed'), findsNothing);
       expect(find.text('Build'), findsNothing);
       expect(find.byTooltip('Choose board target from list'), findsNothing);
-      final map = find.byType(InteractiveViewer);
+      final map = find.byKey(const ValueKey('realm-map'));
       final point = BoardGeometry(
         tester.getSize(map),
       ).vertex(state.topology.vertices[MatchEngine.legalVertices(state).first]);
@@ -265,26 +308,28 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets(
-    'compact build choices scroll while trade shortcuts and turn stay reachable',
-    (tester) async {
-      await display(tester, const Size(640, 320), tableWithSupplies());
-      final turnTop = tester.getRect(find.text('End turn')).top;
-      for (final label in ['Road', 'Village', 'Upgrade']) {
-        await tester.ensureVisible(find.text(label));
-        await tester.pumpAndSettle();
-        expect(find.text(label).hitTestable(), findsOneWidget);
-        expect(tester.getRect(find.text('End turn')).top, turnTop);
-      }
-      await tester.tap(find.text('Trade'));
+  testWidgets('compact build and trade get space without turn footer', (
+    tester,
+  ) async {
+    await display(tester, const Size(640, 320), tableWithSupplies());
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await scrollToAction(tester, 'Road');
+    await tester.pumpAndSettle();
+    expect(find.text('End turn'), findsNothing);
+    for (final label in ['Road', 'Village', 'Upgrade']) {
+      await tester.ensureVisible(find.text(label));
       await tester.pumpAndSettle();
-      for (final label in ['Bank trade', 'Player trade']) {
-        expect(tester.getRect(find.text(label)).bottom, lessThan(turnTop));
-        expect(find.text(label).hitTestable(), findsOneWidget);
-      }
-      expect(tester.takeException(), isNull);
-    },
-  );
+      expect(find.text(label).hitTestable(), findsOneWidget);
+    }
+
+    await scrollToAction(tester, 'Player trade');
+    await tester.pumpAndSettle();
+    for (final label in ['Bank trade', 'Player trade']) {
+      expect(find.text(label).hitTestable(), findsOneWidget);
+    }
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('card actions wait for the roll and pending events', (
     tester,
@@ -294,13 +339,18 @@ void main() {
       const Size(844, 390),
       tableWithSupplies().copyWith(phase: MatchPhase.roll),
     );
-    await tester.tap(find.text('Cards'));
+    await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();
+    await selectMobileCategory(tester, 'Cards');
     expect(
-      find.text('Roll and resolve pending events before playing cards.'),
+      find.text('Roll the dice before playing your strategy cards.'),
       findsOneWidget,
     );
     expect(find.textContaining('Strategy hand'), findsNothing);
+    expect(find.text('Roll dice'), findsNothing);
+    expect(find.text('Return to board'), findsOneWidget);
+    await tester.tap(find.text('Return to board'));
+    await tester.pumpAndSettle();
     expect(find.text('Roll dice'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

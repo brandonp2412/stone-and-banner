@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../network/lan_client.dart';
+import '../engine/world_seed.dart';
 import 'match_screen.dart';
 
 class LanRoomPage extends StatefulWidget {
@@ -17,7 +19,6 @@ class _LanRoomPageState extends State<LanRoomPage> {
   final address = TextEditingController();
   final name = TextEditingController(text: 'Player');
   final roomCode = TextEditingController();
-  final boardSeed = TextEditingController(text: '20261027');
   String? savedRoom, savedToken;
   bool host = true;
   int seats = 3;
@@ -70,14 +71,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
 
   void _createOrJoin() {
     if (host) {
-      final seed = int.tryParse(boardSeed.text);
-      if (seed == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a numeric board seed.')),
-        );
-        return;
-      }
-      client.host(address.text, name.text, seats, seed);
+      client.host(address.text, name.text, seats, randomWorldSeed());
     } else {
       client.join(address.text, name.text, roomCode.text);
     }
@@ -90,7 +84,6 @@ class _LanRoomPageState extends State<LanRoomPage> {
     address.dispose();
     name.dispose();
     roomCode.dispose();
-    boardSeed.dispose();
     super.dispose();
   }
 
@@ -215,15 +208,6 @@ class _LanRoomPageState extends State<LanRoomPage> {
               selected: {seats},
               onSelectionChanged: (value) =>
                   setState(() => seats = value.first),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: boardSeed,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Board seed',
-              ),
             ),
           ] else
             TextField(

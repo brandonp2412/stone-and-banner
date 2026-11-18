@@ -49,9 +49,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pumpWidget(const StoneBannerApp());
       await tester.pumpAndSettle();
-      expect(find.text('Continue saved match'), findsOneWidget);
-      await tester.tap(find.text('Continue saved match'));
-      await tester.pumpAndSettle();
+      expect(find.text('Raise a town.\nShape a realm.'), findsNothing);
       expect(find.text('Pass the device'), findsOneWidget);
       expect(find.textContaining('glowing edge'), findsNothing);
       await tester.tap(find.text("I'm ready"));
@@ -74,7 +72,7 @@ void main() {
       expect(later.events.length, 2);
       expect(later.phase, MatchPhase.setupVillage);
 
-      await tester.tap(find.byTooltip('Match menu'));
+      await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Home').last);
       await tester.pumpAndSettle();
@@ -92,8 +90,6 @@ void main() {
     });
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Continue saved match'));
-    await tester.pump();
     expect(find.textContaining('Saved replay is invalid'), findsOneWidget);
     expect(find.text('Pass the device'), findsNothing);
   });

@@ -1,5 +1,6 @@
+import 'action_helpers.dart';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/engine/board.dart';
@@ -24,9 +25,6 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        await (FontLoader('NotoSans')
-              ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf')))
-            .load();
         var state = reactions.grant(
           reactions.draft(109).copyWith(phase: MatchPhase.actions),
           1,
@@ -66,7 +64,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('Governance challenge'), findsOneWidget);
-        expect(find.text('Private hands are concealed'), findsOneWidget);
+        expect(find.text('Private hands are concealed'), findsNothing);
         await tester.scrollUntilVisible(
           find.text(response),
           80,
@@ -92,8 +90,8 @@ void main() {
     for (final action in {
       'Fortify': 'fortify',
       'Recruit Knight': 'recruit',
-      'Activate': 'activate',
-      'Promote': 'promote',
+      'Activate Knight': 'activate',
+      'Upgrade Knight': 'promote',
       'Move Knight': 'knightMove',
     }.entries) {
       testWidgets('${action.key} through the tabletop at scale $scale', (
@@ -107,9 +105,6 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        await (FontLoader('NotoSans')
-              ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf')))
-            .load();
         final initial = fixtures.prepared();
         var state = initial;
         final accepted = <MatchEvent>[];
@@ -134,14 +129,18 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        final map = tester.getRect(find.byType(InteractiveViewer));
+        final map = tester.getRect(find.byKey(const ValueKey('realm-map')));
+        await tester.tap(find.text('Actions'));
+        await tester.pumpAndSettle();
+        await scrollToAction(tester, 'Road');
+        await tester.pumpAndSettle();
         await tester.scrollUntilVisible(
-          find.text('Knights & defence'),
+          find.text('Knights & Defense'),
           80,
           scrollable: find.byType(Scrollable).last,
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Knights & defence'));
+        await tester.tap(find.text('Knights & Defense'));
         await tester.pumpAndSettle();
         await tester.scrollUntilVisible(
           find.text(action.key),
@@ -163,12 +162,18 @@ void main() {
             matching: find.byType(ListTile),
           );
           expect(targets, findsWidgets);
-          await tester.tap(targets.first);
+          await Scrollable.ensureVisible(
+            tester.element(targets.first),
+            alignment: .1,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+          );
+          await tester.pumpAndSettle();
+          tester.widget<ListTile>(targets.first).onTap!();
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         }
         expect(accepted.single.toJson()['type'], action.value);
-        expect(tester.getRect(find.byType(InteractiveViewer)), map);
+        expect(tester.getRect(find.byKey(const ValueKey('realm-map'))), map);
         fixtures.checkConservation(state);
         expect(
           MatchEngine.snapshot(state),

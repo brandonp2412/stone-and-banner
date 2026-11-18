@@ -46,9 +46,7 @@ void main() {
     },
   );
 
-  testWidgets('invalid seed shows an error without Navigator/Scaffold crash', (
-    tester,
-  ) async {
+  testWidgets('new match starts without a world seed input', (tester) async {
     tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -59,9 +57,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Player names'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Player names'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'wrong');
+    expect(find.text('World seed'), findsNothing);
     await tester.scrollUntilVisible(
       find.text('Start match'),
       200,
@@ -69,8 +65,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start match'));
-    await tester.pump();
-    expect(find.text('Enter a numeric world seed.'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Pass the device'), findsOneWidget);
   });
 
   testWidgets('invalid replay never echoes pasted code or parser internals', (

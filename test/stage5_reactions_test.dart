@@ -47,10 +47,7 @@ void conserved(MatchState s) {
       0,
       (sum, p) => sum + (p.stores[good] ?? 0),
     );
-    final escrow = s.offers
-        .where((o) => o.give == good)
-        .fold<int>(0, (sum, o) => sum + o.giveCount);
-    expect(free + escrow + s.bank[good]!, 19, reason: good.name);
+    expect(free + s.bank[good]!, 19, reason: good.name);
     expect(s.bank[good], greaterThanOrEqualTo(0));
     for (final p in s.players) {
       expect(p.stores[good] ?? 0, greaterThanOrEqualTo(0));
@@ -85,7 +82,7 @@ MatchState rollOrResolve(MatchState s) {
 
 void main() {
   test(
-    'standing escrow survives turns, accepts once, and replays end-to-end',
+    'standing offer survives turns, accepts once, and replays end-to-end',
     () {
       MatchState? result;
       for (var seed = 1; seed < 300 && result == null; seed++) {
@@ -104,10 +101,13 @@ void main() {
         final id = s.offers.single.id;
         conserved(s);
         expect(s.players[0].stores[give] ?? 0, greaterThanOrEqualTo(0));
-        expect(
-          () => MatchEngine.apply(s, RespondTrade(1, true, offerId: id)),
-          throwsStateError,
-        ); // Not Ben's turn.
+        final immediate = MatchEngine.apply(
+          s,
+          RespondTrade(1, true, offerId: id),
+        );
+        expect(immediate.active, 0);
+        expect(immediate.offers, isEmpty);
+        conserved(immediate);
         s = MatchEngine.apply(s, const EndTurn());
         expect(s.active, 1);
         s = rollOrResolve(s);
@@ -129,86 +129,94 @@ void main() {
     },
   );
 
-  test('counter replaces escrow once; expiration and withdrawal refund exactly once', () {
-    var s = grant(
-      grant(draft(88).copyWith(phase: MatchPhase.actions), 0, Resource.wood, 3),
-      1,
-      Resource.brick,
-      3,
-    );
-    s = MatchEngine.apply(
-      s,
-      const ProposeTrade(1, Resource.wood, 2, Resource.brick, 1),
-    );
-    final original = s.offers.single;
-    conserved(s);
-    expect(
-      () => MatchEngine.apply(
-        s,
-        const ProposeTrade(2, Resource.wood, 1, Resource.wool, 1),
-      ),
-      throwsStateError,
-    );
-    s = rollOrResolve(MatchEngine.apply(s, const EndTurn()));
-    s = MatchEngine.apply(
-      s,
-      ProposeTrade(
-        0,
-        Resource.brick,
-        2,
-        Resource.wood,
+  test(
+    'counter replaces offers; expiration and withdrawal leave hands unchanged',
+    () {
+      var s = grant(
+        grant(
+          draft(88).copyWith(phase: MatchPhase.actions),
+          0,
+          Resource.wood,
+          3,
+        ),
         1,
-        counterOf: original.id,
-      ),
-    );
-    final counter = s.offers.single;
-    expect(counter.isCounter, isTrue);
-    expect(s.players[0].stores[Resource.wood] ?? 0, greaterThanOrEqualTo(2));
-    expect(
-      () => MatchEngine.apply(
+        Resource.brick,
+        3,
+      );
+      s = MatchEngine.apply(
+        s,
+        const ProposeTrade(1, Resource.wood, 2, Resource.brick, 1),
+      );
+      final original = s.offers.single;
+      conserved(s);
+      expect(
+        () => MatchEngine.apply(
+          s,
+          const ProposeTrade(2, Resource.wood, 1, Resource.wool, 1),
+        ),
+        throwsStateError,
+      );
+      s = rollOrResolve(MatchEngine.apply(s, const EndTurn()));
+      s = MatchEngine.apply(
         s,
         ProposeTrade(
           0,
           Resource.brick,
-          1,
+          2,
           Resource.wood,
           1,
-          counterOf: counter.id,
+          counterOf: original.id,
         ),
-      ),
-      throwsStateError,
-    );
-    s = rollOrResolve(MatchEngine.apply(s, const EndTurn()));
-    s = MatchEngine.apply(s, const EndTurn());
-    expect(s.active, 0);
-    s = rollOrResolve(s);
-    s = MatchEngine.apply(s, RespondTrade(0, true, offerId: counter.id));
-    conserved(s);
-    expect(s.offers, isEmpty);
+      );
+      final counter = s.offers.single;
+      expect(counter.isCounter, isTrue);
+      expect(s.players[0].stores[Resource.wood] ?? 0, greaterThanOrEqualTo(2));
+      expect(
+        () => MatchEngine.apply(
+          s,
+          ProposeTrade(
+            0,
+            Resource.brick,
+            1,
+            Resource.wood,
+            1,
+            counterOf: counter.id,
+          ),
+        ),
+        throwsStateError,
+      );
+      s = rollOrResolve(MatchEngine.apply(s, const EndTurn()));
+      s = MatchEngine.apply(s, const EndTurn());
+      expect(s.active, 0);
+      s = rollOrResolve(s);
+      s = MatchEngine.apply(s, RespondTrade(0, true, offerId: counter.id));
+      conserved(s);
+      expect(s.offers, isEmpty);
 
-    s = MatchEngine.apply(
-      s,
-      const ProposeTrade(1, Resource.wood, 1, Resource.brick, 1),
-    );
-    final withdrawal = s.offers.single.id;
-    s = MatchEngine.apply(s, WithdrawTrade(withdrawal));
-    conserved(s);
-    expect(
-      () => MatchEngine.apply(s, WithdrawTrade(withdrawal)),
-      throwsStateError,
-    );
+      s = MatchEngine.apply(
+        s,
+        const ProposeTrade(1, Resource.wood, 1, Resource.brick, 1),
+      );
+      final withdrawal = s.offers.single.id;
+      s = MatchEngine.apply(s, WithdrawTrade(withdrawal));
+      conserved(s);
+      expect(
+        () => MatchEngine.apply(s, WithdrawTrade(withdrawal)),
+        throwsStateError,
+      );
 
-    s = MatchEngine.apply(
-      s,
-      const ProposeTrade(2, Resource.wood, 1, Resource.brick, 1),
-    );
-    s = rollOrResolve(MatchEngine.apply(s, const EndTurn()));
-    s = rollOrResolve(MatchEngine.apply(s, const EndTurn()));
-    s = MatchEngine.apply(s, const EndTurn());
-    expect(s.active, 0);
-    expect(s.offers, isEmpty);
-    conserved(s);
-  });
+      s = MatchEngine.apply(
+        s,
+        const ProposeTrade(2, Resource.wood, 1, Resource.brick, 1),
+      );
+      s = rollOrResolve(MatchEngine.apply(s, const EndTurn()));
+      s = rollOrResolve(MatchEngine.apply(s, const EndTurn()));
+      s = MatchEngine.apply(s, const EndTurn());
+      expect(s.active, 0);
+      expect(s.offers, isEmpty);
+      conserved(s);
+    },
+  );
 
   test(
     'Bandit active Knight intercepts before theft; pass steals only once',

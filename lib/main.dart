@@ -1,15 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'engine/ai_turn_coordinator.dart';
 import 'engine/match.dart';
+import 'engine/heuristic_ai.dart';
+import 'engine/world_seed.dart';
 import 'replay_codes.dart';
 import 'ui/match_screen.dart';
+import 'ui/game_notice.dart';
+import 'ui/resource_icon.dart';
 import 'ui/lan_room_page.dart';
+
+MatchEvent? _chooseComputerEvent(MatchState state) =>
+    const HeuristicAi().choose(state);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,13 +26,19 @@ Future<void> main() async {
     DeviceOrientation.landscapeRight,
   ]);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  registerResourceIconLicenses();
+  await Future.wait([loadResourceIcons(), restoreResourceIconStyle()]);
   runApp(const StoneBannerApp());
 }
 
 enum Page { home, board, rules, setup }
 
 class StoneBannerApp extends StatefulWidget {
-  const StoneBannerApp({super.key});
+  const StoneBannerApp({super.key, this.worldSeedFactory = randomWorldSeed});
+
+  /// Production games get a fresh seed; tests may supply a fixed seed.
+  final int Function() worldSeedFactory;
+
   @override
   State<StoneBannerApp> createState() => _StoneBannerAppState();
 }
@@ -37,7 +51,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   Set<int> aiSeats = <int>{};
   Set<int> savedAiSeats = <int>{};
   bool computerOpponents = false;
-  int aiOpponentCount = 1;
+  int aiOpponentCount = 2; // Solo play by default when Vs AI is chosen.
 
   int get humanSeats => seats - (computerOpponents ? aiOpponentCount : 0);
   bool get soloHumanVsAi => computerOpponents && humanSeats == 1;
@@ -53,7 +67,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     final s = match;
     return s != null &&
         s.phase != MatchPhase.finished &&
-        aiSeats.contains(s.tactical?.responder ?? s.active);
+        aiSeats.contains(AiTurnCoordinator.actingSeat(s, aiSeats.contains));
   }
 
   void _syncAi() {
@@ -110,6 +124,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       read: () => match,
       commit: _commitAi,
       isComputerSeat: (seat) => aiSeats.contains(seat),
+      // Give each committed computer action room for its on-screen animation.
+      delay: const Duration(milliseconds: 950),
+      decide: (state) => compute(_chooseComputerEvent, state),
       onError: (error) {
         if (mounted) setState(() => aiError = error.toString());
       },
@@ -144,6 +161,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           savedReplay = replay;
           savedAiSeats = seats;
         });
+        // Do not interrupt navigation if storage finishes loading late.
+        if (replay != null && page == Page.home) resume();
       }
     } on Object {
       if (mounted) fail('Could not load the saved local match.');
@@ -203,7 +222,6 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   MatchState? match;
   bool handoff = false;
   int seats = 3;
-  final seed = TextEditingController(text: '20261027');
   final names = [
     for (var i = 1; i <= 4; i++) TextEditingController(text: 'Player $i'),
   ];
@@ -212,7 +230,6 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   void dispose() {
     ai.pause();
     WidgetsBinding.instance.removeObserver(this);
-    seed.dispose();
     for (final n in names) {
       n.dispose();
     }
@@ -222,14 +239,10 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   void fail(String text) {
     messengerKey.currentState
       ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text)));
+      ..showSnackBar(GameNotice.snackBar(text, error: true));
   }
 
   Future<void> confirmStart(BuildContext dialogContext) async {
-    if (int.tryParse(seed.text.trim()) == null) {
-      fail('Enter a numeric world seed.');
-      return;
-    }
     final humanNames = [
       for (var i = 0; i < humanSeats; i++) names[i].text.trim(),
     ];
@@ -276,7 +289,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           i >= firstComputer
               ? 'Computer ${i - firstComputer + 1}'
               : names[i].text.trim(),
-      ], int.parse(seed.text));
+      ], widget.worldSeedFactory());
       ai.pause();
       setState(() {
         match = s;
@@ -290,11 +303,42 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       });
       _save(s);
       _syncAi();
-    } on FormatException {
-      fail('Enter a numeric seed.');
     } on StateError catch (e) {
       fail(e.message);
     }
+  }
+
+  Future<void> _showMatchActions(BuildContext parentContext) async {
+    ai.pause();
+    await showDialog<void>(
+      context: parentContext,
+      builder: (dialogContext) => Dialog.fullscreen(
+        child: SafeArea(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.arrow_back),
+                title: const Text('Actions'),
+                onTap: () => Navigator.pop(dialogContext),
+              ),
+              for (final entry in [
+                ('Rules', Page.rules, Icons.menu_book),
+                ('Home', Page.home, Icons.home_outlined),
+              ])
+                ListTile(
+                  leading: Icon(entry.$3),
+                  title: Text(entry.$1),
+                  onTap: () {
+                    Navigator.pop(dialogContext);
+                    setState(() => page = entry.$2);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (mounted) _syncAi();
   }
 
   void dispatch(MatchEvent event) {
@@ -456,33 +500,26 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     fontSize: 12,
                   ),
                 ),
-                ExpansionTile(
-                  title: const Text('Player names'),
-                  subtitle: const Text('Names and world seed'),
-                  tilePadding: EdgeInsets.zero,
-                  children: [
-                    for (var i = 0; i < humanSeats; i++)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: TextField(
-                          controller: names[i],
-                          textCapitalization: TextCapitalization.words,
-                          decoration: InputDecoration(
-                            labelText: 'Player ${i + 1}',
-                            border: const OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                    TextField(
-                      controller: seed,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'World seed',
-                        border: OutlineInputBorder(),
+                const SizedBox(height: 16),
+                Text(
+                  'Player names',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                const Text('Choose names for human players'),
+                const SizedBox(height: 16),
+                for (var i = 0; i < humanSeats; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TextField(
+                      controller: names[i],
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: 'Player ${i + 1}',
+                        border: const OutlineInputBorder(),
                       ),
                     ),
-                  ],
-                ),
+                  ),
               ],
             ),
           ),
@@ -647,6 +684,16 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                           : MatchView(
                               state: current,
                               onEvent: dispatch,
+                              onHome: () {
+                                ai.pause();
+                                setState(() => page = Page.home);
+                              },
+                              onRules: () {
+                                ai.pause();
+                                setState(() => page = Page.rules);
+                              },
+                              computerSeats: aiSeats,
+                              visibleSeat: oneHumanMatch ? 0 : current.active,
                               observing: aiActing,
                               automationError: aiError,
                               onResumeAutomation: () {
@@ -688,18 +735,19 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                               'First to 15 Victory Points wins. Village = 1, Town = 2, Capital = 4; the longest road of at least five sides earns 2.',
                             ),
                             const Divider(height: 24),
-                            ExpansionTile(
-                              title: const Text('Advanced play'),
-                              subtitle: const Text(
-                                'Knights, cards, seasons and reactions',
-                              ),
-                              childrenPadding: const EdgeInsets.fromLTRB(
-                                16,
-                                8,
-                                16,
-                                0,
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: const [
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Text(
+                                    'Advanced play',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
                                 _Rule(
                                   'Town Developments',
                                   'Innovation, Commerce and Governance have five tiers each. Developed Towns can produce paper, cloth and coin.',
@@ -718,18 +766,19 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                 ),
                               ],
                             ),
-                            ExpansionTile(
-                              title: const Text('Glossary'),
-                              subtitle: const Text(
-                                'Goods, structures and turn terms',
-                              ),
-                              childrenPadding: const EdgeInsets.fromLTRB(
-                                16,
-                                8,
-                                16,
-                                0,
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: const [
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Text(
+                                    'Glossary',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
                                 _Rule(
                                   'Basic goods',
                                   'Wood, brick, wheat, wool and ore pay for roads, structures and Knights.',
@@ -827,6 +876,16 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                         ),
                                         label: const Text("I'm ready"),
                                       ),
+                                      Builder(
+                                        builder: (context) => TextButton.icon(
+                                          onPressed: () =>
+                                              _showMatchActions(context),
+                                          icon: const Icon(
+                                            Icons.layers_outlined,
+                                          ),
+                                          label: const Text('Actions'),
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -834,29 +893,6 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  if (page == Page.board)
-                    Positioned(
-                      top: 3 + MediaQuery.paddingOf(context).top,
-                      right: 4 + MediaQuery.paddingOf(context).right,
-                      child: PopupMenuButton<String>(
-                        tooltip: 'Match menu',
-                        onOpened: ai.pause,
-                        onCanceled: _syncAi,
-                        icon: const Icon(Icons.more_vert, size: 20),
-                        onSelected: (value) {
-                          ai.pause();
-                          setState(
-                            () => page = value == 'rules'
-                                ? Page.rules
-                                : Page.home,
-                          );
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'home', child: Text('Home')),
-                          PopupMenuItem(value: 'rules', child: Text('Rules')),
-                        ],
                       ),
                     ),
                 ],
@@ -951,6 +987,8 @@ class _LandingHall extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
+      final compactLandscape =
+          box.maxWidth > box.maxHeight && box.maxHeight < 560;
       final artwork = Stack(
         fit: StackFit.expand,
         children: [
@@ -1000,40 +1038,43 @@ class _LandingHall extends StatelessWidget {
       );
       final menu = Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.symmetric(
+            horizontal: compactLandscape ? 16 : 24,
+            vertical: compactLandscape ? 8 : 24,
+          ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   'Stone & Banner',
                   style: TextStyle(
-                    fontSize: 27,
+                    fontSize: compactLandscape ? 23 : 27,
                     fontWeight: FontWeight.w700,
                     color: Color(0xffefd6a3),
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: compactLandscape ? 4 : 8),
                 const Text(
                   'Build, trade and defend your way to 15 Victory Points.',
                   style: TextStyle(color: Color(0xffabbfc2), fontSize: 13),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: compactLandscape ? 10 : 20),
                 if (onContinue != null) ...[
                   FilledButton.icon(
                     onPressed: onContinue,
                     icon: const Icon(Icons.play_arrow_rounded),
                     label: const Text('Continue saved match'),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: compactLandscape ? 4 : 8),
                 ],
                 FilledButton.tonalIcon(
                   onPressed: onNew,
                   icon: const Icon(Icons.add),
                   label: const Text('New local match'),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: compactLandscape ? 4 : 8),
                 Wrap(
                   alignment: WrapAlignment.center,
                   spacing: 6,
@@ -1055,16 +1096,18 @@ class _LandingHall extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'OFFLINE PLAY  ·  LOCAL AI  ·  3–4 SEATS',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.3,
-                    color: Color(0xff8fa9ac),
+                if (!compactLandscape) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'OFFLINE PLAY  ·  LOCAL AI  ·  3–4 SEATS',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 10,
+                      letterSpacing: 1.3,
+                      color: Color(0xff8fa9ac),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

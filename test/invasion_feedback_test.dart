@@ -56,9 +56,11 @@ void main() {
       contains('town downgraded to village'),
     );
     expect(MatchEngine.invasionForecast(town), contains('(-1 VP)'));
+    // A single upgraded settlement now has strength 1, so one Fort
+    // is enough to repel the assault instead of being destroyed.
     expect(
       MatchEngine.invasionForecast(town.copyWith(fortified: {v})),
-      contains('lost the Fortification'),
+      contains('Defended 1–1'),
     );
   });
 

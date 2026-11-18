@@ -16,6 +16,12 @@ flutter:
   uses-material-design: true
   assets:
     - assets/art/stone_banner_crest.jpg
+    - assets/icons/
+    - assets/icons/game-icons/
+    - assets/icons/mdi/
+    - assets/icons/fluent-emoji-flat/
+    - assets/icons/noto/
+    - assets/icons/twemoji/
   fonts:
     - family: NotoSans
       fonts:

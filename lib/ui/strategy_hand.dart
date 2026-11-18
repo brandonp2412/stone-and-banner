@@ -76,10 +76,12 @@ class StrategyHand extends StatelessWidget {
     required this.state,
     required this.onEvent,
     this.onlineOptions,
+    this.onOpenRealm,
   });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
   final Map? onlineOptions;
+  final VoidCallback? onOpenRealm;
 
   String _optionLabel(StrategyCard card, PlayStrategyCard option) {
     switch (card.power) {
@@ -384,6 +386,53 @@ class StrategyHand extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            if (state.current.cards.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xff20343c),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xff40565b)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.style_outlined,
+                        size: 28,
+                        color: Color(0xffe5c183),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'No strategy cards yet',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              'Develop Town tracks to unlock card draws.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Color(0xffabbfc2),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (onOpenRealm != null) ...[
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: onOpenRealm,
+                          child: const Text('Develop'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
             for (var i = 0; i < state.current.cards.length; i++)
               Padding(
                 padding: const EdgeInsets.only(top: 10),

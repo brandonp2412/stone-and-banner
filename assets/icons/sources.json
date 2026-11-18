@@ -1,0 +1,107 @@
+{
+  "game-icons": {
+    "source": {
+      "name": "GameIcons",
+      "url": "https://github.com/game-icons/icons"
+    },
+    "license": {
+      "title": "CC BY 3.0",
+      "spdx": "CC-BY-3.0",
+      "url": "https://github.com/game-icons/icons/blob/master/license.txt"
+    },
+    "icons": {
+      "wood": "wood-pile",
+      "brick": "clay-brick",
+      "wheat": "wheat",
+      "wool": "sheep",
+      "ore": "ore",
+      "paper": "scroll-unfurled",
+      "cloth": "rolled-cloth",
+      "coin": "two-coins"
+    }
+  },
+  "mdi": {
+    "source": {
+      "name": "Pictogrammers",
+      "url": "https://github.com/Templarian/MaterialDesign"
+    },
+    "license": {
+      "title": "Apache 2.0",
+      "spdx": "Apache-2.0",
+      "url": "https://github.com/Templarian/MaterialDesign/blob/master/LICENSE"
+    },
+    "icons": {
+      "wood": "pine-tree",
+      "brick": "wall",
+      "wheat": "barley",
+      "wool": "sheep",
+      "ore": "diamond-stone",
+      "paper": "file-document",
+      "cloth": "tshirt-crew",
+      "coin": "circle-multiple"
+    }
+  },
+  "fluent-emoji-flat": {
+    "source": {
+      "name": "Microsoft Corporation",
+      "url": "https://github.com/microsoft/fluentui-emoji"
+    },
+    "license": {
+      "title": "MIT",
+      "spdx": "MIT",
+      "url": "https://github.com/microsoft/fluentui-emoji/blob/main/LICENSE"
+    },
+    "icons": {
+      "wood": "wood",
+      "brick": "brick",
+      "wheat": "sheaf-of-rice",
+      "wool": "ewe",
+      "ore": "rock",
+      "paper": "scroll",
+      "cloth": "yarn",
+      "coin": "coin"
+    }
+  },
+  "noto": {
+    "source": {
+      "name": "Google Inc",
+      "url": "https://github.com/googlefonts/noto-emoji"
+    },
+    "license": {
+      "title": "Apache 2.0",
+      "spdx": "Apache-2.0",
+      "url": "https://github.com/googlefonts/noto-emoji/blob/main/svg/LICENSE"
+    },
+    "icons": {
+      "wood": "wood",
+      "brick": "brick",
+      "wheat": "sheaf-of-rice",
+      "wool": "ewe",
+      "ore": "rock",
+      "paper": "scroll",
+      "cloth": "yarn",
+      "coin": "coin"
+    }
+  },
+  "twemoji": {
+    "source": {
+      "name": "Twitter",
+      "url": "https://github.com/jdecked/twemoji"
+    },
+    "license": {
+      "title": "CC BY 4.0",
+      "spdx": "CC-BY-4.0",
+      "url": "https://creativecommons.org/licenses/by/4.0/"
+    },
+    "icons": {
+      "wood": "wood",
+      "brick": "brick",
+      "wheat": "sheaf-of-rice",
+      "wool": "ewe",
+      "ore": "rock",
+      "paper": "scroll",
+      "cloth": "yarn",
+      "coin": "coin"
+    }
+  }
+}

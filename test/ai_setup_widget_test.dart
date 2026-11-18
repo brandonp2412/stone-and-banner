@@ -31,13 +31,14 @@ void main() {
     expect(find.text('1 AI'), findsOneWidget);
     expect(find.text('2 AI'), findsOneWidget);
     expect(find.text('3 AI'), findsNothing);
+    expect(find.textContaining('1 human · 2 computers'), findsOneWidget);
+    await tester.tap(find.text('1 AI'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('2 humans · 1 computer'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Player names'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Player names'));
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsNWidgets(3)); // two humans + seed
+    expect(find.byType(TextField), findsNWidgets(2)); // two human names
 
     await tester.ensureVisible(find.text('Start match'));
     await tester.tap(find.text('Start match'));
@@ -84,9 +85,7 @@ void main() {
 
       await tester.ensureVisible(find.text('Player names'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Player names'));
-      await tester.pumpAndSettle();
-      expect(find.byType(TextField), findsNWidgets(2)); // one human + seed
+      expect(find.byType(TextField), findsOneWidget); // one human name
       await tester.enterText(
         find.widgetWithText(TextField, 'Player 1'),
         'Presley',
@@ -129,6 +128,8 @@ void main() {
       'stone_banner_local_replay_v1': replay,
     });
     await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
@@ -218,21 +219,16 @@ void main() {
     expect(find.text('New local match'), findsOneWidget);
   });
 
-  testWidgets('invalid seed and blank name never leave setup', (tester) async {
+  testWidgets('blank name never leaves automatically seeded setup', (
+    tester,
+  ) async {
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Player names'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Player names'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, 'World seed'), 'abc');
-    await tester.ensureVisible(find.text('Start match'));
-    await tester.tap(find.text('Start match'));
-    await tester.pump();
-    expect(find.text('Enter a numeric world seed.'), findsOneWidget);
-    await tester.enterText(find.widgetWithText(TextField, 'World seed'), '321');
+    expect(find.text('World seed'), findsNothing);
     await tester.enterText(find.widgetWithText(TextField, 'Player 1'), ' ');
     await tester.tap(find.text('Start match'));
     await tester.pumpAndSettle();

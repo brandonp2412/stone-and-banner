@@ -1,3 +1,5 @@
+import 'action_helpers.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
@@ -49,18 +51,18 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Realm'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await scrollToAction(tester, 'Your realm');
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Town Developments'));
     expect(find.text('Town Developments'), findsOneWidget);
     await tester.ensureVisible(find.text('Town Developments'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Town Developments'));
-    await tester.pumpAndSettle();
     expect(find.textContaining('Scriptorium'), findsOneWidget);
-    await tester.ensureVisible(find.text('Develop').first);
+    await tester.ensureVisible(find.text('Develop innovation'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Develop').first);
+    await tester.tap(find.text('Develop innovation').hitTestable());
     await tester.pumpAndSettle();
     expect(s.current.level(StrategyDeck.innovation), 1);
 
@@ -68,15 +70,16 @@ void main() {
       for (var v = 0; v < s.topology.vertices.length; v++)
         if (MatchEngine.legalRecruit(s, v)) v,
     ].first;
-    await tester.tap(find.text('Build'));
+
+    await scrollToAction(tester, 'Road');
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Knights & defence'),
+      find.text('Knights & Defense'),
       100,
       scrollable: find.byType(Scrollable).last,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Knights & defence'));
+    await tester.tap(find.text('Knights & Defense'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Recruit Knight'),
@@ -86,7 +89,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Recruit Knight'));
     await tester.pumpAndSettle();
-    final board = find.byType(InteractiveViewer);
+    final board = find.byKey(const ValueKey('realm-map'));
     // The map stays visible while the action panel scrolls.
     await tester.pumpAndSettle();
     final size = tester.getSize(board);
@@ -115,10 +118,15 @@ void main() {
         ),
       ),
     );
-    await tester.ensureVisible(find.text('Resolve Invasion'));
+    await tester.ensureVisible(find.text('Resolve'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Fleet strength'), findsOneWidget);
-    await tester.tap(find.text('Resolve Invasion'));
+    expect(
+      find.text(
+        'Defence ${MatchEngine.defenceStrength(s) + s.invasionAid} / ${MatchEngine.invasionStrength(s)}',
+      ),
+      findsWidgets,
+    );
+    await tester.tap(find.text('Resolve'));
     await tester.pumpAndSettle();
     expect(s.phase, MatchPhase.roll);
     expect(find.text('Roll dice'), findsOneWidget);

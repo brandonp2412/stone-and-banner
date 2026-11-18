@@ -4,10 +4,16 @@ import 'package:flutter/material.dart';
 
 /// Presentation only: the caller supplies the engine's saved dice result.
 class DiceRoll extends StatefulWidget {
-  const DiceRoll({super.key, required this.first, required this.second});
+  const DiceRoll({
+    super.key,
+    required this.first,
+    required this.second,
+    this.onComplete,
+  });
 
   final int first;
   final int second;
+  final VoidCallback? onComplete;
 
   @override
   State<DiceRoll> createState() => _DiceRollState();
@@ -18,10 +24,14 @@ class _DiceRollState extends State<DiceRoll>
   late final _controller =
       AnimationController(
         vsync: this,
-        duration: const Duration(milliseconds: 1800),
+        duration: const Duration(milliseconds: 850),
       )..addStatusListener((status) {
         if (status == AnimationStatus.completed && mounted) {
-          Navigator.of(context).pop();
+          if (widget.onComplete != null) {
+            widget.onComplete!();
+          } else {
+            Navigator.of(context).pop();
+          }
         }
       });
   bool _started = false;
@@ -32,7 +42,9 @@ class _DiceRollState extends State<DiceRoll>
     if (_started) return;
     _started = true;
     if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.value = 1;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.value = 1;
+      });
     } else {
       _controller.forward();
     }
@@ -45,12 +57,24 @@ class _DiceRollState extends State<DiceRoll>
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: false,
-    child: Dialog(
-      backgroundColor: const Color(0xff14242b),
-      child: Padding(
+  Widget build(BuildContext context) => Center(
+    child: Material(
+      type: MaterialType.transparency,
+      child: Container(
         padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xf214242b),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xff79938e), width: 1.5),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0xb3000000),
+              blurRadius: 32,
+              spreadRadius: 8,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
@@ -59,11 +83,6 @@ class _DiceRollState extends State<DiceRoll>
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  landed ? 'The dice have spoken' : 'Rolling dice…',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 28),
                 ExcludeSemantics(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -73,12 +92,18 @@ class _DiceRollState extends State<DiceRoll>
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           child: Transform.translate(
                             offset: Offset(
-                              0,
                               landed
                                   ? 0
-                                  : -24 *
-                                        (1 - t) *
-                                        math.sin(t * math.pi * 7 + i).abs(),
+                                  : (i == 0 ? -180 : 160) *
+                                        math.pow(1 - t / .65, 3).toDouble(),
+                              landed
+                                  ? 0
+                                  : 120 * math.pow(1 - t / .65, 3).toDouble() -
+                                        48 *
+                                            (1 - t / .65) *
+                                            math
+                                                .sin(t / .65 * math.pi * 3)
+                                                .abs(),
                             ),
                             child: Transform.rotate(
                               angle: landed
@@ -110,7 +135,12 @@ class _DiceRollState extends State<DiceRoll>
                               ? 'Awaiting the realm’s roll'
                               : '${widget.first} + ${widget.second} = ${widget.first + widget.second}'
                         : 'Rolling…',
-                    style: Theme.of(context).textTheme.headlineSmall,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: Colors.white,
+                      shadows: const [
+                        Shadow(blurRadius: 8, color: Colors.black),
+                      ],
+                    ),
                   ),
                 ),
               ],

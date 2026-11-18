@@ -1,3 +1,5 @@
+import 'action_helpers.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
@@ -81,9 +83,11 @@ void main() {
     await tester.pumpWidget(app(pending));
     await tester.pumpWidget(app(answered));
     await tester.pump();
-    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.byKey(const ValueKey('match-activity-notice')), findsOneWidget);
     await tester.pumpAndSettle(const Duration(seconds: 5));
-    await tester.tap(find.text('Trade'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await scrollToAction(tester, 'Player trade');
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('trade-result')), findsOneWidget);
     expect(tester.takeException(), isNull);

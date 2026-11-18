@@ -1,3 +1,4 @@
+import 'action_helpers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
@@ -47,7 +48,9 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Cards'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await scrollToAction(tester, 'Cards');
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.textContaining('Strategy hand'));
     await tester.pumpAndSettle();
@@ -87,7 +90,9 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Cards'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await scrollToAction(tester, 'Cards');
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.textContaining('Strategy hand'));
     await tester.pumpAndSettle();
@@ -131,7 +136,9 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Cards'));
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    await scrollToAction(tester, 'Cards');
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.textContaining('Strategy hand'));
     await tester.pumpAndSettle();
