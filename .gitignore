@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local code-assistant state and generated golden-test failure images
+/.serena/
+/test/failures/
