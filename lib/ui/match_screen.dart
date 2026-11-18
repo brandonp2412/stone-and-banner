@@ -612,11 +612,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: SizedBox(
-          // Keep the sheet compact on normal landscape phones, but leave
-          // enough vertical room for at least one option at large text scales.
+          // Use most of the available landscape height while keeping every
+          // board target accessible through the scrollable list.
           height: math.min(
             MediaQuery.sizeOf(context).height *
-                (MediaQuery.textScalerOf(context).scale(1) > 1.2 ? .76 : .52),
+                (MediaQuery.textScalerOf(context).scale(1) > 1.2 ? .88 : .82),
             math.max(190, 62 + options.length * 52.0),
           ),
           child: Column(
@@ -626,9 +626,19 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   horizontal: 12,
                   vertical: 8,
                 ),
-                child: Text(
-                  'Choose legal board target',
-                  style: Theme.of(context).textTheme.titleLarge,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Choose legal board target',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    if (options.length > 4)
+                      Text(
+                        'Scroll to browse all ${options.length} targets',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
                 ),
               ),
               Expanded(
@@ -1972,6 +1982,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 _costLabel(MatchEngine.villageCost),
                 MatchEngine.legalVertices(s).isNotEmpty,
               ),
+              if (MatchEngine.affordable(s, MatchEngine.villageCost) &&
+                  MatchEngine.legalVertices(s).isEmpty)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(12, 0, 12, 10),
+                  child: Text(
+                    'Village unavailable: extend a road to a vacant junction away from other settlements.',
+                    style: TextStyle(fontSize: 12, color: Color(0xffe5c183)),
+                  ),
+                ),
               _buildAction(
                 _Move.upgrade,
                 Icons.location_city,
