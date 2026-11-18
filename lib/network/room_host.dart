@@ -158,22 +158,7 @@ class HostedRoom {
         current.tactical != null) {
       return false;
     }
-    final MatchEvent event = switch (current.phase) {
-      MatchPhase.setupVillage => PlaceVillage(
-        MatchEngine.legalVertices(current).first,
-      ),
-      MatchPhase.setupRoad => PlaceRoad(MatchEngine.legalEdges(current).first),
-      MatchPhase.roll => RollDice(
-        MatchEngine.expectedDice(current).$1,
-        MatchEngine.expectedDice(current).$2,
-      ),
-      MatchPhase.bandit => MoveBandit(
-        (current.banditTile + 1) % current.board.tiles.length,
-      ),
-      MatchPhase.actions => const EndTurn(),
-      MatchPhase.invasion => const ResolveInvasion(),
-      MatchPhase.finished => throw StateError('Match finished.'),
-    };
+    final event = MatchEngine.idleEvent(current)!;
     state = MatchEngine.apply(current, event);
     _record(event, current.active);
     return true;

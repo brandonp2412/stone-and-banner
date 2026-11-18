@@ -13,10 +13,6 @@ void conserved(MatchState state) {
         state.players.fold<int>(
           0,
           (sum, player) => sum + (player.stores[resource] ?? 0),
-        ) +
-        state.offers.fold<int>(
-          0,
-          (sum, offer) => sum + (offer.give == resource ? offer.giveCount : 0),
         );
     expect(total, MatchEngine.bankSupply, reason: resource.name);
   }

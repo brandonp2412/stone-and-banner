@@ -11,8 +11,7 @@ void expectConserved(MatchState s) {
   for (final good in Resource.values) {
     final total =
         (s.bank[good] ?? 0) +
-        s.players.fold<int>(0, (n, p) => n + (p.stores[good] ?? 0)) +
-        s.offers.fold<int>(0, (n, o) => n + (o.give == good ? o.giveCount : 0));
+        s.players.fold<int>(0, (n, p) => n + (p.stores[good] ?? 0));
     expect(total, MatchEngine.bankSupply, reason: good.name);
     expect(s.bank[good], greaterThanOrEqualTo(0));
     for (final p in s.players) {

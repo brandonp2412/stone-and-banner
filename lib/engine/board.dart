@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 enum Resource { wood, brick, wheat, wool, ore, paper, cloth, coin }
 
 enum Land { woodland, clayBeds, fields, meadows, ridges, barren }
@@ -159,8 +161,43 @@ class BoardEdge {
   final List<int> tiles;
 }
 
+class Dock {
+  const Dock(this.edge, this.resource);
+  final BoardEdge edge;
+  final Resource? resource;
+  String get label => resource == null ? '3:1' : '${resource!.name} 2:1';
+}
+
 class BoardTopology {
   BoardTopology._(this.vertices, this.edges, this.tileVertices);
+
+  /// Fixed evenly spaced coastal docks, derived from topology for replay stability.
+  List<Dock> get docks {
+    final coast = edges.where((edge) => edge.tiles.length == 1).toList()
+      ..sort((a, b) {
+        double angle(BoardEdge e) => math.atan2(
+          vertices[e.a].y + vertices[e.b].y,
+          vertices[e.a].x + vertices[e.b].x,
+        );
+        return angle(a).compareTo(angle(b));
+      });
+    const goods = <Resource?>[
+      null,
+      Resource.wood,
+      Resource.brick,
+      null,
+      Resource.wheat,
+      Resource.wool,
+      null,
+      Resource.ore,
+      null,
+    ];
+    return [
+      for (var i = 0; i < goods.length; i++)
+        Dock(coast[i * coast.length ~/ goods.length], goods[i]),
+    ];
+  }
+
   final List<BoardVertex> vertices;
   final List<BoardEdge> edges;
   final List<List<int>> tileVertices;

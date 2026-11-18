@@ -115,7 +115,7 @@ void main() {
     },
   );
 
-  test('standing escrow and duplicate acceptance cannot mint goods', () {
+  test('standing offers and duplicate acceptance cannot mint goods', () {
     final room = openRoom();
     final start = room.state!;
     final players = start.players.toList();
@@ -129,7 +129,7 @@ void main() {
     final offer = ProposeTrade(1, Resource.wood, 2, Resource.wool, 1);
     expect(room.move(0, 'offer-1', 0, offer.toJson())['ok'], true);
     expect(room.state!.offers.single.giveCount, 2);
-    expect(room.state!.players[0].stores[Resource.wood], 1);
+    expect(room.state!.players[0].stores[Resource.wood], 3);
     expect(room.move(0, 'offer-1', 0, offer.toJson())['ok'], true);
     expect(room.state!.offers.length, 1);
     final old = room.state!.events.length;

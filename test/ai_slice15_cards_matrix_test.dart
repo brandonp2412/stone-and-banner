@@ -71,14 +71,7 @@ void _conserved(MatchState s) {
       0,
       (sum, p) => sum + (p.stores[good] ?? 0),
     );
-    final escrow = s.offers
-        .where((o) => o.give == good)
-        .fold<int>(0, (sum, o) => sum + o.giveCount);
-    expect(
-      s.bank[good]! + held + escrow,
-      MatchEngine.bankSupply,
-      reason: good.name,
-    );
+    expect(s.bank[good]! + held, MatchEngine.bankSupply, reason: good.name);
     expect(s.bank[good], greaterThanOrEqualTo(0));
     for (final p in s.players) {
       expect(p.stores[good] ?? 0, greaterThanOrEqualTo(0));

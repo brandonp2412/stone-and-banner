@@ -12,11 +12,7 @@ void conserved(MatchState state) {
   for (final good in Resource.values) {
     final total =
         (state.bank[good] ?? 0) +
-        state.players.fold<int>(0, (sum, p) => sum + (p.stores[good] ?? 0)) +
-        state.offers.fold<int>(
-          0,
-          (sum, o) => sum + (o.give == good ? o.giveCount : 0),
-        );
+        state.players.fold<int>(0, (sum, p) => sum + (p.stores[good] ?? 0));
     expect(total, MatchEngine.bankSupply, reason: good.name);
   }
 }
@@ -146,6 +142,34 @@ void main() {
     conserved(MatchEngine.apply(state, move));
   });
 
+  test('bots recruit and activate a guard before an invasion', () {
+    var state = deal(town(109).copyWith(round: 2, reaverPressure: 1), {
+      Resource.wool: 1,
+      Resource.ore: 1,
+      Resource.wheat: 1,
+    });
+    final recruits = AiActionAdapter.observe(
+      state,
+      state.active,
+    ).legalActions.whereType<RecruitKnight>().toList();
+    expect(recruits, isNotEmpty);
+    final hire = bot.choose(state);
+    expect(hire, isA<RecruitKnight>());
+    state = MatchEngine.apply(state, hire!);
+    expect(state.knights.values.single.active, isFalse);
+    conserved(state);
+    // Recruitment cannot activate in the same turn. The bot does it first
+    // on its next turn rather than building another scoring site instead.
+    state = deal(state.copyWith(turnSerial: state.turnSerial + 1), {
+      Resource.wheat: 1,
+    });
+    final activate = bot.choose(state);
+    expect(activate, isA<ActivateKnight>());
+    state = MatchEngine.apply(state, activate!);
+    expect(MatchEngine.defenceStrength(state), greaterThan(0));
+    conserved(state);
+  });
+
   test('capital resource goal outranks a second Town after first upgrade', () {
     final state = deal(town(157), {Resource.wood: 6});
     expect(
@@ -166,7 +190,7 @@ void main() {
   });
 
   test('Reaver pressure activates and promotes Knights without free goods', () {
-    var state = actions(101);
+    var state = town(101);
     final edge = state.roads.entries
         .firstWhere((e) => e.value == state.active)
         .key;
@@ -186,6 +210,16 @@ void main() {
     expect(state.knights[vertex]!.active, isTrue);
     conserved(state);
 
+    // A second Town raises the fleet to strength 2. Promotion is now needed.
+    final other = state.sites.keys.firstWhere(
+      (id) => state.sites[id]!.structure == Structure.village,
+    );
+    state = state.copyWith(
+      sites: {
+        ...state.sites,
+        other: Site(state.sites[other]!.owner, Structure.town),
+      },
+    );
     state = deal(state.copyWith(turnSerial: state.turnSerial + 1), {
       Resource.ore: 1,
       Resource.wool: 1,
@@ -235,6 +269,15 @@ void main() {
 
   test('invasion aid uses public gap and passes when victory impossible', () {
     var state = actions(127);
+    // Four upgraded settlements set a public fleet threat of four.
+    // This preserves the intentional 2/1/4 aid-gap scenarios below.
+    state = state.copyWith(
+      sites: {
+        ...state.sites,
+        for (final vertex in state.sites.keys.take(4))
+          vertex: Site(state.sites[vertex]!.owner, Structure.town),
+      },
+    );
     state = deal(state, {Resource.wheat: 1, Resource.ore: 1}, seat: 1);
     MatchState invasion(int aid) => state.copyWith(
       phase: MatchPhase.invasion,

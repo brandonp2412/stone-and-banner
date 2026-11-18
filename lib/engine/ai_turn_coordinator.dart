@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'ai.dart';
+import 'ai_cards.dart';
 import 'heuristic_ai.dart';
 import 'match.dart';
 
 /// Runs only the seats explicitly owned by the local offline computer.
 /// The callback must atomically reject a state that has changed since [read].
 typedef AiStateCommit = bool Function(MatchState expected, MatchState next);
-typedef AiDecision = MatchEvent? Function(MatchState state);
+typedef AiDecision = FutureOr<MatchEvent?> Function(MatchState state);
 
 class AiTurnCoordinator {
   AiTurnCoordinator({
@@ -39,6 +40,17 @@ class AiTurnCoordinator {
   int _generation = 0;
   Future<void> _work = Future<void>.value();
 
+  static int actingSeat(MatchState state, bool Function(int) isComputerSeat) {
+    if (state.tactical == null && state.phase == MatchPhase.actions) {
+      for (final offer in state.offers) {
+        if (offer.proposer == state.active && isComputerSeat(offer.target)) {
+          return offer.target;
+        }
+      }
+    }
+    return state.tactical?.responder ?? state.active;
+  }
+
   bool get isPaused => _paused;
   bool get isRunning => _running;
   Future<void> get settled => _work;
@@ -65,7 +77,9 @@ class AiTurnCoordinator {
       while (!_paused && ticket == _generation) {
         final before = read();
         if (before == null || before.phase == MatchPhase.finished) return;
-        final seat = before.tactical?.responder ?? before.active;
+        final seat = actingSeat(before, isComputerSeat);
+        final immediateReply =
+            seat != (before.tactical?.responder ?? before.active);
         if (!isComputerSeat(seat)) return;
         if (events >= maxEventsPerRun) {
           throw StateError('Computer move limit reached. Resume to continue.');
@@ -73,12 +87,37 @@ class AiTurnCoordinator {
 
         // Yield even in tests with a zero delay. No wall clock enters the
         // reducer, seed, policy or replay; this only schedules presentation.
-        await Future<void>.delayed(delay);
+        // Think during the presentation interval, so decision time is not
+        // added as a second pause between actions. Await both to handle errors
+        // even if the pump is cancelled while the decision is in flight.
+        final results = await Future.wait<Object?>([
+          Future<MatchEvent?>.sync(() {
+            if (!immediateReply) return _decide(before);
+            final offer = before.offers.firstWhere(
+              (o) => o.proposer == before.active && o.target == seat,
+            );
+            final view = AiActionAdapter.observe(
+              before.copyWith(active: seat, offers: [offer]),
+              seat,
+            );
+            final answer = AiCardStrategy.incomingOffer(view);
+            return answer is RespondTrade
+                ? answer
+                : RespondTrade(seat, false, offerId: offer.id);
+          }).onError<StateError>((error, stack) => null),
+          // Every visible computer action receives the same presentation
+          // interval, regardless of whether the previous event was a trade,
+          // dice roll, construction or turn transition.
+          Future<void>.delayed(delay),
+        ]);
         if (_paused || ticket != _generation) return;
 
         final current = read();
         if (current == null || !identical(before, current)) continue;
-        final view = AiActionAdapter.observe(current, seat);
+        final view = AiActionAdapter.observe(
+          immediateReply ? current.copyWith(active: seat) : current,
+          seat,
+        );
         if (view.legalActions.isEmpty) {
           throw StateError('Computer has no legal action for this phase.');
         }
@@ -87,15 +126,29 @@ class AiTurnCoordinator {
         // the adapter, then fall back to its bounded deterministic choice.
         MatchState next;
         try {
-          final preferred = _decide(current);
+          final preferred = results.first as MatchEvent?;
           if (preferred == null) throw StateError('No computer decision.');
-          next = AiActionAdapter.applySelected(current, view, preferred);
+          next = immediateReply
+              ? MatchEngine.apply(current, preferred)
+              : AiActionAdapter.applySelected(current, view, preferred);
         } on StateError {
-          final safe = AiActionAdapter.decide(view);
+          final safe = immediateReply
+              ? RespondTrade(
+                  seat,
+                  false,
+                  offerId: current.offers
+                      .firstWhere(
+                        (o) => o.target == seat && o.proposer == current.active,
+                      )
+                      .id,
+                )
+              : AiActionAdapter.decide(view);
           if (safe == null) {
             throw StateError('Computer cannot recover a legal action.');
           }
-          next = AiActionAdapter.applySelected(current, view, safe);
+          next = immediateReply
+              ? MatchEngine.apply(current, safe)
+              : AiActionAdapter.applySelected(current, view, safe);
         }
         if (next.events.length != current.events.length + 1) {
           throw StateError('Computer action did not append exactly one event.');

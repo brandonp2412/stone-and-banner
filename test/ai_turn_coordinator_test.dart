@@ -15,6 +15,43 @@ void main() {
     return s;
   }
 
+  testWidgets('decision time overlaps a regular presentation cadence', (
+    tester,
+  ) async {
+    var state = MatchEngine.newGame(['A', 'B', 'C'], 607);
+    var commits = 0;
+    final ai = AiTurnCoordinator(
+      read: () => state,
+      commit: (expected, next) {
+        state = next;
+        commits++;
+        return true;
+      },
+      isComputerSeat: (_) => true,
+      delay: const Duration(milliseconds: 1800),
+      decide: (state) async {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        return AiActionAdapter.decide(
+          AiActionAdapter.observe(state, state.active),
+        );
+      },
+    );
+    ai.resume();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(commits, 0);
+    await tester.pump(const Duration(milliseconds: 1299));
+    expect(commits, 0);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(commits, 1);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 1300));
+    expect(commits, 2);
+    ai.pause();
+    await tester.pump(const Duration(milliseconds: 1800));
+    await ai.settled;
+    expect(commits, 2);
+  });
+
   test(
     'sequential multi-seat turns return to human with exact replay',
     () async {
@@ -137,6 +174,7 @@ void main() {
         },
         isComputerSeat: (seat) => seat != 0,
         delay: Duration.zero,
+        onError: (error) => fail(error.toString()),
       );
       for (
         var cycle = 0;

@@ -722,15 +722,33 @@ class MatchEngine {
     return null;
   }
 
-  static int tradeRate(MatchState s, int player) {
+  static int tradeRate(MatchState s, int player, [Resource? give]) {
+    var dockRate = 4;
+    for (final dock in s.topology.docks) {
+      if (s.sites[dock.edge.a]?.owner != player &&
+          s.sites[dock.edge.b]?.owner != player) {
+        continue;
+      }
+      final rate = dock.resource == null
+          ? 3
+          : give == dock.resource
+          ? 2
+          : 4;
+      if (rate < dockRate) dockRate = rate;
+    }
     final best = [for (var i = 0; i < s.players.length; i++) score(s, i)]
         .reduce((a, b) => a > b ? a : b);
     final commerce = s.players[player].level(StrategyDeck.commerce);
-    if (commerce >= 4) return s.balance.guildRate;
-    if (commerce >= 2) return s.balance.marketRate;
-    return best - score(s, player) >= 3 && !s.catchupUsed.contains(player)
+    if (commerce >= 4) {
+      return dockRate < s.balance.guildRate ? dockRate : s.balance.guildRate;
+    }
+    if (commerce >= 2) {
+      return dockRate < s.balance.marketRate ? dockRate : s.balance.marketRate;
+    }
+    final base = best - score(s, player) >= 3 && !s.catchupUsed.contains(player)
         ? s.balance.catchupRate
         : 4;
+    return dockRate < base ? dockRate : base;
   }
 
   static bool affordable(MatchState s, Map<Resource, int> cost, [int? player]) {
@@ -900,8 +918,12 @@ class MatchEngine {
       if (legalMoveKnight(s, from, v)) v,
   ];
 
-  static int invasionStrength(MatchState s) =>
-      4 + s.invasions + (s.reaverPressure > 3 ? s.reaverPressure - 3 : 0);
+  /// The fleet is as strong as the number of upgraded settlements in play.
+  /// Pressure determines *when* it attacks, not how hard it hits; a Village
+  /// contributes nothing, and repeated invasions do not snowball its strength.
+  static int invasionStrength(MatchState s) => s.sites.values
+      .where((site) => site.structure != Structure.village)
+      .length;
 
   /// Uses the same immutable resolution as the recorded event. Aid may still
   /// change this forecast while a tactical window is open.
@@ -1242,6 +1264,27 @@ class MatchEngine {
     ];
   }
 
+  /// Deterministic fallback for an expired turn. Reactions wait for a response.
+  static MatchEvent? idleEvent(MatchState s) {
+    if (s.tactical != null) return null;
+    return switch (s.phase) {
+      MatchPhase.setupVillage => PlaceVillage(
+        MatchEngine.legalVertices(s).first,
+      ),
+      MatchPhase.setupRoad => PlaceRoad(MatchEngine.legalEdges(s).first),
+      MatchPhase.roll => RollDice(
+        MatchEngine.expectedDice(s).$1,
+        MatchEngine.expectedDice(s).$2,
+      ),
+      MatchPhase.bandit => MoveBandit(
+        (s.banditTile + 1) % s.board.tiles.length,
+      ),
+      MatchPhase.actions => const EndTurn(),
+      MatchPhase.invasion => const ResolveInvasion(),
+      MatchPhase.finished => null,
+    };
+  }
+
   static int longestRoad(MatchState s, int player) {
     final owned = {
       for (final e in s.roads.keys)
@@ -1452,7 +1495,11 @@ class MatchEngine {
         threat = invasionStrength(s);
     var report = '';
     var result = s;
-    if (strength >= threat) {
+    if (threat == 0) {
+      report =
+          'No damage: only Villages remain. '
+          'The fleet raids Towns and Capitals; Villages are safe. No Honour awarded.';
+    } else if (strength >= threat) {
       final contributions = <int, int>{
         for (var i = 0; i < s.players.length; i++)
           i: s.knights.values
@@ -1540,6 +1587,10 @@ class MatchEngine {
     }
     return result.copyWith(
       phase: MatchPhase.roll,
+      knights: {
+        for (final entry in result.knights.entries)
+          entry.key: entry.value.copyWith(active: false),
+      },
       invasions: s.invasions + 1,
       reaverPressure: 0,
       invasionAid: 0,
@@ -1574,14 +1625,6 @@ class MatchEngine {
       !s.reactionsUsed.contains(player) &&
       ((s.players[player].stores[Resource.wheat] ?? 0) > 0 ||
           (s.players[player].stores[Resource.ore] ?? 0) > 0);
-
-  static MatchState _refund(MatchState s, TradeProposal offer) {
-    final players = s.players.toList();
-    final stores = Map<Resource, int>.of(players[offer.proposer].stores);
-    stores[offer.give] = (stores[offer.give] ?? 0) + offer.giveCount;
-    players[offer.proposer] = players[offer.proposer].copyWith(stores: stores);
-    return s.copyWith(players: players);
-  }
 
   static MatchState _consumeCardAt(MatchState s, int player, int index) {
     final cards = s.players[player].cards.toList();
@@ -1759,7 +1802,16 @@ class MatchEngine {
       );
       if (s.phase == MatchPhase.actions) s = _pay(s, villageCost);
       s = s.copyWith(
-        sites: {...s.sites, event.vertex: Site(s.active, Structure.village)},
+        sites: {
+          ...s.sites,
+          event.vertex: Site(
+            s.active,
+            s.phase == MatchPhase.setupVillage &&
+                    s.setupStep >= s.players.length
+                ? Structure.town
+                : Structure.village,
+          ),
+        },
         phase: s.phase == MatchPhase.setupVillage
             ? MatchPhase.setupRoad
             : MatchPhase.actions,
@@ -1966,7 +2018,7 @@ class MatchEngine {
             event.give.index < Resource.values.length,
         'Unknown goods.',
       );
-      final rate = tradeRate(s, s.active);
+      final rate = tradeRate(s, s.active, event.give);
       _require(
         (s.current.stores[event.give] ?? 0) >= rate,
         'Not enough goods.',
@@ -2018,24 +2070,19 @@ class MatchEngine {
                   o.id == id &&
                   o.target == s.active &&
                   o.proposer == event.target &&
-                  !o.isCounter,
+                  o.proposer != s.active,
             )
             .toList();
         _require(originals.length == 1, 'Cannot counter this offer.');
-        s = _refund(s, originals.single);
         s = s.copyWith(offers: s.offers.where((o) => o.id != id).toList());
         counter = true;
       }
       _require(
         (s.current.stores[event.give] ?? 0) >= event.giveCount,
-        'You cannot escrow unavailable goods.',
+        'You need the offered goods to propose a trade.',
       );
-      final players = s.players.toList();
-      final stores = Map<Resource, int>.of(s.current.stores);
-      stores[event.give] = stores[event.give]! - event.giveCount;
-      players[s.active] = s.current.copyWith(stores: stores);
+      // Offers are non-binding: no goods leave either hand until accepted.
       s = s.copyWith(
-        players: players,
         offers: [
           ...s.offers,
           TradeProposal(
@@ -2052,8 +2099,15 @@ class MatchEngine {
       );
     } else if (event is RespondTrade) {
       _require(
-        s.phase == MatchPhase.actions && s.active == event.player,
-        'Answer offers on your own action turn.',
+        s.phase == MatchPhase.actions &&
+            (s.active == event.player ||
+                s.offers.any(
+                  (o) =>
+                      o.target == event.player &&
+                      o.proposer == s.active &&
+                      (event.offerId == null || o.id == event.offerId),
+                )),
+        'Answer offers on your turn or reply to the active proposer.',
       );
       final choices = s.offers
           .where(
@@ -2071,16 +2125,20 @@ class MatchEngine {
           'Requested goods are no longer available. Decline instead.',
         );
         final buyers = s.players.toList();
+        final proposer = buyers[offer.proposer];
+        _require(
+          (proposer.stores[offer.give] ?? 0) >= offer.giveCount,
+          'The proposer no longer has the offered goods. Decline instead.',
+        );
         final from = Map<Resource, int>.of(seller.stores);
-        final to = Map<Resource, int>.of(buyers[offer.proposer].stores);
+        final to = Map<Resource, int>.of(proposer.stores);
         from[offer.want] = from[offer.want]! - offer.wantCount;
         from[offer.give] = (from[offer.give] ?? 0) + offer.giveCount;
+        to[offer.give] = to[offer.give]! - offer.giveCount;
         to[offer.want] = (to[offer.want] ?? 0) + offer.wantCount;
         buyers[event.player] = seller.copyWith(stores: from);
-        buyers[offer.proposer] = buyers[offer.proposer].copyWith(stores: to);
+        buyers[offer.proposer] = proposer.copyWith(stores: to);
         s = s.copyWith(players: buyers);
-      } else {
-        s = _refund(s, offer);
       }
       s = s.copyWith(offers: s.offers.where((o) => o.id != offer.id).toList());
     } else if (event is WithdrawTrade) {
@@ -2089,7 +2147,6 @@ class MatchEngine {
           .where((o) => o.id == event.offerId && o.proposer == s.active)
           .toList();
       _require(matches.length == 1, 'Not your outstanding offer.');
-      s = _refund(s, matches.single);
       s = s.copyWith(
         offers: s.offers.where((o) => o.id != event.offerId).toList(),
       );
@@ -2124,10 +2181,6 @@ class MatchEngine {
       final next = (s.active + 1) % s.players.length;
       // Expire any offer when its proposer next receives the action turn.
       // Its target has necessarily had a full opportunity to accept.
-      final expired = s.offers.where((o) => o.proposer == next).toList();
-      for (final offer in expired) {
-        s = _refund(s, offer);
-      }
       s = s.copyWith(
         offers: s.offers.where((o) => o.proposer != next).toList(),
       );

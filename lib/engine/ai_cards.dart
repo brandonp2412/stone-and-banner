@@ -81,7 +81,7 @@ abstract final class AiCardStrategy {
     return availableAid.first;
   }
 
-  /// Responds to visible, escrowed offers before any optional turn spending.
+  /// Responds to visible outstanding offers before any optional turn spending.
   /// Counters only original offers, never a counter to a counter.
   static MatchEvent? incomingOffer(AiTurnView view) {
     if (view.phase != MatchPhase.actions) return null;

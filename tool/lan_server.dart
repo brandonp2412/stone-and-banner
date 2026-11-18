@@ -193,16 +193,11 @@ class _Server {
     if (state == null || state.phase == MatchPhase.finished) return;
     final window = state.tactical;
     if (window != null) {
-      final id = window.id, responder = window.responder;
-      clocks[room] = Timer(const Duration(seconds: 20), () {
-        if (room.timeout(id, responder)) {
-          broadcast(room);
-          schedule(room);
-        }
-      });
+      // A human reaction remains pending until the player chooses or passes.
+      return;
     } else {
       final version = room.version;
-      clocks[room] = Timer(const Duration(minutes: 3), () {
+      clocks[room] = Timer(const Duration(seconds: 90), () {
         if (room.advanceIdle(version)) {
           broadcast(room);
           schedule(room);

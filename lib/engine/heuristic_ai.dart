@@ -29,6 +29,14 @@ class AiLegalActions {
       _options.whereType<BankExchange>().toList();
   List<PlayStrategyCard> get cards =>
       _options.whereType<PlayStrategyCard>().toList();
+  List<RecruitKnight> get recruits =>
+      _options.whereType<RecruitKnight>().toList();
+  List<ActivateKnight> get activates =>
+      _options.whereType<ActivateKnight>().toList();
+  List<PromoteKnight> get promotions =>
+      _options.whereType<PromoteKnight>().toList();
+  List<FortifyTown> get fortifications =>
+      _options.whereType<FortifyTown>().toList();
   List<MoveBandit> get banditMoves => _options.whereType<MoveBandit>().toList();
   List<RespondTactical> get tactical =>
       _options.whereType<RespondTactical>().toList();
@@ -252,6 +260,47 @@ class HeuristicAi {
     final answer = AiCardStrategy.incomingOffer(view);
     if (answer != null) return answer;
 
+    // Defend before all ore is sunk into points: a Knight needs a recruitment
+    // turn and a later activation, so reacting at invasion time is too late.
+    final ownKnights = state.knights.entries
+        .where((entry) => entry.value.owner == state.active)
+        .toList();
+    final ownActiveStrength = ownKnights
+        .where((entry) => entry.value.active)
+        .fold<int>(0, (total, entry) => total + entry.value.rank.strength);
+    final approachingFleet = MatchEngine.invasionStrength(state) + 1;
+    final needDefence = MatchEngine.defenceStrength(state) < approachingFleet;
+    final preparing = state.reaverPressure >= 1 || state.round >= 2;
+    if (preparing && view.actionsSinceRoll < 6) {
+      if (legal.activates.isNotEmpty) {
+        return _best<ActivateKnight>(
+          legal.activates,
+          (event) => state.knights[event.vertex]!.rank.strength.toDouble(),
+          (event) => event.vertex,
+        );
+      }
+      if (needDefence && legal.promotions.isNotEmpty) {
+        return _best<PromoteKnight>(
+          legal.promotions,
+          (event) => state.knights[event.vertex]!.rank.strength.toDouble(),
+          (event) => event.vertex,
+        );
+      }
+      // Have a second guard ready if the next attack disables the first.
+      if (legal.recruits.isNotEmpty &&
+          ownKnights.length < 2 &&
+          (needDefence || ownActiveStrength == 0)) {
+        return _best<RecruitKnight>(
+          legal.recruits,
+          (event) => siteValue(state, event.vertex),
+          (event) => event.vertex,
+        );
+      }
+      if (needDefence && legal.fortifications.isNotEmpty) {
+        return legal.fortifications.first;
+      }
+    }
+
     final capitals = legal.upgrades
         .where((e) => state.sites[e.vertex]!.structure == Structure.town)
         .toList();
@@ -317,17 +366,6 @@ class HeuristicAi {
       if (_roadValue(state, road.edge) >= 3) return road;
     }
 
-    // Defensive spending is secondary to points and infrastructure.
-    if (state.reaverPressure >= 2) {
-      final inactive =
-          state.knights.keys
-              .where((v) => MatchEngine.legalActivate(state, v))
-              .toList()
-            ..sort();
-      if (inactive.isNotEmpty && _have(state, Resource.wheat) > 1) {
-        return ActivateKnight(inactive.first);
-      }
-    }
     final proposal = AiCardStrategy.propose(view);
     if (proposal != null) return proposal;
     return const EndTurn();

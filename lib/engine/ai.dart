@@ -34,7 +34,7 @@ class AiTurnView {
   final Map<Resource, int> ownGoods;
   final List<HeldCard> ownCards;
 
-  /// Public escrowed offers; no concealed inventories are included.
+  /// Public outstanding offers; no concealed inventories are included.
   final List<TradeProposal> publicOffers;
   final List<MatchEvent> legalActions;
   final int _seed;
@@ -454,9 +454,9 @@ abstract final class AiActionAdapter {
       actions.add(DiscardStrategyCard(i));
     }
 
-    final rate = MatchEngine.tradeRate(s, s.active);
     final commerce = s.current.level(StrategyDeck.commerce);
     for (final give in Resource.values) {
+      final rate = MatchEngine.tradeRate(s, s.active, give);
       if ((s.current.stores[give] ?? 0) < rate) continue;
       for (final receive in Resource.values) {
         if (receive == give) continue;
@@ -477,7 +477,7 @@ abstract final class AiActionAdapter {
         if ((s.current.stores[offer.want] ?? 0) >= offer.wantCount) {
           actions.add(RespondTrade(s.active, true, offerId: offer.id));
         }
-        if (!offer.isCounter && !s.offers.any((o) => o.proposer == s.active)) {
+        if (!s.offers.any((o) => o.proposer == s.active)) {
           // A counter uses an explicitly visible offered good. Never inspect
           // the proposer's private stores to decide what they can afford.
           for (final give in Resource.values) {

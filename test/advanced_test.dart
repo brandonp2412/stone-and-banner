@@ -193,6 +193,11 @@ void main() {
       var s = draft(91).copyWith(phase: MatchPhase.actions);
       final v = s.sites.keys.firstWhere((v) => s.sites[v]!.owner == 0);
       s = town(s, v);
+      // Two upgraded settlements outnumber a single Fort's defence.
+      final other = s.sites.keys.firstWhere(
+        (site) => site != v && s.sites[site]!.owner == 0,
+      );
+      s = town(s, other);
       s = fund(s, 0, MatchEngine.fortCost);
       s = MatchEngine.apply(s, FortifyTown(v));
       expect(s.fortified, contains(v));
@@ -223,9 +228,15 @@ void main() {
   test(
     'defence earns Honour only for sole Knight leader; victory scores 15',
     () {
-      var s = draft(111).copyWith(
+      final base = draft(111);
+      final upgraded = base.sites.keys.first;
+      var s = base.copyWith(
         phase: MatchPhase.invasion,
         reaverPressure: 3,
+        sites: {
+          ...base.sites,
+          upgraded: Site(base.sites[upgraded]!.owner, Structure.town),
+        },
         knights: {
           0: const KnightPiece(0, KnightRank.champion, true, -1),
           1: const KnightPiece(0, KnightRank.warden, true, -1),

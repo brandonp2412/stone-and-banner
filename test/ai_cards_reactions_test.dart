@@ -42,11 +42,7 @@ void conserve(MatchState state) {
   for (final resource in Resource.values) {
     final total =
         (state.bank[resource] ?? 0) +
-        state.players.fold<int>(0, (n, p) => n + (p.stores[resource] ?? 0)) +
-        state.offers.fold<int>(
-          0,
-          (n, o) => n + (o.give == resource ? o.giveCount : 0),
-        );
+        state.players.fold<int>(0, (n, p) => n + (p.stores[resource] ?? 0));
     expect(total, MatchEngine.bankSupply, reason: resource.name);
   }
 }
@@ -199,7 +195,7 @@ void main() {
     );
   });
 
-  test('escrowed offer is countered once, then accepted or declined', () {
+  test('open offer is countered once, then accepted or declined', () {
     var s = fixture();
     s = stock(s, 0, {Resource.ore: 1});
     s = stock(s, 1, {Resource.wheat: 2, Resource.wood: 1});
@@ -293,7 +289,7 @@ void main() {
     conserve(afterPass);
   });
 
-  test('bot offers surplus once and accepts a useful escrowed trade', () {
+  test('bot offers surplus once and accepts a useful open trade', () {
     var proposing = fixture().copyWith(
       sites: {0: const Site(0, Structure.village)},
     );

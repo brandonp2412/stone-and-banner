@@ -42,7 +42,7 @@ void main() {
     }
   });
 
-  test('3–4 seat snake drafts: spacing, two villages, two roads, replay', () {
+  test('3–4 seat snake drafts: spacing, one village and one town, two roads, replay', () {
     for (final count in [3, 4]) {
       final s = draft(20261027 + count, count);
       expect(s.phase, MatchPhase.roll);
@@ -54,7 +54,7 @@ void main() {
       }
       for (var i = 0; i < count; i++) {
         expect(s.sites.values.where((v) => v.owner == i).length, 2);
-        expect(s.players[i].buildings, [Structure.village, Structure.village]);
+        expect(s.players[i].buildings, [Structure.village, Structure.town]);
       }
       conserved(s);
       expect(
@@ -162,7 +162,7 @@ void main() {
       s,
       RespondTrade(1, false, offerId: s.offers.single.id),
     );
-    expect(s.players[0].stores[Resource.brick], before + 1);
+    expect(s.players[0].stores[Resource.brick], before);
     conserved(s);
   });
 
@@ -260,7 +260,8 @@ void main() {
           final site = s.sites[v];
           if (site == null) continue;
           final p = claims.putIfAbsent(resource, () => {});
-          p[site.owner] = (p[site.owner] ?? 0) + 1;
+          p[site.owner] =
+              (p[site.owner] ?? 0) + site.structure.points;
         }
       }
       if (claims.isNotEmpty) {

@@ -37,7 +37,8 @@ void main() {
       await tester.tap(find.byType(ListTile).first);
       await tester.pump();
     }
-    expect(find.text('Computer turn'), findsOneWidget);
+    expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
+    expect(find.text('Watch the realm grow.'), findsNothing);
     expect(find.text('Your goods'), findsNothing);
   }
 
@@ -48,7 +49,10 @@ void main() {
   }
 
   Future<void> finishAi(WidgetTester tester) async {
-    for (var tick = 0; tick < 100; tick++) {
+    for (var tick = 0; tick < 300; tick++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
       await tester.pump(const Duration(milliseconds: 100));
       final session = await saved();
       final state = MatchEngine.importReplay(session['replay'] as String);
@@ -57,7 +61,7 @@ void main() {
         return;
       }
     }
-    fail('Computer did not return to human seat within 10 simulated seconds');
+    fail('Computer did not return to human seat within 30 simulated seconds');
   }
 
   testWidgets('computer setup is private, completes a turn, and resumes', (
@@ -79,8 +83,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Continue saved match'));
-    await tester.pumpAndSettle();
     expect(find.text('Computer turn'), findsNothing);
     expect(find.text('Pass the device'), findsNothing);
     expect(find.byTooltip('Choose board target from list'), findsOneWidget);
@@ -97,10 +99,7 @@ void main() {
     final eventCount = MatchEngine.importReplay(before['replay'] as String)
         .events
         .length;
-    await tester.tap(find.byTooltip('Match menu'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('Home').last);
+    await tester.binding.handlePopRoute();
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     final after = await saved();
@@ -110,7 +109,8 @@ void main() {
     );
     await tester.tap(find.text('Continue saved match'));
     await tester.pump();
-    expect(find.text('Computer turn'), findsOneWidget);
+    expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
+    expect(find.text('Watch the realm grow.'), findsNothing);
     await finishAi(tester);
     expect(find.text('Computer turn'), findsNothing);
   });
