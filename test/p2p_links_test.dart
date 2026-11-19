@@ -2,9 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/network/p2p_links.dart';
 
 void main() {
-  final base = Uri.parse(
-    'https://brandonp2412.github.io/stone-and-banner/?unused=1',
-  );
+  final base = Uri.parse('https://brandonp2412.github.io/stone-and-banner/');
   final offer = {
     'type': 'offer',
     'room': 'AABBCCDD',
@@ -17,7 +15,20 @@ void main() {
     final uri = Uri.parse(link);
     expect(uri.query, isEmpty);
     expect(uri.path, '/stone-and-banner/');
+    expect(
+      link,
+      isNot(contains('?#p2p=')),
+      reason: 'The host must not be reloaded when a response opens in its tab.',
+    );
+    expect(link, contains('/stone-and-banner/#p2p='));
     expect(uri.fragment, startsWith('p2p='));
+    expect(P2pLinks.parse(link), {'v': 1, ...offer});
+  });
+
+  test('existing host query parameters survive offer and response', () {
+    final tracked = Uri.parse('$base?qa=1');
+    final link = P2pLinks.link(tracked, offer);
+    expect(Uri.parse(link).query, 'qa=1');
     expect(P2pLinks.parse(link), {'v': 1, ...offer});
   });
 

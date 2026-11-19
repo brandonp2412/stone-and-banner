@@ -22,6 +22,23 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   String? parseError;
   int seats = 3;
   bool applying = false;
+  bool? responseDelivered;
+  bool forwardingResponse = false;
+  String? receivedResponseLink;
+
+  Future<void> _deliverResponse(String link) async {
+    if (forwardingResponse) return;
+    setState(() {
+      forwardingResponse = true;
+      responseDelivered = null;
+    });
+    final delivered = await P2pTransport.forwardAnswer(link);
+    if (!mounted) return;
+    setState(() {
+      responseDelivered = delivered;
+      forwardingResponse = false;
+    });
+  }
 
   @override
   void initState() {
@@ -33,8 +50,12 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
         incoming = P2pLinks.parse(incomingLink);
         if (incoming!['type'] == 'offer') name.text = 'Guest';
         if (incoming!['type'] == 'answer') {
-          // Host's original tab receives this via BroadcastChannel.
-          P2pTransport.broadcastAnswer(incomingLink);
+          // A response link isn't another game lobby. Deliver it to an
+          // existing same-browser host tab and require acknowledgement.
+          receivedResponseLink = incomingLink;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _deliverResponse(incomingLink);
+          });
         }
       } on Object catch (e) {
         parseError = '$e';
@@ -85,78 +106,124 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     ),
   );
 
-  Widget _setup() => _pane([
-    Text(
-      'Direct P2P multiplayer',
-      style: Theme.of(context).textTheme.headlineSmall,
-    ),
-    const SizedBox(height: 8),
-    const Text(
-      'No signalling server, relay, or accounts. '
-      'Free public STUN servers help peers traverse home routers; game moves '
-      'stay encrypted and direct. Exchange invitation and response links '
-      'over chat. Some NATs and firewalls still block connections.',
-    ),
-    const SizedBox(height: 14),
-    TextField(
-      controller: name,
-      maxLength: 32,
-      decoration: const InputDecoration(
-        labelText: 'Your player name',
-        border: OutlineInputBorder(),
-      ),
-    ),
-    if (incoming?['type'] == 'offer') ...[
-      const Text('Invitation received. Join to generate a response link.'),
-      const SizedBox(height: 10),
-      FilledButton.icon(
-        onPressed: room.preparing
-            ? null
-            : () async {
+  Widget _setup() => incoming?['type'] == 'answer'
+      ? _answerPage()
+      : _pane([
+          Text(
+            'Direct P2P multiplayer',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'No signalling server, relay, or accounts. '
+            'Free public STUN servers help peers traverse home routers; game moves '
+            'stay encrypted and direct. Exchange invitation and response links '
+            'over chat. Some NATs and firewalls still block connections.',
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: name,
+            maxLength: 32,
+            decoration: const InputDecoration(
+              labelText: 'Your player name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (incoming?['type'] == 'offer') ...[
+            const Text(
+              'Invitation received. Join to generate a response link.',
+            ),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: room.preparing
+                  ? null
+                  : () async {
+                      try {
+                        await room.join(name.text, incoming!);
+                      } on Object catch (e) {
+                        setState(() => parseError = '$e');
+                      }
+                    },
+              icon: const Icon(Icons.link),
+              label: Text(
+                room.preparing
+                    ? 'Collecting candidates…'
+                    : 'Join and create response',
+              ),
+            ),
+          ] else ...[
+            const Text(
+              'Create a room and send a separate invitation to each guest.',
+            ),
+            const SizedBox(height: 9),
+            SegmentedButton<int>(
+              selected: {seats},
+              segments: const [
+                ButtonSegment(value: 3, label: Text('3 players')),
+                ButtonSegment(value: 4, label: Text('4 players')),
+              ],
+              onSelectionChanged: (v) => setState(() => seats = v.first),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () {
                 try {
-                  await room.join(name.text, incoming!);
+                  room.host(name.text, seats, randomWorldSeed());
                 } on Object catch (e) {
                   setState(() => parseError = '$e');
                 }
               },
-        icon: const Icon(Icons.link),
-        label: Text(
-          room.preparing
-              ? 'Collecting candidates…'
-              : 'Join and create response',
+              icon: const Icon(Icons.groups),
+              label: const Text('Host P2P match'),
+            ),
+          ],
+        ]);
+
+  /// A returned answer is not a second host lobby. Keep its UI deliberately
+  /// separate from the Create/Join form so users never mistake it for a game.
+  Widget _answerPage() => _pane([
+    Text(
+      'Connection response',
+      style: Theme.of(context).textTheme.headlineSmall,
+    ),
+    const SizedBox(height: 12),
+    if (forwardingResponse)
+      const ListTile(
+        leading: CircularProgressIndicator(),
+        title: Text('Sending response to your original host tab…'),
+        subtitle: Text('Keep the host tab open. This page is not a lobby.'),
+      )
+    else if (responseDelivered == true)
+      const ListTile(
+        leading: Icon(Icons.check_circle_outline),
+        title: Text('Response applied to your host lobby'),
+        subtitle: Text(
+          'Return to the original host tab to see your friend join. '
+          'You do not need to host again.',
+        ),
+      )
+    else
+      const ListTile(
+        leading: Icon(Icons.info_outline),
+        title: Text('Original host tab not found'),
+        subtitle: Text(
+          'This response page cannot become your host room. '
+          'Switch to your existing host tab and paste the link into '
+          '“Response link from friend”. If the host tab was replaced, '
+          'recreate the lobby and send a new invitation. '
+          'Links must open in the same browser, not an in-app browser.',
         ),
       ),
-    ] else if (incoming?['type'] == 'answer') ...[
-      const Text(
-        'Response forwarded to any open host tab. '
-        'If it was not applied, paste this link into your original host tab. '
-        'Do not close or replace the host tab.',
-      ),
-      _copy('response link', P2pTransport.initialLink() ?? ''),
-    ] else ...[
-      const Text('Create a room and send a separate invitation to each guest.'),
-      const SizedBox(height: 9),
-      SegmentedButton<int>(
-        selected: {seats},
-        segments: const [
-          ButtonSegment(value: 3, label: Text('3 players')),
-          ButtonSegment(value: 4, label: Text('4 players')),
-        ],
-        onSelectionChanged: (v) => setState(() => seats = v.first),
-      ),
-      const SizedBox(height: 12),
-      FilledButton.icon(
-        onPressed: () {
-          try {
-            room.host(name.text, seats, randomWorldSeed());
-          } on Object catch (e) {
-            setState(() => parseError = '$e');
-          }
-        },
-        icon: const Icon(Icons.groups),
-        label: const Text('Host P2P match'),
-      ),
-    ],
+    const SizedBox(height: 8),
+    OutlinedButton.icon(
+      onPressed: forwardingResponse || receivedResponseLink == null
+          ? null
+          : () => _deliverResponse(receivedResponseLink!),
+      icon: const Icon(Icons.send_outlined),
+      label: const Text('Try sending to open host tab again'),
+    ),
+    const SizedBox(height: 8),
+    _copy('response link', receivedResponseLink ?? ''),
   ]);
 
   Widget _lobby() => _pane([
@@ -167,7 +234,8 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     const SizedBox(height: 7),
     Text(
       room.isHost
-          ? 'You are the authoritative host. Keep this tab open.'
+          ? 'You are the authoritative host. KEEP this tab open when your '
+                'friend replies; never replace it with their link.'
           : room.connected
           ? 'Connected to host · Seat ${room.seat! + 1}'
           : 'Waiting for the host to apply your response link…',
@@ -236,8 +304,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
       ),
       const SizedBox(height: 14),
       const Text(
-        'Friend opens the invite and sends back a response link. '
-        'Paste it here, or open it in a NEW tab while keeping this tab open.',
+        'Your friend must send a response link back because WebRTC needs '
+        'connection details from both browsers. Do not leave this host tab. '
+        'Open their response link in a separate tab in the SAME browser '
+        '(it will apply automatically), or copy and paste it below.',
       ),
       const SizedBox(height: 7),
       TextField(

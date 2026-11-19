@@ -19,8 +19,12 @@ external void _close(JSString id);
 external void _onAnswer(JSFunction callback);
 @JS('stoneP2p.offAnswer')
 external void _offAnswer(JSFunction callback);
-@JS('stoneP2p.postAnswer')
-external void _postAnswer(JSString message);
+@JS('stoneP2p.forwardAnswer')
+external JSPromise<JSBoolean> _forwardAnswer(JSString message);
+@JS('stoneP2p.acknowledgeAnswer')
+external void _acknowledgeAnswer(JSString id, JSBoolean accepted);
+@JS('stoneP2p.setHosting')
+external void _setHosting(JSBoolean hosting);
 
 class P2pTransport {
   static String? initialLink() {
@@ -65,9 +69,12 @@ class P2pTransport {
     _listeners.remove(id);
   }
 
-  void listenAnswers(void Function(String) callback) {
+  void listenAnswers(void Function(String link, String id) callback) {
     if (_answerListener != null) _offAnswer(_answerListener!);
-    _answerListener = ((JSString raw) => callback(raw.toDart)).toJS;
+    _answerListener = ((JSString raw, JSString id) => callback(
+      raw.toDart,
+      id.toDart,
+    )).toJS;
     _onAnswer(_answerListener!);
   }
 
@@ -78,5 +85,9 @@ class P2pTransport {
     }
   }
 
-  static void broadcastAnswer(String message) => _postAnswer(message.toJS);
+  static Future<bool> forwardAnswer(String message) async =>
+      (await _forwardAnswer(message.toJS).toDart).toDart;
+  static void acknowledgeAnswer(String id, bool accepted) =>
+      _acknowledgeAnswer(id.toJS, accepted.toJS);
+  static void setHosting(bool hosting) => _setHosting(hosting.toJS);
 }

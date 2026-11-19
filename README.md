@@ -19,9 +19,20 @@ Open [Stone & Banner](https://brandonp2412.github.io/stone-and-banner/) and
 choose **P2P multiplayer**. The host keeps their browser tab open, generates
 one **invite link per guest**, and sends the links via any chat. Each guest
 opens their invitation, chooses a unique name, then sends back a **response
-link**. The host pastes each response link into their original host tab (or
-opens it in a *new* tab to forward it automatically). When all 3–4 players
-are connected, the host starts the match. The host can also tap **Add AI
+link**. The host must **keep the original host tab open**: clicking a response
+link in the **same browser** can apply it automatically (in a new tab, or a
+fragment-only navigation that preserves the original document). The response
+page now confirms whether the original host actually received it. If the
+response opens in a separate in-app browser/profile, use **Copy response
+link** and paste it into the host tab's **Response link from friend** field.
+Never replace or reload the host document: WebRTC connections are in-memory.
+
+Both directions are necessary for *manual* WebRTC signalling: an invitation
+carries an SDP offer, and the response returns the SDP answer. One-link joins
+would require some external signalling channel; public STUN only assists NAT
+discovery and cannot exchange offers and answers.
+
+When all 3–4 players are connected, the host starts the match. The host can also tap **Add AI
 opponent** to reserve any unfilled seats for computer players, mixing remote
 friends and bots in the same 3–4 player game. AI seats use the same
 HeuristicAi/AiTurnCoordinator as the local game and run entirely in the host

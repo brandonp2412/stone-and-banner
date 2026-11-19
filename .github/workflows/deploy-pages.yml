@@ -33,8 +33,8 @@ jobs:
         run: flutter pub get
       - name: Test P2P invitations and room authority
         run: flutter test test/p2p_links_test.dart test/p2p_bot_lobby_test.dart test/stage6_room_test.dart
-      - name: Verify direct-only WebRTC ICE configuration
-        run: node --test tool/p2p_ice_test.js
+      - name: Verify direct WebRTC ICE and response handshakes
+        run: node --test tool/p2p_ice_test.js tool/p2p_answer_test.js
       - name: Build website
         run: flutter build web --release --base-href /stone-and-banner/
       - name: Bust browser bridge cache on each deployment

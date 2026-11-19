@@ -6,7 +6,17 @@ abstract final class P2pLinks {
     final encoded = base64Url
         .encode(utf8.encode(jsonEncode({'v': 1, ...message})))
         .replaceAll('=', '');
-    return origin.replace(query: '', fragment: 'p2p=$encoded').toString();
+    // Only the fragment changes. An extra '?' would force a full reload in
+    // some browsers, destroying the host's live RTCPeerConnection.
+    return Uri(
+      scheme: origin.scheme,
+      userInfo: origin.userInfo,
+      host: origin.host,
+      port: origin.hasPort ? origin.port : null,
+      path: origin.path,
+      query: origin.query.isEmpty ? null : origin.query,
+      fragment: 'p2p=$encoded',
+    ).toString();
   }
 
   static Map<String, dynamic> parse(String input) {
