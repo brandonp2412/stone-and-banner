@@ -51,6 +51,7 @@ class _Server {
   final registry = LanRoomRegistry();
   final connections = <_Connection>{};
   final clocks = <HostedRoom, Timer>{};
+  final clockTurns = <HostedRoom, String>{};
 
   void attach(WebSocket socket) {
     final conn = _Connection(socket);
@@ -188,21 +189,27 @@ class _Server {
   }
 
   void schedule(HostedRoom room) {
-    clocks.remove(room)?.cancel();
     final state = room.state;
-    if (state == null || state.phase == MatchPhase.finished) return;
-    final window = state.tactical;
-    if (window != null) {
-      // A human reaction remains pending until the player chooses or passes.
+    if (state == null || state.phase == MatchPhase.finished) {
+      clocks.remove(room)?.cancel();
+      clockTurns.remove(room);
       return;
-    } else {
-      final version = room.version;
-      clocks[room] = Timer(const Duration(seconds: 90), () {
-        if (room.advanceIdle(version)) {
-          broadcast(room);
-          schedule(room);
-        }
-      });
     }
+    final key =
+        '${state.turnSerial}:${state.active}:${state.pendingDiscards.keys.join(',')}:${state.tactical?.id}:${state.tactical?.responder}';
+    // Offers and other actions must not renew a player's turn allowance.
+    if (clockTurns[room] == key && clocks[room]?.isActive == true) return;
+    clocks.remove(room)?.cancel();
+    clockTurns[room] = key;
+    clocks[room] = Timer(const Duration(seconds: 90), () {
+      final current = room.state;
+      if (current == null) return;
+      final window = current.tactical;
+      final advanced = window != null
+          ? room.timeout(window.id, window.responder)
+          : room.advanceIdle(room.version);
+      if (advanced) broadcast(room);
+      schedule(room);
+    });
   }
 }

@@ -10,10 +10,7 @@ import 'match.dart';
 /// invents placements, exchanges or dice outcomes.
 class AiLegalActions {
   AiLegalActions(MatchState state)
-    : _options = AiActionAdapter.observe(
-        state,
-        state.tactical?.responder ?? state.active,
-      ).legalActions;
+    : _options = AiActionAdapter.observe(state, state.actingSeat).legalActions;
 
   // The adapter is the authoritative whitelist. No opponent hand queries,
   // speculative reducer events or private target checks are done here.
@@ -31,6 +28,7 @@ class AiLegalActions {
       _options.whereType<PlayStrategyCard>().toList();
   List<RecruitKnight> get recruits =>
       _options.whereType<RecruitKnight>().toList();
+  List<MoveKnight> get knightMoves => _options.whereType<MoveKnight>().toList();
   List<ActivateKnight> get activates =>
       _options.whereType<ActivateKnight>().toList();
   List<PromoteKnight> get promotions =>
@@ -127,6 +125,33 @@ class HeuristicAi {
     return sorted.first;
   }
 
+  // Stable variety keeps replays deterministic while varying aggressive turns.
+  bool _aggressive(MatchState state) =>
+      (state.seed + state.turnSerial * 17 + state.active * 31) % 100 < 40;
+
+  double _blockingValue(MatchState state, int vertex) {
+    final junction = state.topology.vertices[vertex];
+    var value = 0.0;
+    for (var seat = 0; seat < state.players.length; seat++) {
+      if (seat == state.active) continue;
+      final roads = junction.edges.where((e) => state.roads[e] == seat).length;
+      if (roads >= 2) value += 9;
+      if (roads == 1) value += 3;
+    }
+    return value;
+  }
+
+  double _knightValue(MatchState state, int vertex) {
+    final junction = state.topology.vertices[vertex];
+    final ownRoads = junction.edges
+        .where((e) => state.roads[e] == state.active)
+        .length;
+    // Guard contested junctions without occupying our best settlement sites.
+    return _blockingValue(state, vertex) * 2 +
+        ownRoads * 1.5 -
+        (_open(state, vertex) ? siteValue(state, vertex) * .8 : 0);
+  }
+
   double _roadValue(MatchState state, int edge) {
     final road = state.topology.edges[edge];
     final accessible = <int>{};
@@ -153,7 +178,12 @@ class HeuristicAi {
         }
       }
     }
-    return best;
+    return best +
+        (_aggressive(state)
+            ? endpoints
+                  .map((v) => _blockingValue(state, v))
+                  .fold<double>(0, math.max)
+            : 0);
   }
 
   Map<Resource, int> _goal(MatchState state) {
@@ -225,6 +255,12 @@ class HeuristicAi {
 
   MatchEvent? choose(MatchState state) {
     if (state.phase == MatchPhase.finished) return null;
+    if (state.pendingDiscards.isNotEmpty) {
+      return AiActionAdapter.observe(
+        state,
+        state.actingSeat,
+      ).legalActions.single;
+    }
     final legal = AiLegalActions(state);
     if (state.tactical != null) return _tactical(state, legal);
     switch (state.phase) {
@@ -271,7 +307,17 @@ class HeuristicAi {
     final approachingFleet = MatchEngine.invasionStrength(state) + 1;
     final needDefence = MatchEngine.defenceStrength(state) < approachingFleet;
     final preparing = state.reaverPressure >= 1 || state.round >= 2;
-    if (preparing && view.actionsSinceRoll < 6) {
+    final ownsTown = state.sites.values.any(
+      (site) =>
+          site.owner == state.active && site.structure != Structure.village,
+    );
+    final rivalTowns = state.sites.values.any(
+      (site) =>
+          site.owner != state.active && site.structure != Structure.village,
+    );
+    // A player with no towns at risk can profit from an undefended invasion.
+    final defend = ownsTown || !rivalTowns;
+    if (preparing && defend && needDefence && view.actionsSinceRoll < 6) {
       if (legal.activates.isNotEmpty) {
         return _best<ActivateKnight>(
           legal.activates,
@@ -292,12 +338,23 @@ class HeuristicAi {
           (needDefence || ownActiveStrength == 0)) {
         return _best<RecruitKnight>(
           legal.recruits,
-          (event) => siteValue(state, event.vertex),
+          (event) => _knightValue(state, event.vertex),
           (event) => event.vertex,
         );
       }
       if (needDefence && legal.fortifications.isNotEmpty) {
         return legal.fortifications.first;
+      }
+    }
+
+    if (legal.knightMoves.isNotEmpty) {
+      final move = _best<MoveKnight>(
+        legal.knightMoves,
+        (e) => _knightValue(state, e.to) - _knightValue(state, e.from),
+        (e) => e.to,
+      );
+      if (_knightValue(state, move.to) > _knightValue(state, move.from) + 2) {
+        return move;
       }
     }
 
@@ -316,7 +373,9 @@ class HeuristicAi {
     if (legal.villages.isNotEmpty) {
       return _best<PlaceVillage>(
         legal.villages,
-        (e) => siteValue(state, e.vertex),
+        (e) =>
+            siteValue(state, e.vertex) +
+            (_aggressive(state) ? _blockingValue(state, e.vertex) : 0),
         (e) => e.vertex,
       );
     }

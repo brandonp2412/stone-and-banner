@@ -16,7 +16,13 @@ Offset edgeMidpoint(MatchState state, Size mapSize, int id) {
 
 void main() {
   test('barbarians scale with upgraded sites, not past raids or pressure', () {
-    final baseline = tableWithSupplies();
+    final initial = tableWithSupplies();
+    final baseline = initial.copyWith(
+      sites: {
+        for (final entry in initial.sites.entries)
+          entry.key: Site(entry.value.owner, Structure.village),
+      },
+    );
     expect(MatchEngine.invasionStrength(baseline), 0);
     final villages = baseline.sites.keys.toList();
     final town = baseline.copyWith(
@@ -45,7 +51,7 @@ void main() {
     );
   });
 
-  testWidgets('tap owned road to choose extension, then confirm new road', (
+  testWidgets('tap owned road to choose extension and build directly', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(393, 852);
@@ -89,12 +95,6 @@ void main() {
     final nextEdge = MatchEngine.legalEdges(state).first;
     await tester.tapAt(position(nextEdge));
     await tester.pumpAndSettle();
-    expect(find.text('Build this road?'), findsOneWidget);
-    expect(state.roads.length, originalRoads);
-
-    await tester.tap(find.text('Build road'));
-    await tester.pump(); // Start the dialog's reverse route animation.
-    await tester.pump(const Duration(milliseconds: 340));
     expect(find.text('Build this road?'), findsNothing);
     expect(state.roads[nextEdge], state.active);
     expect(state.roads.length, originalRoads + 1);

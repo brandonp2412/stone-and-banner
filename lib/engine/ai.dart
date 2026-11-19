@@ -6,6 +6,7 @@ import 'board.dart';
 import 'cards.dart';
 import 'game.dart';
 import 'match.dart';
+import 'trade_sentiment.dart';
 
 /// A deliberately narrow observation for an offline AI seat.
 ///
@@ -83,13 +84,24 @@ class AiStrategySignals {
 abstract final class AiActionAdapter {
   static AiTurnView observe(MatchState state, int seat) {
     RangeError.checkValidIndex(seat, state.players, 'seat');
-    final expected = state.tactical?.responder ?? state.active;
+    final expected = state.actingSeat;
     if (seat != expected) {
       throw StateError('AI may observe only the acting/responding seat.');
     }
 
     final actions = <MatchEvent>[];
-    if (state.tactical case final TacticalWindow window) {
+    if (state.pendingDiscards.isNotEmpty) {
+      final hand = Map<Resource, int>.of(state.players[seat].stores);
+      final goods = <Resource, int>{};
+      for (var left = state.pendingDiscards[seat]!; left > 0; left--) {
+        final ranked = Resource.values.toList()
+          ..sort((a, b) => (hand[b] ?? 0).compareTo(hand[a] ?? 0));
+        final good = ranked.first;
+        goods[good] = (goods[good] ?? 0) + 1;
+        hand[good] = hand[good]! - 1;
+      }
+      actions.add(DiscardResources(seat, goods));
+    } else if (state.tactical case final TacticalWindow window) {
       actions.add(RespondTactical(window.id, seat, TacticalChoice.pass));
       if (window.kind == TacticalKind.bandit &&
           MatchEngine.canIntercept(state, seat)) {
@@ -133,11 +145,16 @@ abstract final class AiActionAdapter {
           final (first, second) = MatchEngine.expectedDice(state);
           actions.add(RollDice(first, second));
         case MatchPhase.bandit:
-          // A null victim is always legal. Choosing a particular victim would
-          // require consulting their concealed resource inventory.
           for (var tile = 0; tile < state.board.tiles.length; tile++) {
             if (tile != state.banditTile) {
-              actions.add(MoveBandit(tile));
+              final victims = MatchEngine.banditVictims(state, tile);
+              if (victims.isEmpty) {
+                actions.add(MoveBandit(tile));
+              } else {
+                actions.addAll(
+                  victims.map((victim) => MoveBandit(tile, victim: victim)),
+                );
+              }
             }
           }
         case MatchPhase.invasion:
@@ -150,8 +167,19 @@ abstract final class AiActionAdapter {
     }
 
     // Preserve enumeration order, de-duplicating by canonical replay payload.
+    final grievances = TradeSentiment.grievances(state, seat);
     final distinct = <String, MatchEvent>{};
     for (final action in actions) {
+      if (action is ProposeTrade &&
+          action.counterOf == null &&
+          !TradeSentiment.willingToOffer(
+            state,
+            seat,
+            action.target,
+            grievances[action.target] ?? 0,
+          )) {
+        continue;
+      }
       distinct.putIfAbsent(jsonEncode(action.toJson()), () => action);
     }
     final player = state.players[seat];
@@ -471,13 +499,21 @@ abstract final class AiActionAdapter {
       }
     }
 
+    // Include resolved offers and counters so changing the goods or target,
+    // declining, withdrawing, or restoring a save cannot allow another ask.
+    final proposedThisTurn = s.events.reversed
+        .takeWhile((event) => event is! RollDice && event is! EndTurn)
+        .any((event) => event is ProposeTrade);
+    final canPropose =
+        !proposedThisTurn && !s.offers.any((o) => o.proposer == s.active);
+
     for (final offer in s.offers) {
       if (offer.target == s.active) {
         actions.add(RespondTrade(s.active, false, offerId: offer.id));
-        if ((s.current.stores[offer.want] ?? 0) >= offer.wantCount) {
+        if (canPayTrade(s.current.stores, offer.wants)) {
           actions.add(RespondTrade(s.active, true, offerId: offer.id));
         }
-        if (!s.offers.any((o) => o.proposer == s.active)) {
+        if (canPropose) {
           // A counter uses an explicitly visible offered good. Never inspect
           // the proposer's private stores to decide what they can afford.
           for (final give in Resource.values) {
@@ -502,20 +538,41 @@ abstract final class AiActionAdapter {
       }
     }
 
-    if (!s.offers.any((o) => o.proposer == s.active)) {
-      // The reducer accepts arbitrary positive requested amounts; 1-for-1
-      // proposals are a finite, public-information-only AI candidate policy.
-      for (final give in Resource.values) {
-        if ((s.current.stores[give] ?? 0) < 1) continue;
-        for (final want in Resource.values) {
-          if (give == want) continue;
+    if (canPropose) {
+      // Bounded bundles: up to three of one good or one each of two goods.
+      // Candidate generation uses only our inventory, never a rival's hand.
+      final bundles = <Map<Resource, int>>[
+        for (final good in Resource.values)
+          for (var count = 1; count <= 3; count++) {good: count},
+        for (final first in Resource.values)
+          for (final second in Resource.values)
+            if (first.index < second.index) {first: 1, second: 1},
+      ];
+      for (final gives in bundles) {
+        if (!canPayTrade(s.current.stores, gives)) continue;
+        for (final wants in bundles) {
+          if (gives.keys.any(wants.containsKey)) continue;
+          final paid = gives.values.fold<int>(0, (a, b) => a + b);
+          final asked = wants.values.fold<int>(0, (a, b) => a + b);
+          if (asked > paid || paid > asked * 2) continue;
           for (var target = 0; target < s.players.length; target++) {
             if (target == s.active) continue;
-            actions.add(ProposeTrade(target, give, 1, want, 1));
+            actions.add(
+              ProposeTrade(
+                target,
+                gives.keys.first,
+                gives.values.first,
+                wants.keys.first,
+                wants.values.first,
+                giveBundle: gives,
+                wantBundle: wants,
+              ),
+            );
           }
         }
       }
     }
+
     actions.add(const EndTurn());
   }
 
@@ -583,7 +640,7 @@ abstract final class AiActionAdapter {
         state.events.length != view.eventOrdinal ||
         state.active != view.activeSeat ||
         state.phase != view.phase ||
-        (state.tactical?.responder ?? state.active) != view.seat) {
+        (state.actingSeat) != view.seat) {
       throw StateError('AI observation is stale or belongs to another seat.');
     }
     final key = jsonEncode(action.toJson());

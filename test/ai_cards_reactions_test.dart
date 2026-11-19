@@ -205,7 +205,8 @@ void main() {
       const ProposeTrade(1, Resource.ore, 1, Resource.wheat, 2),
     );
     expect(s.offers, hasLength(1));
-    s = s.copyWith(active: 1); // Target's own action turn.
+    // Preserve the offer while moving the fixture to the target's own turn.
+    s = s.copyWith(active: 1, events: [...s.events, const EndTurn()]);
     final view = AiActionAdapter.observe(s, 1);
     final counter = AiCardStrategy.incomingOffer(view);
     expect(counter, isA<ProposeTrade>());
@@ -213,6 +214,14 @@ void main() {
     s = AiActionAdapter.applySelected(s, view, counter);
     expect(s.offers.single.isCounter, isTrue);
     expect(s.offers.single.proposer, 1);
+    final withdrawn = MatchEngine.apply(s, WithdrawTrade(s.offers.single.id));
+    expect(
+      AiActionAdapter.observe(
+        withdrawn,
+        1,
+      ).legalActions.whereType<ProposeTrade>(),
+      isEmpty,
+    );
     conserve(s);
 
     s = s.copyWith(active: 0);
@@ -288,6 +297,40 @@ void main() {
     );
     conserve(afterPass);
   });
+
+  for (final resolution in ['decline', 'withdraw', 'accept']) {
+    test('bot asks only once after a trade $resolution within the turn', () {
+      var state = stock(fixture(), 0, {Resource.wood: 3});
+      state = stock(state, 1, {Resource.ore: 2});
+      const proposal = ProposeTrade(1, Resource.wood, 1, Resource.ore, 1);
+      state = MatchEngine.apply(state, proposal);
+      final id = state.offers.single.id;
+      state = MatchEngine.apply(
+        state,
+        resolution == 'withdraw'
+            ? WithdrawTrade(id)
+            : RespondTrade(1, resolution == 'accept', offerId: id),
+      );
+      bool isRepeat(MatchEvent event) =>
+          event is ProposeTrade &&
+          event.counterOf == null &&
+          event.target == proposal.target &&
+          event.give == proposal.give &&
+          event.giveCount == proposal.giveCount &&
+          event.want == proposal.want &&
+          event.wantCount == proposal.wantCount;
+      final view = AiActionAdapter.observe(state, 0);
+      expect(view.legalActions.any(isRepeat), isFalse);
+      expect(view.legalActions.whereType<ProposeTrade>(), isEmpty);
+      // The history boundary permits the same terms on a later turn.
+      final later = state.copyWith(events: [...state.events, const EndTurn()]);
+      expect(
+        AiActionAdapter.observe(later, 0).legalActions.any(isRepeat),
+        isTrue,
+      );
+      conserve(state);
+    });
+  }
 
   test('bot offers surplus once and accepts a useful open trade', () {
     var proposing = fixture().copyWith(

@@ -3,21 +3,20 @@ import 'dart:math' as math;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../engine/advanced.dart';
 import '../engine/board.dart';
 import '../engine/game.dart';
 import '../engine/match.dart';
-import '../replay_codes.dart';
 import 'strategy_hand.dart';
 import 'labels.dart';
 import 'resource_harvest.dart';
 import 'resource_icon.dart';
 import 'trade_market.dart';
 import 'trade_leg.dart';
-import 'game_notice.dart';
+import 'focus_hint.dart';
+import 'gameplay_hint.dart';
 import 'match_activity.dart';
 import 'match_end_modal.dart';
 import 'board_event_effects.dart';
@@ -68,6 +67,8 @@ class MatchView extends StatefulWidget {
     this.waitingMessage,
     this.onHome,
     this.onRules,
+    this.onSettings,
+    this.pauseInBackground = true,
   });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
@@ -81,6 +82,8 @@ class MatchView extends StatefulWidget {
   final int? visibleSeat;
   final String? waitingMessage;
   final VoidCallback? onHome, onRules;
+  final Future<void> Function()? onSettings;
+  final bool pauseInBackground;
   @override
   State<MatchView> createState() => _MatchViewState();
 }
@@ -90,6 +93,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   _Move choice = _Move.inspect;
   int? selectedKnight;
   Size? _boardSize;
+  Offset? _hoverPosition;
   RollDice? _rollingDice;
   int _diceAnimationSerial = 0;
   late final AnimationController _roadController;
@@ -102,13 +106,17 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   bool _endModalDismissed = false;
   bool _hintsEnabled = true;
   bool _hintsLoaded = false;
-  bool _townHintDismissed = false;
+  final Set<String> _seenHints = {};
+  String? _dismissedHintContext;
+  bool _botTradeOpen = false;
+  bool _tradeComposerOpen = false;
 
   Future<void> _loadHints() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
       _hintsEnabled = prefs.getBool('gameplay_hints_enabled') ?? true;
+      _seenHints.addAll(prefs.getStringList('gameplay_hints_seen_v1') ?? []);
       _hintsLoaded = true;
     });
   }
@@ -119,77 +127,153 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     await prefs.setBool('gameplay_hints_enabled', enabled);
   }
 
-  bool get _showTownHint =>
-      _hintsLoaded &&
-      _hintsEnabled &&
-      !_townHintDismissed &&
-      !widget.observing &&
-      s.phase == MatchPhase.actions &&
-      s.tactical == null &&
-      s.active == viewerSeat &&
-      s.players[viewerSeat].developments.values.every((level) => level == 0) &&
-      s.sites.values.any(
-        (site) =>
-            site.owner == viewerSeat && site.structure != Structure.village,
-      );
+  final _realmHintTarget = GlobalKey();
+  final _actionsHintTarget = GlobalKey();
+  final _boardHintTarget = GlobalKey();
+  final _panelHintTarget = GlobalKey();
+  final _tabHintTargets = List.generate(3, (_) => GlobalKey());
 
-  Widget _townProductionHint(bool mobile) => Container(
-    key: const ValueKey('town-production-hint'),
-    color: const Color(0xff243b43),
-    padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Expanded(
-          child: Text(
-            'A Town alone gives basic goods. In Realm, build Scriptorium '
-            '(woodland → paper), Loomhouse (meadows → cloth), or Mint House '
-            '(ridges → coin). Each costs 1 wheat + 1 ore. '
-            'Then collect on matching rolls.',
-            style: TextStyle(fontSize: 12, color: Color(0xffdce8e9)),
-          ),
-        ),
-        TextButton(
-          onPressed: () => setState(() {
-            _townHintDismissed = true;
+  String get _hintContext =>
+      '${s.seed}:${s.phase}:${s.tactical?.id}:$_tab:$move:$_mobilePage';
+
+  GameplayHint? get _activeGameplayHint {
+    if (!_hintsLoaded ||
+        !_hintsEnabled ||
+        widget.observing ||
+        _dismissedHintContext == _hintContext) {
+      return null;
+    }
+    String? id;
+    if (s.tactical != null) {
+      if (s.tactical!.responder != viewerSeat) return null;
+      id = 'response_${s.tactical!.kind.name}';
+    } else {
+      if (s.active != viewerSeat) return null;
+      id = switch (s.phase) {
+        MatchPhase.setupVillage =>
+          s.setupStep < s.players.length ? 'setupVillage' : 'setupTown',
+        MatchPhase.setupRoad => 'setupRoad',
+        MatchPhase.roll => 'roll',
+        MatchPhase.bandit => 'bandit',
+        MatchPhase.invasion => 'invasion',
+        MatchPhase.finished => null,
+        MatchPhase.actions =>
+          move != _Move.inspect
+              ? move.name
+              : switch (_tab) {
+                  1 => 'trade',
+                  2 => 'cards',
+                  3 => 'realm',
+                  _ =>
+                    !_seenHints.contains('town') &&
+                            s.players[viewerSeat].developments.values.every(
+                              (level) => level == 0,
+                            ) &&
+                            s.sites.values.any(
+                              (site) =>
+                                  site.owner == viewerSeat &&
+                                  site.structure != Structure.village,
+                            )
+                        ? 'town'
+                        : 'actions',
+                },
+      };
+    }
+    return id == null || _seenHints.contains(id) ? null : gameplayHints[id];
+  }
+
+  Future<void> _dismissGameplayHint(GameplayHint hint) async {
+    setState(() {
+      _seenHints.add(hint.id);
+      _dismissedHintContext = _hintContext;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      'gameplay_hints_seen_v1',
+      _seenHints.toList()..sort(),
+    );
+  }
+
+  Widget _gameplayHint(bool mobile, GameplayHint hint) {
+    final onMap = !mobile || _mobilePage == null;
+    final target = hint.id == 'town'
+        ? (mobile && onMap ? _actionsHintTarget : _realmHintTarget)
+        : s.tactical != null
+        ? _panelHintTarget
+        : ['trade', 'cards', 'realm', 'actions'].contains(hint.id)
+        ? (mobile && onMap
+              ? _actionsHintTarget
+              : hint.id == 'realm'
+              ? _realmHintTarget
+              : _tabHintTargets[_tab])
+        : onMap
+        ? _boardHintTarget
+        : _panelHintTarget;
+    return FocusHint(
+      key: ValueKey(
+        hint.id == 'town' ? 'town-production-hint' : 'gameplay-hint-${hint.id}',
+      ),
+      target: target,
+      title: hint.title,
+      explanation: hint.explanation,
+      actionLabel: hint.id == 'town' ? 'Realm' : 'Got it',
+      onOpen: () {
+        unawaited(_dismissGameplayHint(hint));
+        if (hint.id == 'town') {
+          setState(() {
             _tab = 3;
             if (mobile) _mobilePage = -1;
-          }),
-          child: const Text('Realm'),
-        ),
-        IconButton(
-          tooltip: 'Dismiss hint for this game',
-          onPressed: () => setState(() => _townHintDismissed = true),
-          icon: const Icon(Icons.close, size: 18),
-        ),
-      ],
-    ),
-  );
+            _dismissedHintContext = _hintContext;
+          });
+        }
+      },
+      onDismiss: () => unawaited(_dismissGameplayHint(hint)),
+    );
+  }
+
   late final AnimationController _numberPulseController;
+  late final AnimationController _cardsTabController;
 
   @override
   void initState() {
     super.initState();
     unawaited(loadResourceIcons());
     unawaited(_loadHints());
+    _scheduleBotTrade();
     _turnClock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted ||
           s.phase == MatchPhase.finished ||
-          s.tactical != null ||
-          // A dialog or target picker is open above this match route.
-          // Never consume a local turn while the player is interacting
-          // with a blocking overlay.
-          !(ModalRoute.of(context)?.isCurrent ?? true)) {
+          (_activeGameplayHint != null &&
+              s.pendingDiscards.isEmpty &&
+              s.offers.isEmpty &&
+              (ModalRoute.of(context)?.isCurrent ?? true)) ||
+          (!widget.online &&
+              widget.pauseInBackground &&
+              WidgetsBinding.instance.lifecycleState != null &&
+              WidgetsBinding.instance.lifecycleState !=
+                  AppLifecycleState.resumed)) {
         return;
       }
       if (_secondsLeft > 0) setState(() => _secondsLeft--);
       if (_secondsLeft == 0 &&
           !widget.online &&
-          !widget.observing &&
+          (!widget.observing ||
+              s.offers.any(
+                (o) => o.target == viewerSeat && o.proposer == s.active,
+              )) &&
           _expiredEventCount != s.events.length) {
-        final event = MatchEngine.idleEvent(s);
+        final unanswered = s.offers
+            .where((o) => o.target == viewerSeat && o.proposer == s.active)
+            .firstOrNull;
+        final event = unanswered != null
+            ? RespondTrade(viewerSeat, false, offerId: unanswered.id)
+            : MatchEngine.idleEvent(s);
         if (event != null) {
           _expiredEventCount = s.events.length;
+          if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
+            Navigator.of(context)
+                .popUntil((route) => route == ModalRoute.of(context));
+          }
           send(event);
         }
       }
@@ -203,6 +287,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       parent: _roadController,
       curve: Curves.easeOutCubic,
     );
+    _cardsTabController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+      value: 1,
+    );
     _numberPulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1550),
@@ -212,13 +301,116 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
 
   MatchState get s => widget.state;
   PlayerState get inventoryOwner => s.players[widget.viewingSeat ?? viewerSeat];
-  int get viewerSeat => widget.visibleSeat ?? widget.viewingSeat ?? s.active;
+  int get viewerSeat =>
+      widget.visibleSeat ?? widget.viewingSeat ?? s.actingSeat;
   _Move get move => switch (s.phase) {
     MatchPhase.setupVillage => _Move.village,
     MatchPhase.setupRoad => _Move.road,
     MatchPhase.bandit => _Move.bandit,
     _ => choice,
   };
+  bool _discardDialogOpen = false;
+
+  void _scheduleDiscardDialog() {
+    if (_discardDialogOpen ||
+        widget.observing ||
+        !s.pendingDiscards.containsKey(viewerSeat) ||
+        s.actingSeat != viewerSeat) {
+      return;
+    }
+    _discardDialogOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final seat = viewerSeat;
+      final required = s.pendingDiscards[seat];
+      if (required == null || widget.observing) {
+        _discardDialogOpen = false;
+        return;
+      }
+      final selected = <Resource, int>{};
+      final hand = Map<Resource, int>.of(s.players[seat].stores);
+      final result = await showDialog<Map<Resource, int>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => PopScope(
+          canPop: false,
+          child: StatefulBuilder(
+            builder: (context, update) {
+              final total = selected.values.fold<int>(0, (a, b) => a + b);
+              return AlertDialog(
+                title: Text('${s.players[seat].id}: discard resources'),
+                content: SizedBox(
+                  width: 380,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'A 7 was rolled. Choose $required resources to discard (half your hand, rounded down).',
+                        ),
+                        const SizedBox(height: 12),
+                        Text('$total / $required selected'),
+                        for (final good in Resource.values)
+                          if ((hand[good] ?? 0) > 0)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${good.name} (${hand[good]} held)',
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Keep one more ${good.name}',
+                                  onPressed: (selected[good] ?? 0) == 0
+                                      ? null
+                                      : () => update(
+                                          () => selected[good] =
+                                              selected[good]! - 1,
+                                        ),
+                                  icon: const Icon(Icons.remove),
+                                ),
+                                Text('${selected[good] ?? 0}'),
+                                IconButton(
+                                  tooltip: 'Discard one ${good.name}',
+                                  onPressed:
+                                      total >= required ||
+                                          (selected[good] ?? 0) >= hand[good]!
+                                      ? null
+                                      : () => update(
+                                          () => selected[good] =
+                                              (selected[good] ?? 0) + 1,
+                                        ),
+                                  icon: const Icon(Icons.add),
+                                ),
+                              ],
+                            ),
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: total == required
+                        ? () => Navigator.pop(dialogContext, selected)
+                        : null,
+                    child: Text('Discard $required resources'),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+      _discardDialogOpen = false;
+      if (mounted &&
+          result != null &&
+          s.actingSeat == seat &&
+          s.pendingDiscards[seat] == required) {
+        send(DiscardResources(seat, result));
+      }
+    });
+  }
+
   void send(MatchEvent event) {
     widget.onEvent(event);
     setState(() {
@@ -300,6 +492,71 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
   }
 
+  String? _boardHover(Offset point, Size size) {
+    if (widget.observing || s.tactical != null) return null;
+    final g = BoardGeometry(size);
+    if (move == _Move.road) {
+      return _roadNear(point, g, availableTargets) == null
+          ? null
+          : s.phase == MatchPhase.setupRoad
+          ? 'Place starting road · free'
+          : 'Build road · ${_costLabel(MatchEngine.effectiveRoadCost(s))}';
+    }
+    if (move == _Move.bandit) {
+      for (final id in availableTargets) {
+        if ((point - g.tile(s.board.tiles[id].position)).distance < g.radius) {
+          return 'Move Bandit here · click to choose a neighbour';
+        }
+      }
+      return null;
+    }
+    if (move != _Move.inspect) {
+      final radius = math.max(
+        22,
+        g.radius * (move == _Move.village || move == _Move.upgrade ? .4 : .45),
+      );
+      for (final id in availableTargets) {
+        if ((point - g.vertex(s.topology.vertices[id])).distance <= radius) {
+          return '$_instruction · click to select';
+        }
+      }
+      return null;
+    }
+    if (s.phase != MatchPhase.actions) return null;
+    for (final id in s.knights.keys) {
+      if ((point - g.vertex(s.topology.vertices[id])).distance <=
+          math.max(22, g.radius * .35)) {
+        final actions = [
+          if (MatchEngine.legalActivate(s, id)) 'activate',
+          if (MatchEngine.legalPromote(s, id)) 'upgrade',
+        ];
+        return actions.isEmpty
+            ? 'Inspect Knight · click for details'
+            : 'Inspect Knight · ${actions.join(' or ')} available';
+      }
+    }
+    for (final id in {
+      ...MatchEngine.legalVertices(s),
+      ...MatchEngine.legalUpgrades(s),
+    }) {
+      if ((point - g.vertex(s.topology.vertices[id])).distance <=
+          math.min(18, g.radius * .3)) {
+        return s.sites.containsKey(id)
+            ? 'Upgrade settlement · ${_upgradeCostLabel()}'
+            : 'Build village · ${_costLabel(MatchEngine.villageCost)}';
+      }
+    }
+    final road = _roadNear(point, g, [
+      ...MatchEngine.legalEdges(s),
+      for (final entry in s.roads.entries)
+        if (entry.value == s.active) entry.key,
+    ]);
+    if (road == null) return null;
+    return s.roads[road] == s.active
+        ? 'Extend your road · click to see options'
+        : 'Build road · ${_costLabel(MatchEngine.effectiveRoadCost(s))}';
+  }
+
   Future<void> tapBoard(Offset tap, Size size) async {
     final g = BoardGeometry(size);
     if (move == _Move.village || move == _Move.upgrade) {
@@ -324,7 +581,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         if (s.phase == MatchPhase.setupRoad) {
           send(PlaceRoad(best)); // Starting roads are free.
         } else {
-          await _confirmRoad(best);
+          send(PlaceRoad(best));
         }
       }
     } else if ({
@@ -421,15 +678,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           context: context,
           barrierDismissible: false,
           builder: (context) => AlertDialog(
-            title: const Text('Bandit · steal one good?'),
+            title: const Text('Bandit · choose who to rob'),
             content: const Text(
               'Choose a neighbour. The good is drawn from their hand using the saved seed.',
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, -1),
-                child: const Text('Take none'),
-              ),
               for (final n in victims)
                 TextButton(
                   onPressed: () => Navigator.pop(context, n),
@@ -439,7 +692,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           ),
         );
         if (chosen != null && mounted) {
-          send(MoveBandit(best, victim: chosen == -1 ? null : chosen));
+          send(MoveBandit(best, victim: chosen));
         }
       }
     } else {
@@ -688,6 +941,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     Resource? initialGive,
     bool fromTray = false,
   }) async {
+    if ((widget.observing && counter == null) ||
+        (s.active != viewerSeat && counter == null) ||
+        s.phase != MatchPhase.actions ||
+        s.tactical != null) {
+      return;
+    }
+    _tradeComposerOpen = true;
     final event = await showDialog<MatchEvent>(
       context: context,
       barrierColor: fromTray ? Colors.black38 : null,
@@ -705,7 +965,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               width: 660,
               height: MediaQuery.sizeOf(context).height * (fromTray ? .75 : .9),
               child: _TradeComposer(
-                state: s,
+                state: counter == null ? s : s.copyWith(active: viewerSeat),
                 kind: kind,
                 counter: counter,
                 initialGive: initialGive,
@@ -718,11 +978,92 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         },
       ),
     );
-    if (mounted && event != null) send(event);
+    _tradeComposerOpen = false;
+    if (mounted &&
+        event != null &&
+        (!widget.observing || counter != null) &&
+        (s.active == viewerSeat || counter != null) &&
+        s.phase == MatchPhase.actions &&
+        s.tactical == null) {
+      send(event);
+    }
+  }
+
+  void _scheduleBotTrade() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _botTradeOpen ||
+          _tradeComposerOpen ||
+          s.tactical != null ||
+          s.phase != MatchPhase.actions) {
+        return;
+      }
+      final incoming = s.offers.where(
+        (o) =>
+            o.target == viewerSeat &&
+            o.proposer == s.active &&
+            widget.computerSeats.contains(o.proposer),
+      );
+      if (incoming.isEmpty) return;
+      _botTradeOpen = true;
+      showGeneralDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        transitionDuration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 320),
+        pageBuilder: (context, animation, secondaryAnimation) => PopScope(
+          canPop: false,
+          child: Dialog(
+            key: const ValueKey('bot-trade-dialog'),
+            child: SizedBox(
+              width: 540,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: TradeMarket(
+                  state: s,
+                  viewerSeat: viewerSeat,
+                  computerSeats: widget.computerSeats,
+                  allowOffers: true,
+                  onBank: () {},
+                  onOffer: () {},
+                  onCounter: (trade) {
+                    Navigator.of(context).pop();
+                    offer(trade);
+                  },
+                  onEvent: (event) {
+                    Navigator.of(context).pop();
+                    send(event);
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: SlideTransition(
+              position: Tween(
+                begin: const Offset(0, .15),
+                end: Offset.zero,
+              ).animate(curved),
+              child: child,
+            ),
+          );
+        },
+      ).whenComplete(() {
+        _botTradeOpen = false;
+        if (mounted) _scheduleBotTrade();
+      });
+    });
   }
 
   final _panelScroll = List.generate(4, (_) => ScrollController());
-  bool _panelExpanded = false;
 
   bool get _compact => MediaQuery.sizeOf(context).height < 350;
 
@@ -752,6 +1093,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     _turnClock?.cancel();
     _roadController.dispose();
     _numberPulseController.dispose();
+    _cardsTabController.dispose();
     for (final controller in _panelScroll) {
       controller.dispose();
     }
@@ -761,9 +1103,44 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(covariant MatchView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _scheduleBotTrade();
+    if (oldWidget.state.active != s.active ||
+        (oldWidget.state.pendingDiscards.containsKey(viewerSeat) &&
+            !s.pendingDiscards.containsKey(viewerSeat))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !(ModalRoute.of(context)?.isCurrent ?? true)) {
+          Navigator.of(context)
+              .popUntil((route) => route == ModalRoute.of(context));
+        }
+      });
+    }
+    final previousSeat =
+        oldWidget.visibleSeat ??
+        oldWidget.viewingSeat ??
+        oldWidget.state.active;
+    if (s.seed == oldWidget.state.seed && previousSeat == viewerSeat) {
+      // Compare copies, so receiving a card also registers when another card
+      // was played or discarded in the same update.
+      final previousCards = oldWidget.state.players[previousSeat].cards
+          .toList();
+      final gainedCard = s.players[viewerSeat].cards.any((card) {
+        final index = previousCards.indexWhere(
+          (previous) =>
+              previous.track == card.track && previous.index == card.index,
+        );
+        if (index < 0) return true;
+        previousCards.removeAt(index);
+        return false;
+      });
+      if (gainedCard && !MediaQuery.disableAnimationsOf(context)) {
+        _cardsTabController.forward(from: 0);
+      }
+    } else {
+      _cardsTabController.value = 1;
+    }
     if (s.seed != oldWidget.state.seed ||
         s.events.length < oldWidget.state.events.length) {
-      _townHintDismissed = false;
+      _dismissedHintContext = null;
     }
     if (s.phase != oldWidget.state.phase ||
         (s.phase == MatchPhase.finished && s.seed != oldWidget.state.seed)) {
@@ -810,7 +1187,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
     if (oldWidget.state.turnSerial != s.turnSerial ||
         oldWidget.state.active != s.active ||
-        (widget.online && oldWidget.state.events.length != s.events.length)) {
+        oldWidget.state.actingSeat != s.actingSeat) {
       _secondsLeft = 90;
       _expiredEventCount = null;
     }
@@ -818,8 +1195,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         oldWidget.state.phase != s.phase) {
       choice = _Move.inspect;
       selectedKnight = null;
-      if (s.phase != MatchPhase.actions) _tab = 0;
-      _mobilePage = null;
     }
   }
 
@@ -831,7 +1206,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 ? 'Place your village'
                 : 'Place your town',
           MatchPhase.setupRoad => 'Connect your settlement',
-          MatchPhase.roll => 'Your turn begins',
+          MatchPhase.roll => '',
           MatchPhase.bandit => 'Move the Bandit',
           MatchPhase.invasion => 'Defend the realm',
           MatchPhase.finished =>
@@ -860,7 +1235,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             'Tap a glowing junction · first placements are free',
           MatchPhase.setupRoad =>
             'Tap a glowing edge beside your new settlement',
-          MatchPhase.roll => 'Roll the dice to collect this turn’s production',
+          MatchPhase.roll => '',
           MatchPhase.bandit => 'Tap another hex, then choose a neighbour',
           MatchPhase.invasion => 'Review the fleet and your shared defence',
           MatchPhase.finished => '15 Victory Points · a realm to remember',
@@ -876,7 +1251,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    _scheduleDiscardDialog();
     final phase = s.phase;
+    final gameplayHint = _activeGameplayHint;
     final mobile = MediaQuery.sizeOf(context).width < 900;
     return PopScope(
       canPop: !mobile || _mobilePage == null,
@@ -891,17 +1268,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               child: Column(
                 children: [
                   if (!mobile || _mobilePage == null) _playerBar(),
-                  if (_showTownHint) _townProductionHint(mobile),
                   Expanded(
                     child: LayoutBuilder(
+                      key: _panelHintTarget,
                       builder: (context, bounds) {
                         if (mobile) return _mobileLayout(phase);
                         final desktop =
                             bounds.maxWidth >= 1200 && bounds.maxHeight >= 550;
                         final railWidth = desktop
                             ? (bounds.maxWidth * .25).clamp(320.0, 420.0)
-                            : _panelExpanded
-                            ? math.min(460.0, bounds.maxWidth * .72)
                             : math.min(320.0, bounds.maxWidth * .48);
                         return Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -914,26 +1289,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                 child: Column(
                                   children: [
                                     if (s.tactical == null || widget.observing)
-                                      Row(
-                                        children: [
-                                          Expanded(child: _tabs()),
-                                          if (!desktop)
-                                            IconButton(
-                                              tooltip: _panelExpanded
-                                                  ? 'Narrow action panel'
-                                                  : 'Expand action panel',
-                                              onPressed: () => setState(() {
-                                                _panelExpanded =
-                                                    !_panelExpanded;
-                                              }),
-                                              icon: Icon(
-                                                _panelExpanded
-                                                    ? Icons.close_fullscreen
-                                                    : Icons.open_in_full,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
+                                      _tabs(),
                                     Expanded(
                                       child:
                                           s.tactical != null &&
@@ -950,15 +1306,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                               child: ListView(
                                                 controller: _panelScroll[_tab],
                                                 key: PageStorageKey(
-                                                  'panel-$_tab-${s.active}',
+                                                  'panel-$_tab',
                                                 ),
                                                 padding: EdgeInsets.symmetric(
                                                   horizontal: _compact ? 8 : 12,
                                                   vertical: _compact ? 4 : 12,
                                                 ),
                                                 children: [
-                                                  if (widget.observing)
-                                                    _waitingStatus(),
+                                                  _waitingStatus(),
                                                   ..._visiblePanelContents(
                                                     phase,
                                                   ),
@@ -968,10 +1323,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                               ),
                                             ),
                                     ),
-                                    if (s.tactical == null &&
-                                        !widget.observing &&
-                                        s.phase != MatchPhase.finished)
-                                      _turnAction(),
+                                    Visibility(
+                                      visible:
+                                          s.tactical == null &&
+                                          !widget.observing &&
+                                          s.phase != MatchPhase.finished,
+                                      maintainSize: true,
+                                      maintainAnimation: true,
+                                      maintainState: true,
+                                      child: _turnAction(),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -994,6 +1355,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 deferAnimation: _rollingDice != null,
               ),
             ),
+            if (!widget.observing)
+              Positioned(
+                top: MediaQuery.paddingOf(context).top + 60,
+                left: 8,
+                child: _emoteButton(),
+              ),
             // Center activity notices below the top controls on every screen.
             Positioned(
               top:
@@ -1009,10 +1376,19 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     state: s,
                     viewerSeat: viewerSeat,
                     computerSeats: widget.computerSeats,
+                    emote: _emote,
+                    emoteTarget: _emoteTarget,
+                    emoteSerial: _emoteSerial,
                   ),
                 ),
               ),
             ),
+            if (gameplayHint != null)
+              Positioned.fill(
+                child: BlockSemantics(
+                  child: _gameplayHint(mobile, gameplayHint),
+                ),
+              ),
             if (s.phase == MatchPhase.finished && _endModalDismissed)
               Positioned(
                 right: 16,
@@ -1150,6 +1526,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       SizedBox(
+                        key: _actionsHintTarget,
                         width: math.min(128, bounds.maxWidth * .24),
                         child: OutlinedButton.icon(
                           key: const ValueKey('mobile-open-actions'),
@@ -1210,15 +1587,43 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     ),
   );
 
-  Widget _hintSetting() => SwitchListTile(
-    title: const Text('Gameplay hints'),
-    subtitle: const Text('Show tips when learning a game'),
-    value: _hintsEnabled,
-    onChanged: _hintsLoaded ? _setHintsEnabled : null,
+  Widget _hintSetting() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SwitchListTile(
+        title: const Text('Gameplay hints'),
+        subtitle: const Text('Explain each mechanic the first time you use it'),
+        value: _hintsEnabled,
+        onChanged: _hintsLoaded ? _setHintsEnabled : null,
+      ),
+      if (_seenHints.isNotEmpty)
+        TextButton.icon(
+          onPressed: () async {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove('gameplay_hints_seen_v1');
+            if (!mounted) return;
+            setState(() {
+              _seenHints.clear();
+              _dismissedHintContext = null;
+            });
+          },
+          icon: const Icon(Icons.replay, size: 18),
+          label: const Text('Show first-time hints again'),
+        ),
+    ],
   );
 
   List<Widget> _matchOptions() => [
     _hintSetting(),
+    if (widget.onSettings != null)
+      ListTile(
+        leading: const Icon(Icons.settings),
+        title: const Text("Settings"),
+        onTap: () async {
+          await widget.onSettings?.call();
+          if (mounted) await _loadHints();
+        },
+      ),
     if (widget.onRules != null)
       ListTile(
         leading: const Icon(Icons.menu_book),
@@ -1244,8 +1649,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           child: _TacticalPanel(state: s, onEvent: send, online: widget.online),
         )
       else ...[
-        if (widget.observing) _waitingStatus(),
-        if (_tab == 0 && s.phase == MatchPhase.actions)
+        _waitingStatus(),
+        if (_tab == 0 &&
+            s.phase != MatchPhase.setupVillage &&
+            s.phase != MatchPhase.setupRoad)
           const Padding(
             padding: EdgeInsets.only(bottom: 10),
             child: Text(
@@ -1257,6 +1664,30 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       ],
       const SizedBox(height: 12),
       ..._matchOptions(),
+    ],
+  );
+
+  String? _emote;
+  int _emoteSerial = 0;
+  int? _emoteTarget;
+
+  Widget _emoteButton() => PopupMenuButton<String>(
+    tooltip: 'Emote at the table',
+    icon: const Text('🙂', style: TextStyle(fontSize: 22)),
+    onSelected: (emoji) => setState(() {
+      final parts = emoji.split('|');
+      _emoteTarget = int.parse(parts[0]);
+      _emote = parts[1];
+      _emoteSerial++;
+    }),
+    itemBuilder: (context) => [
+      for (var seat = 0; seat < s.players.length; seat++)
+        if (seat != viewerSeat)
+          for (final emoji in ['👋', '😂', '😡', '😈', '👏', '🤝'])
+            PopupMenuItem(
+              value: '$seat|$emoji',
+              child: Text('$emoji  ${s.players[seat].id}'),
+            ),
     ],
   );
 
@@ -1288,7 +1719,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              for (var i = 0; i < s.players.length; i++)
+              for (final i in [
+                viewerSeat,
+                for (var seat = 0; seat < s.players.length; seat++)
+                  if (seat != viewerSeat) seat,
+              ])
                 Semantics(
                   label:
                       '${s.players[i].id}, ${MatchEngine.score(s, i)} of 15 Victory Points${i == winner
@@ -1296,87 +1731,101 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                           : i == s.active
                           ? ', active player'
                           : ''}',
-                  child: Container(
-                    width: width,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: i == s.active
-                          ? seatColors[i].withValues(alpha: .13)
-                          : const Color(0xff1c2e35),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: i == s.active
-                            ? seatColors[i]
-                            : const Color(0xff30434a),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          i == s.active
-                              ? Icons.flag_rounded
-                              : Icons.shield_outlined,
-                          size: 20,
-                          color: seatColors[i],
+                  child: Tooltip(
+                    message: i == viewerSeat
+                        ? 'Settings and match options'
+                        : '${s.players[i].id}: ${MatchEngine.score(s, i)} Victory Points',
+                    child: InkWell(
+                      onTap: i == viewerSeat ? _openPlayerOptions : null,
+                      child: Container(
+                        width: width,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 3,
                         ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                s.players[i].id,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  height: 1.2,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                        decoration: BoxDecoration(
+                          color: i == s.active
+                              ? seatColors[i].withValues(alpha: .13)
+                              : const Color(0xff1c2e35),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: i == s.active
+                                ? seatColors[i]
+                                : const Color(0xff30434a),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              i == s.active
+                                  ? Icons.flag_rounded
+                                  : Icons.shield_outlined,
+                              size: 20,
+                              color: seatColors[i],
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    s.players[i].id,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      height: 1.2,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    i == winner
+                                        ? 'Winner'
+                                        : i == s.active
+                                        ? 'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.longestRoadHolder == i ? ' · Road +2' : ''}'
+                                        : s.longestRoadHolder == i
+                                        ? 'Longest road · +2 VP'
+                                        : 'Realm ${i + 1}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      height: 1.2,
+                                      color: i == s.active
+                                          ? seatColors[i]
+                                          : const Color(0xffa6b6ba),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                i == winner
-                                    ? 'Winner'
-                                    : i == s.active
-                                    ? 'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.longestRoadHolder == i ? ' · Road +2' : ''}'
-                                    : s.longestRoadHolder == i
-                                    ? 'Longest road · +2 VP'
-                                    : 'Realm ${i + 1}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            ),
+                            SizedBox(
+                              width:
+                                  MediaQuery.textScalerOf(context).scale(20) *
+                                  1.4,
+                              child: Text(
+                                '${MatchEngine.score(s, i)}',
+                                textAlign: TextAlign.right,
                                 style: TextStyle(
-                                  fontSize: 10,
-                                  height: 1.2,
-                                  color: i == s.active
-                                      ? seatColors[i]
-                                      : const Color(0xffa6b6ba),
+                                  color: seatColors[i],
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                            const Text(
+                              ' /15',
+                              style: TextStyle(
+                                fontSize: 10,
+                                height: 1.2,
+                                color: Color(0xffa6b6ba),
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          '${MatchEngine.score(s, i)}',
-                          style: TextStyle(
-                            color: seatColors[i],
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const Text(
-                          ' /15',
-                          style: TextStyle(
-                            fontSize: 10,
-                            height: 1.2,
-                            color: Color(0xffa6b6ba),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -1386,6 +1835,20 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       );
     },
   );
+
+  void _openPlayerOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: _matchOptions(),
+          ),
+        ),
+      ),
+    );
+  }
 
   double get _instructionHeight => math.max(
     50,
@@ -1451,6 +1914,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   }
 
   Widget _map({bool mobileFullscreen = false}) => Stack(
+    key: _boardHintTarget,
     children: [
       Positioned.fill(
         child: LayoutBuilder(
@@ -1464,6 +1928,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               ),
             );
             _boardSize = size;
+            final hover = _hoverPosition == null
+                ? null
+                : _boardHover(_hoverPosition!, size);
             return Align(
               alignment: Alignment.topCenter,
               child: SizedBox(
@@ -1473,47 +1940,96 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   child: Semantics(
                     key: const ValueKey('realm-map'),
                     label: 'Realm map. $_instruction. $_hint',
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTapUp: s.tactical == null && !widget.observing
-                          ? (details) => tapBoard(details.localPosition, size)
-                          : null,
-                      child: CustomPaint(
-                        painter: _Painter(
-                          s,
-                          widget.observing || s.tactical != null
-                              ? _Move.inspect
-                              : move,
-                          selectedKnight,
-                          animatedRoad: _animatedRoad,
-                          animatedRoadStart: _animatedRoadStart,
-                          roadReveal: _roadReveal,
-                          numberPulse: _numberPulseController,
-                        ),
-                        child: SizedBox.expand(
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              BoardEventEffects(
-                                eventIndex: s.events.length,
-                                event: s.events.isEmpty ? null : s.events.last,
-                                anchor: _eventAnchor(size),
-                              ),
-                              if (_rollingDice case final dice?)
-                                IgnorePointer(
-                                  child: DiceRoll(
-                                    key: ValueKey(_diceAnimationSerial),
-                                    first: dice.first,
-                                    second: dice.second,
-                                    onComplete: () {
-                                      if (mounted &&
-                                          identical(_rollingDice, dice)) {
-                                        setState(() => _rollingDice = null);
-                                      }
-                                    },
+                    child: MouseRegion(
+                      cursor: hover == null
+                          ? SystemMouseCursors.basic
+                          : SystemMouseCursors.click,
+                      onHover: (event) =>
+                          setState(() => _hoverPosition = event.localPosition),
+                      onExit: (_) => setState(() => _hoverPosition = null),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: s.tactical == null && !widget.observing
+                            ? (details) => tapBoard(details.localPosition, size)
+                            : null,
+                        child: CustomPaint(
+                          painter: _Painter(
+                            s,
+                            widget.observing || s.tactical != null
+                                ? _Move.inspect
+                                : move,
+                            selectedKnight,
+                            showTargets:
+                                !widget.observing &&
+                                viewerSeat == s.actingSeat &&
+                                s.tactical == null,
+                            hoverBuilds: _hoverPosition != null,
+                            animatedRoad: _animatedRoad,
+                            animatedRoadStart: _animatedRoadStart,
+                            roadReveal: _roadReveal,
+                            numberPulse: _numberPulseController,
+                          ),
+                          child: SizedBox.expand(
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (hover != null)
+                                  Positioned(
+                                    left: (_hoverPosition!.dx + 16).clamp(
+                                      8.0,
+                                      math.max(8.0, size.width - 268),
+                                    ),
+                                    top: (_hoverPosition!.dy + 24).clamp(
+                                      8.0,
+                                      math.max(8.0, size.height - 100),
+                                    ),
+                                    child: IgnorePointer(
+                                      child: Container(
+                                        key: const ValueKey('board-hover-hint'),
+                                        width: 250,
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xff101e25),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(0xffd6bd80),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          hover,
+                                          style: const TextStyle(
+                                            color: Color(0xfff5ead3),
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
+                                BoardEventEffects(
+                                  eventIndex: s.events.length,
+                                  event: s.events.isEmpty
+                                      ? null
+                                      : s.events.last,
+                                  anchor: _eventAnchor(size),
                                 ),
-                            ],
+                                if (_rollingDice case final dice?)
+                                  IgnorePointer(
+                                    child: DiceRoll(
+                                      key: ValueKey(_diceAnimationSerial),
+                                      first: dice.first,
+                                      second: dice.second,
+                                      onComplete: () {
+                                        if (mounted &&
+                                            identical(_rollingDice, dice)) {
+                                          setState(() => _rollingDice = null);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1534,6 +2050,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         child: IgnorePointer(
           child: ConstrainedBox(
             constraints: BoxConstraints(
+              minWidth: mobileFullscreen
+                  ? math.min(160, MediaQuery.sizeOf(context).width * .30)
+                  : 230,
               maxWidth: mobileFullscreen
                   ? math.min(160, MediaQuery.sizeOf(context).width * .30)
                   : 230,
@@ -1550,9 +2069,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    s.phase == MatchPhase.invasion
-                        ? 'INVASION · ROUND ${s.round}'
-                        : 'ROUND ${s.round}',
+                    'ROUND ${s.round}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -1565,27 +2082,37 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   InvasionMeter(state: s),
                   if (mobileFullscreen) ...[
                     const SizedBox(height: 5),
-                    Text(
-                      _compactInstruction,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        height: 1.1,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xffefd6a3),
-                      ),
-                    ),
-                    if (_compactHint != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        _compactHint!,
+                    SizedBox(
+                      height:
+                          MediaQuery.textScalerOf(context).scale(13) * 1.1 * 2,
+                      child: Text(
+                        _compactInstruction,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 10,
-                          height: 1.2,
-                          color: Color(0xffc6d5d5),
+                          fontSize: 13,
+                          height: 1.1,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xffefd6a3),
+                        ),
+                      ),
+                    ),
+                    ...[
+                      const SizedBox(height: 3),
+                      SizedBox(
+                        height:
+                            MediaQuery.textScalerOf(context).scale(10) *
+                            1.2 *
+                            2,
+                        child: Text(
+                          _compactHint ?? '',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            height: 1.2,
+                            color: Color(0xffc6d5d5),
+                          ),
                         ),
                       ),
                     ],
@@ -1644,7 +2171,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         ),
       if (mobileFullscreen && choice != _Move.inspect && phaseAllowsChoice)
         Positioned(
-          top: availableTargets.isNotEmpty ? 94 : 48,
+          top: 94,
           right: 6,
           child: IconButton(
             tooltip: 'Cancel selection',
@@ -1724,72 +2251,110 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
 
   bool get phaseAllowsChoice => s.phase == MatchPhase.actions;
 
-  Widget _tabs() => Row(
-    children: [
-      for (final (index, icon, label) in [
-        (0, Icons.construction_rounded, 'Build'),
-        (1, Icons.swap_horiz_rounded, 'Trade'),
-        (2, Icons.style_outlined, 'Cards'),
-        (3, Icons.castle_outlined, 'Realm'),
-      ])
-        Expanded(
-          child: Tooltip(
-            message: label,
-            child: InkWell(
-              onTap: () {
-                if (index == 1 &&
-                    !widget.observing &&
-                    s.phase == MatchPhase.actions &&
-                    s.active == viewerSeat) {
-                  exchange();
-                }
-                setState(() {
-                  _tab = index;
-                  if (index != 0) {
-                    choice = _Move.inspect;
-                    selectedKnight = null;
+  double get _cardsTabPulse => _cardsTabController.isAnimating
+      ? math.sin(_cardsTabController.value * math.pi * 3).abs()
+      : 0;
+
+  Widget _tabs() => AnimatedBuilder(
+    animation: _cardsTabController,
+    builder: (context, _) => Row(
+      children: [
+        for (final (index, icon, label) in [
+          (0, Icons.construction_rounded, 'Build'),
+          (1, Icons.swap_horiz_rounded, 'Trade'),
+          (2, Icons.style_outlined, 'Cards'),
+          (3, Icons.castle_outlined, 'Realm'),
+        ])
+          Expanded(
+            child: Tooltip(
+              key: index == 3 ? _realmHintTarget : _tabHintTargets[index],
+              message:
+                  gameplayHints[switch (index) {
+                        0 => 'actions',
+                        1 => 'trade',
+                        2 => 'cards',
+                        _ => 'realm',
+                      }]!
+                      .explanation,
+              child: InkWell(
+                onTap: () {
+                  if (index == 1 &&
+                      MediaQuery.sizeOf(context).width < 900 &&
+                      !widget.observing &&
+                      s.phase == MatchPhase.actions &&
+                      s.active == viewerSeat) {
+                    exchange();
                   }
-                });
-              },
-              child: Container(
-                constraints: BoxConstraints(minHeight: _compact ? 48 : 54),
-                decoration: BoxDecoration(
-                  color: _tab == index ? const Color(0xff2c4145) : null,
-                  border: Border(
-                    bottom: BorderSide(
-                      width: 2,
-                      color: _tab == index
-                          ? const Color(0xffe5c183)
-                          : Colors.transparent,
-                    ),
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      icon,
-                      size: 20,
-                      color: _tab == index
-                          ? const Color(0xffefd6a3)
-                          : const Color(0xffa6b6ba),
-                    ),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 10,
+                  setState(() {
+                    _tab = index;
+                    if (index != 0) {
+                      choice = _Move.inspect;
+                      selectedKnight = null;
+                    }
+                  });
+                },
+                child: Container(
+                  constraints: BoxConstraints(minHeight: _compact ? 48 : 54),
+                  decoration: BoxDecoration(
+                    color: index == 2
+                        ? Color.lerp(
+                            _tab == index
+                                ? const Color(0xff2c4145)
+                                : Colors.transparent,
+                            const Color(0xff786039),
+                            _cardsTabPulse * 0.7,
+                          )
+                        : _tab == index
+                        ? const Color(0xff2c4145)
+                        : null,
+                    border: Border(
+                      bottom: BorderSide(
+                        width: 2,
                         color: _tab == index
-                            ? const Color(0xffefd6a3)
-                            : const Color(0xffa6b6ba),
+                            ? const Color(0xffe5c183)
+                            : Colors.transparent,
                       ),
                     ),
-                  ],
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Transform.translate(
+                        offset: Offset(0, index == 2 ? -3 * _cardsTabPulse : 0),
+                        child: Transform.scale(
+                          key: index == 2
+                              ? const ValueKey('cards-tab-pulse')
+                              : null,
+                          scale: index == 2 ? 1 + 0.2 * _cardsTabPulse : 1,
+                          child: Icon(
+                            icon,
+                            size: 20,
+                            color:
+                                _tab == index ||
+                                    (index == 2 &&
+                                        _cardsTabController.isAnimating)
+                                ? const Color(0xffefd6a3)
+                                : const Color(0xffa6b6ba),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: _tab == index
+                              ? const Color(0xffefd6a3)
+                              : const Color(0xffa6b6ba),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-    ],
+      ],
+    ),
   );
 
   Widget _heading(String title, String subtitle) => Padding(
@@ -1822,51 +2387,92 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     bool enabled,
   ) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
-    child: OutlinedButton(
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        minimumSize: const Size.fromHeight(52),
-        alignment: Alignment.centerLeft,
-        backgroundColor: choice == action
-            ? const Color(0xff354e4b)
-            : const Color(0xff20343c),
-        side: BorderSide(
-          color: choice == action
-              ? const Color(0xffe5c183)
-              : const Color(0xff40565b),
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      onPressed: enabled
-          ? () => setState(() {
-              choice = action;
-              selectedKnight = null;
-              _panelExpanded = false;
-              _mobilePage = null;
-            })
-          : null,
-      child: Row(
-        children: [
-          Icon(icon, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                Text(
-                  cost,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xffabbfc2),
-                  ),
-                ),
-              ],
-            ),
+    child: Tooltip(
+      message: action == _Move.village && MatchEngine.legalVertices(s).isEmpty
+          ? 'Village unavailable: extend a road to a vacant junction away from other settlements.'
+          : gameplayHints[action.name]?.explanation ?? '$name. $cost',
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          minimumSize: const Size.fromHeight(52),
+          alignment: Alignment.centerLeft,
+          backgroundColor: choice == action
+              ? const Color(0xff354e4b)
+              : const Color(0xff20343c),
+          side: BorderSide(
+            color: choice == action
+                ? const Color(0xffe5c183)
+                : const Color(0xff40565b),
           ),
-          if (choice == action)
-            const Icon(Icons.check_circle_outline, size: 20),
-        ],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        onPressed:
+            enabled &&
+                phaseAllowsChoice &&
+                !widget.observing &&
+                s.tactical == null
+            ? () => setState(() {
+                choice = action;
+                selectedKnight = null;
+                _mobilePage = null;
+              })
+            : null,
+        child: Row(
+          children: [
+            Icon(icon, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  // Measure every changing cost at this width and text scale.
+                  // Discounts and rebuilding must not move subsequent actions.
+                  Stack(
+                    children: [
+                      for (final label in {
+                        cost,
+                        if (action == _Move.road)
+                          _costLabel(MatchEngine.roadCost),
+                        if (action == _Move.recruit)
+                          _costLabel(MatchEngine.recruitCost),
+                        if (action == _Move.upgrade)
+                          'Town: ${_costLabel(MatchEngine.townCost)}\n'
+                              'Capital: ${_costLabel(MatchEngine.capitalCost)}\n'
+                              'Rebuild: ${_costLabel(MatchEngine.rebuildCost)}',
+                      })
+                        Visibility(
+                          visible: label == cost,
+                          maintainSize: true,
+                          maintainAnimation: true,
+                          maintainState: true,
+                          child: Text(
+                            label,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xffabbfc2),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Visibility(
+              visible: choice == action,
+              maintainSize: true,
+              maintainAnimation: true,
+              maintainState: true,
+              child: const Icon(Icons.check_circle_outline, size: 20),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -1883,32 +2489,45 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     ),
   );
 
-  Widget _waitingStatus() => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          widget.automationError != null
-              ? 'Computer paused'
-              : widget.online
-              ? 'Waiting for players'
-              : 'Computer turn',
-          style: const TextStyle(color: Color(0xffe5c183)),
-        ),
-        Text(s.players[s.tactical?.responder ?? s.active].id),
-        if (widget.waitingMessage?.isNotEmpty ?? false)
-          Text(widget.waitingMessage!, style: const TextStyle(fontSize: 12)),
-        if (widget.automationError != null) ...[
-          Text(widget.automationError!),
-          FilledButton(
-            onPressed: widget.onResumeAutomation,
-            child: const Text('Resume computer'),
+  Widget _waitingStatus() {
+    if (!widget.online && widget.automationError == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.automationError != null
+                ? 'Computer paused'
+                : widget.online
+                ? (widget.observing ? 'Waiting for players' : 'Your turn')
+                : 'Computer turn',
+            style: const TextStyle(color: Color(0xffe5c183)),
           ),
+          Text(
+            s.players[s.tactical?.responder ?? s.active].id,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            widget.waitingMessage ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12),
+          ),
+          if (widget.automationError != null) ...[
+            Text(widget.automationError!),
+            FilledButton(
+              onPressed: widget.onResumeAutomation,
+              child: const Text('Resume computer'),
+            ),
+          ],
         ],
-      ],
-    ),
-  );
+      ),
+    );
+  }
 
   List<Widget> _visiblePanelContents(MatchPhase phase) {
     final contents = _panelContents(
@@ -1928,7 +2547,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     final tab = selectedTab ?? _tab;
     if (tab == 0) {
       return [
-        if (phase != MatchPhase.actions)
+        if (phase != MatchPhase.actions && phase != MatchPhase.roll)
           _heading(
             _instruction,
             phase == MatchPhase.actions
@@ -1938,7 +2557,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 ? 'Place your starting pieces to begin.'
                 : _hint,
           ),
-        if (phase != MatchPhase.actions && _mobilePage != null)
+        if (phase != MatchPhase.actions &&
+            phase != MatchPhase.roll &&
+            _mobilePage != null)
           _backToBoardAction(),
         if (phase == MatchPhase.setupVillage ||
             phase == MatchPhase.setupRoad) ...[
@@ -1964,7 +2585,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             style: TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
           ),
         ],
-        if (phase == MatchPhase.actions) ...[
+        if (phase != MatchPhase.setupVillage &&
+            phase != MatchPhase.setupRoad) ...[
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1982,15 +2604,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 _costLabel(MatchEngine.villageCost),
                 MatchEngine.legalVertices(s).isNotEmpty,
               ),
-              if (MatchEngine.affordable(s, MatchEngine.villageCost) &&
-                  MatchEngine.legalVertices(s).isEmpty)
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(12, 0, 12, 10),
-                  child: Text(
-                    'Village unavailable: extend a road to a vacant junction away from other settlements.',
-                    style: TextStyle(fontSize: 12, color: Color(0xffe5c183)),
-                  ),
-                ),
               _buildAction(
                 _Move.upgrade,
                 Icons.location_city,
@@ -2003,20 +2616,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  'Knights & Defense',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-              ),
-              for (var seat = 0; seat < s.players.length; seat++)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    '${s.players[seat].id}: ${s.knights.values.where((k) => k.owner == seat && k.active).fold<int>(0, (total, k) => total + k.rank.strength)} active strength · ${s.knights.values.where((k) => k.owner == seat && !k.active).length} inactive',
-                  ),
-                ),
               _buildAction(
                 _Move.fortify,
                 Icons.shield_outlined,
@@ -2096,11 +2695,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
           ),
 
-        if (phase == MatchPhase.roll)
-          const Text(
-            'Production goes to every eligible settlement. Outcomes use your saved match seed.',
-            style: TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
-          ),
         if (phase == MatchPhase.bandit)
           const Text(
             'Choose a different hex. Any theft and response will be resolved before building.',
@@ -2113,6 +2707,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         TradeMarket(
           state: s,
           computerSeats: widget.computerSeats,
+          allowOffers: !widget.observing,
           onBank: exchange,
           onOffer: offer,
           onCounter: offer,
@@ -2123,7 +2718,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               : () => setState(() => _mobilePage = null),
         ),
         const SizedBox(height: 12),
-        _resourceTray(),
+        if (MediaQuery.sizeOf(context).width < 900) _resourceTray(),
         const Text(
           "Paper funds Innovation upgrades; cloth funds Commerce; coin funds Governance.",
           style: TextStyle(color: Color(0xffbac9cc), fontSize: 12),
@@ -2131,20 +2726,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       ];
     }
     if (tab == 2) {
-      if (phase != MatchPhase.actions) {
-        return [
-          _heading(
-            'Strategy cards',
-            phase == MatchPhase.roll
-                ? 'Roll the dice before playing your strategy cards.'
-                : 'Resolve the current event before playing cards.',
-          ),
-          if (_mobilePage != null) _backToBoardAction(),
-        ];
-      }
       return [
         StrategyHand(
-          state: s,
+          allowActions: !widget.observing && s.active == viewerSeat,
+          state: s.active == viewerSeat ? s : s.copyWith(active: viewerSeat),
           onEvent: send,
           onOpenRealm: _mobilePage == null
               ? null
@@ -2157,7 +2742,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
     return [
       _heading('Your realm', 'Develop Towns to unlock advanced goods.'),
-      if (MediaQuery.sizeOf(context).width >= 900) _hintSetting(),
       Padding(
         padding: const EdgeInsets.only(bottom: 5),
         child: Text(
@@ -2168,8 +2752,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           style: const TextStyle(fontSize: 12, color: Color(0xffbac9cc)),
         ),
       ),
-      if (s.current.level(StrategyDeck.innovation) < 5 &&
-          MatchEngine.canDevelop(s, StrategyDeck.innovation))
+      if (s.current.level(StrategyDeck.innovation) < 5)
         Align(
           alignment: Alignment.centerLeft,
           child: FilledButton.tonalIcon(
@@ -2227,67 +2810,72 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 );
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Card(
-                    margin: EdgeInsets.zero,
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            '${track.name.toUpperCase()} · $level/5',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          Text(
-                            level < 5
-                                ? 'Next: ${track.tiers[level]}'
-                                : 'Complete',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          Text(
-                            level == 0
-                                ? 'Unlocks ${track.commodity.name} from Towns beside ${terrainLabel(track.sourceLand)}.'
-                                : 'Your ${terrainLabel(track.sourceLand)} Towns produce ${track.commodity.name} instead of one basic good.',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xffadc4c6),
-                            ),
-                          ),
-                          if (level < 5) ...[
-                            const SizedBox(height: 5),
+                  child: Tooltip(
+                    message: gameplayHints['realm']!.explanation,
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                             Text(
-                              'Cost: ${_costLabel(cost)}',
+                              '${track.name.toUpperCase()} · $level/5',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              level < 5
+                                  ? 'Next: ${track.tiers[level]}'
+                                  : 'Complete',
                               style: const TextStyle(fontSize: 12),
                             ),
-                            if (!ownsTown)
-                              const Text(
-                                'Build a Town first to unlock developments.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xffe5c183),
-                                ),
-                              )
-                            else if (missing.isNotEmpty)
-                              Text(
-                                'Need: $missing',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xffe5c183),
-                                ),
+                            Text(
+                              level == 0
+                                  ? 'Unlocks ${track.commodity.name} from Towns beside ${terrainLabel(track.sourceLand)}.'
+                                  : 'Towns beside ${terrainLabel(track.sourceLand)} produce ${track.commodity.name} instead of one ${track.sourceLand.produces!.name}.',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xffadc4c6),
                               ),
-                          ],
-                          const SizedBox(height: 6),
-                          OutlinedButton(
-                            onPressed: MatchEngine.canDevelop(s, track)
-                                ? () => send(DevelopTown(track))
-                                : null,
-                            child: Text(
-                              level == 5
-                                  ? 'Max level'
-                                  : 'Develop ${track.name}',
                             ),
-                          ),
-                        ],
+                            if (level < 5) ...[
+                              const SizedBox(height: 5),
+                              Text(
+                                'Cost: ${_costLabel(cost)}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              if (!ownsTown)
+                                const Text(
+                                  'Build a Town first to unlock developments.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xffe5c183),
+                                  ),
+                                )
+                              else if (missing.isNotEmpty)
+                                Text(
+                                  'Need: $missing',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xffe5c183),
+                                  ),
+                                ),
+                            ],
+                            const SizedBox(height: 6),
+                            OutlinedButton(
+                              onPressed: MatchEngine.canDevelop(s, track)
+                                  ? () => send(DevelopTown(track))
+                                  : null,
+                              child: Text(
+                                level == 5
+                                    ? 'Max level'
+                                    : 'Develop ${track.name}',
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -2296,78 +2884,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
         ],
       ),
-      const SizedBox(height: 8),
-      Text('Reaver Fleet arrival ${s.reaverPressure}/3'),
-      InvasionMeter(state: s),
-      if (s.lastInvasion.isNotEmpty) Text(s.lastInvasion),
-      Text(
-        'First Capital: ${s.firstCapitalOwner == null ? 'unclaimed' : s.players[s.firstCapitalOwner!].id}',
-      ),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Standings', style: Theme.of(context).textTheme.titleMedium),
-          if (!widget.online)
-            TextButton.icon(
-              onPressed: () async {
-                await Clipboard.setData(
-                  ClipboardData(text: MatchEngine.exportReplay(s)),
-                );
-                if (mounted) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(GameNotice.snackBar('Replay copied'));
-                }
-              },
-              icon: const Icon(Icons.copy_outlined),
-              label: const Text('Copy replay'),
-            ),
-        ],
-      ),
-      if (!widget.online)
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: () async {
-              await Clipboard.setData(
-                ClipboardData(
-                  text: ReplayCodes.compact(MatchEngine.exportReplay(s)),
-                ),
-              );
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  GameNotice.snackBar(
-                    'Share code copied; it contains every private hand.',
-                  ),
-                );
-              }
-            },
-            icon: const Icon(Icons.share_outlined),
-            label: const Text('Copy compact replay code'),
-          ),
-        ),
-      for (var i = 0; i < s.players.length; i++)
-        Row(
-          children: [
-            Icon(Icons.flag, color: seatColors[i], size: 19),
-            const SizedBox(width: 6),
-            Expanded(child: Text(s.players[i].id)),
-            Text(
-              '${MatchEngine.score(s, i)} VP · Road ${MatchEngine.longestRoad(s, i)}',
-            ),
-            if (s.longestRoadHolder == i)
-              const Tooltip(
-                message: 'Longest road · +2 VP',
-                child: Icon(Icons.military_tech),
-              ),
-          ],
-        ),
-      if (s.dice != null)
-        Text(
-          widget.online
-              ? 'Last dice: ${s.dice} · Event ${widget.onlineView?['eventCount']}'
-              : 'Last dice: ${s.dice} · Event ${s.events.length}',
-        ),
-      if (selectedTab == null) ..._matchOptions(),
+      if (MediaQuery.sizeOf(context).width >= 900 && !widget.observing)
+        _hintSetting(),
     ];
   }
 
@@ -2379,64 +2897,72 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     child: SizedBox(width: double.infinity, child: _turnButton()),
   );
 
-  Widget _turnButton({bool compact = false}) => FilledButton.icon(
-    style: FilledButton.styleFrom(
-      minimumSize: Size(0, compact ? 42 : 48),
-      padding: compact ? const EdgeInsets.symmetric(horizontal: 10) : null,
-      textStyle: compact ? const TextStyle(fontSize: 13) : null,
-      disabledBackgroundColor: const Color(0xff425963),
-      disabledForegroundColor: const Color(0xfff4eee2),
-      backgroundColor: const Color(0xffe5c183),
-      foregroundColor: const Color(0xff28271e),
-    ),
-    onPressed: switch (s.phase) {
-      MatchPhase.roll => () {
-        final (a, b) = widget.online ? (0, 0) : MatchEngine.expectedDice(s);
-        send(RollDice(a, b));
+  Widget _turnButton({bool compact = false}) => Tooltip(
+    message: s.phase == MatchPhase.actions
+        ? 'Finish your turn and pass play to the next player.'
+        : gameplayHints[s.phase.name]?.explanation ?? _instruction,
+    child: FilledButton.icon(
+      style: FilledButton.styleFrom(
+        minimumSize: Size(0, compact ? 42 : 48),
+        padding: compact ? const EdgeInsets.symmetric(horizontal: 10) : null,
+        textStyle: compact ? const TextStyle(fontSize: 13) : null,
+        disabledBackgroundColor: const Color(0xff425963),
+        disabledForegroundColor: const Color(0xfff4eee2),
+        backgroundColor: const Color(0xffe5c183),
+        foregroundColor: const Color(0xff28271e),
+      ),
+      onPressed: switch (s.phase) {
+        MatchPhase.roll => () {
+          final (a, b) = widget.online ? (0, 0) : MatchEngine.expectedDice(s);
+          send(RollDice(a, b));
+        },
+        MatchPhase.actions => () => send(const EndTurn()),
+        MatchPhase.invasion => () => send(const ResolveInvasion()),
+        MatchPhase.setupVillage ||
+        MatchPhase.setupRoad ||
+        MatchPhase.bandit => availableTargets.isNotEmpty ? chooseTarget : null,
+        _ => null,
       },
-      MatchPhase.actions => () => send(const EndTurn()),
-      MatchPhase.invasion => () => send(const ResolveInvasion()),
-      MatchPhase.setupVillage ||
-      MatchPhase.setupRoad ||
-      MatchPhase.bandit => availableTargets.isNotEmpty ? chooseTarget : null,
-      _ => null,
-    },
-    icon: Icon(
-      s.phase == MatchPhase.roll
-          ? Icons.casino_outlined
-          : s.phase == MatchPhase.invasion
-          ? Icons.shield_outlined
-          : s.phase == MatchPhase.setupVillage ||
-                s.phase == MatchPhase.setupRoad ||
-                s.phase == MatchPhase.bandit
-          ? Icons.format_list_numbered
-          : Icons.check_circle_outline,
-    ),
-    label: Text(
-      s.phase == MatchPhase.roll
-          ? 'Roll dice'
-          : s.phase == MatchPhase.invasion
-          ? compact
-                ? 'Resolve'
-                : 'Resolve Invasion'
-          : s.phase == MatchPhase.actions
-          ? 'End turn'
-          : s.phase == MatchPhase.setupVillage
-          ? compact
-                ? 'Site'
-                : 'Choose site'
-          : s.phase == MatchPhase.setupRoad
-          ? compact
-                ? 'Road'
-                : 'Choose road'
-          : s.phase == MatchPhase.bandit
-          ? compact
-                ? 'Bandit'
-                : 'Move Bandit'
-          : s.phase == MatchPhase.finished
-          ? 'Done'
-          : 'Choose on map',
-      style: const TextStyle(fontFamily: 'NotoSans', color: Color(0xff172b33)),
+      icon: Icon(
+        s.phase == MatchPhase.roll
+            ? Icons.casino_outlined
+            : s.phase == MatchPhase.invasion
+            ? Icons.shield_outlined
+            : s.phase == MatchPhase.setupVillage ||
+                  s.phase == MatchPhase.setupRoad ||
+                  s.phase == MatchPhase.bandit
+            ? Icons.format_list_numbered
+            : Icons.check_circle_outline,
+      ),
+      label: Text(
+        s.phase == MatchPhase.roll
+            ? 'Roll dice'
+            : s.phase == MatchPhase.invasion
+            ? compact
+                  ? 'Resolve'
+                  : 'Resolve Invasion'
+            : s.phase == MatchPhase.actions
+            ? 'End turn'
+            : s.phase == MatchPhase.setupVillage
+            ? compact
+                  ? 'Site'
+                  : 'Choose site'
+            : s.phase == MatchPhase.setupRoad
+            ? compact
+                  ? 'Road'
+                  : 'Choose road'
+            : s.phase == MatchPhase.bandit
+            ? compact
+                  ? 'Bandit'
+                  : 'Move Bandit'
+            : s.phase == MatchPhase.finished
+            ? 'Done'
+            : 'Choose on map',
+        style: const TextStyle(
+          fontFamily: 'NotoSans',
+          color: Color(0xff172b33),
+        ),
+      ),
     ),
   );
 
@@ -2445,7 +2971,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     final horizontal = anchorHarvest && MediaQuery.sizeOf(context).width >= 900;
     return Container(
       height: math.max(
-        horizontal ? 49 : (tight ? 49 : 66),
+        horizontal ? 57 : (tight ? 49 : 66),
         MediaQuery.textScalerOf(context).scale(tight ? 14 : 17) * 1.2 +
             (horizontal ? 0 : (tight ? 20 : 27)) +
             (tight ? 13 : 19),
@@ -2456,6 +2982,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         border: Border(top: BorderSide(color: Color(0xff34464a))),
       ),
       child: Row(
+        crossAxisAlignment: horizontal
+            ? CrossAxisAlignment.stretch
+            : CrossAxisAlignment.center,
         children: [
           IconButton(
             tooltip: 'Choose resource icons',
@@ -2486,7 +3015,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     color: _goodColor(r),
                     child: Container(
                       margin: const EdgeInsets.symmetric(horizontal: 2),
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: horizontal ? 8 : 4,
+                        vertical: horizontal ? 4 : 0,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xff20323a),
                         borderRadius: BorderRadius.circular(8),
@@ -2502,14 +3034,27 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             ResourceIcon(r, size: tight ? 20 : 27),
                             const SizedBox(width: 8),
                           ],
-                          Text(
-                            '${inventoryOwner.stores[r] ?? 0}',
-                            style: TextStyle(
-                              fontSize: tight ? 14 : 17,
-                              height: 1.2,
-                              fontWeight: FontWeight.w800,
+                          if (horizontal)
+                            Expanded(
+                              child: Text(
+                                '${inventoryOwner.stores[r] ?? 0}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: tight ? 14 : 17,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            )
+                          else
+                            Text(
+                              '${inventoryOwner.stores[r] ?? 0}',
+                              style: TextStyle(
+                                fontSize: tight ? 14 : 17,
+                                height: 1.2,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
                           if (!horizontal)
                             ResourceIcon(r, size: tight ? 20 : 27),
                         ],
@@ -2576,16 +3121,37 @@ class _TradeComposerState extends State<_TradeComposer> {
   late int target;
   late Resource give;
   late Resource take;
+  Map<Resource, int> extraGive = {};
+  Map<Resource, int> extraTake = {};
   late int giveCount;
   late int takeCount;
   void _selectUsefulExchange() {
     final s = widget.state;
     final stores = s.current.stores;
+    final fundedPlayers = s.players.toList();
+    fundedPlayers[s.active] = s.current.copyWith(
+      stores: {for (final good in Resource.values) good: 99},
+    );
+    final funded = s.copyWith(players: fundedPlayers);
     final costs = [
-      MatchEngine.villageCost,
-      MatchEngine.effectiveRoadCost(s),
-      MatchEngine.townCost,
-      MatchEngine.capitalCost,
+      if (MatchEngine.legalEdges(funded).isNotEmpty)
+        MatchEngine.effectiveRoadCost(s),
+      if (MatchEngine.legalVertices(funded).isNotEmpty) MatchEngine.villageCost,
+      if (s.sites.values.any(
+        (site) => site.owner == s.active && site.structure == Structure.village,
+      ))
+        MatchEngine.townCost,
+      if (s.sites.values.any(
+        (site) => site.owner == s.active && site.structure == Structure.town,
+      ))
+        MatchEngine.capitalCost,
+      for (final track in StrategyDeck.values)
+        if (s.current.level(track) < 5 &&
+            s.sites.values.any(
+              (site) =>
+                  site.owner == s.active && site.structure != Structure.village,
+            ))
+          MatchEngine.developmentCost(s, track, s.current.level(track) + 1),
     ];
     int shortfall(Map<Resource, int> cost) => cost.entries.fold(
       0,
@@ -2600,22 +3166,64 @@ class _TradeComposerState extends State<_TradeComposer> {
             .fold<int>(0, (a, b) => a + b)
             .compareTo(a.values.fold<int>(0, (a, b) => a + b));
       });
-    if (incomplete.isEmpty) return;
-    final cost = incomplete.first;
-    final needed = cost.entries.where((e) => (stores[e.key] ?? 0) < e.value);
-    final receivable = needed.where((e) => (s.bank[e.key] ?? 0) > 0);
-    final chosen = receivable.isNotEmpty ? receivable.first : needed.first;
-    take = chosen.key;
-    takeCount = chosen.value - (stores[take] ?? 0);
-    final candidates = Resource.values.where((good) => good != take).toList();
-    int spare(Resource good) =>
-        (stores[good] ?? 0) -
-        (cost[good] ?? 0) -
-        (widget.kind == _TradeKind.bank
-            ? MatchEngine.tradeRate(s, s.active, good)
-            : 1);
-    candidates.sort((a, b) => spare(b).compareTo(spare(a)));
-    give = candidates.first;
+    for (final cost in incomplete) {
+      for (final wanted in Resource.values) {
+        if ((stores[wanted] ?? 0) >= (cost[wanted] ?? 0) ||
+            (s.bank[wanted] ?? 0) < 1) {
+          continue;
+        }
+        for (final offered in Resource.values) {
+          if (offered == wanted) continue;
+          final rate = widget.kind == _TradeKind.bank
+              ? MatchEngine.tradeRate(s, s.active, offered)
+              : 1;
+          final receipt =
+              widget.kind == _TradeKind.bank &&
+                  (s.current.level(StrategyDeck.commerce) >= 5 ||
+                      (s.current.level(StrategyDeck.commerce) >= 3 &&
+                          wanted == Resource.cloth))
+              ? 2
+              : 1;
+          if ((stores[offered] ?? 0) < rate ||
+              (s.bank[wanted] ?? 0) < receipt) {
+            continue;
+          }
+          if (cost.entries.every(
+            (e) =>
+                (stores[e.key] ?? 0) -
+                    (e.key == offered ? rate : 0) +
+                    (e.key == wanted ? receipt : 0) >=
+                e.value,
+          )) {
+            give = offered;
+            take = wanted;
+            takeCount = 1;
+            return;
+          }
+        }
+      }
+    }
+    // Otherwise seek goods with no production in the player's network.
+    final produced = <Resource>{};
+    for (final entry in s.sites.entries.where(
+      (e) => e.value.owner == s.active,
+    )) {
+      for (final tile in s.topology.vertices[entry.key].tiles) {
+        final resource = s.board.tiles[tile].land.produces;
+        if (resource != null) produced.add(resource);
+      }
+    }
+    final candidates =
+        Resource.values.where((r) => r != give && (s.bank[r] ?? 0) > 0).toList()
+          ..sort((a, b) {
+            final production = (produced.contains(a) ? 1 : 0).compareTo(
+              produced.contains(b) ? 1 : 0,
+            );
+            return production != 0
+                ? production
+                : (stores[a] ?? 0).compareTo(stores[b] ?? 0);
+          });
+    if (candidates.isNotEmpty) take = candidates.first;
   }
 
   @override
@@ -2628,6 +3236,8 @@ class _TradeComposerState extends State<_TradeComposer> {
     take = trade?.give ?? Resource.wool;
     giveCount = trade?.wantCount ?? 1;
     takeCount = trade?.giveCount ?? 1;
+    extraGive = Map.of(trade?.wants ?? {})..remove(give);
+    extraTake = Map.of(trade?.gives ?? {})..remove(take);
     if (trade == null) {
       final payable = Resource.values.where(
         (good) =>
@@ -2657,7 +3267,12 @@ class _TradeComposerState extends State<_TradeComposer> {
     final required = bank ? rate : giveCount;
     final available = s.current.stores[give] ?? 0;
     final bankAvailable = s.bank[take] ?? 0;
+    final gives = {...extraGive, give: giveCount};
+    final wants = {...extraTake, take: takeCount};
     final valid =
+        (bank ||
+            (canPayTrade(s.current.stores, gives) &&
+                gives.keys.every((g) => !wants.containsKey(g)))) &&
         give != take &&
         available >= required &&
         (!bank || bankAvailable >= receipt) &&
@@ -2772,7 +3387,7 @@ class _TradeComposerState extends State<_TradeComposer> {
             ),
           LayoutBuilder(
             builder: (context, constraints) {
-              final givePanel = TradeLeg(
+              final giveLeg = TradeLeg(
                 title: 'YOU GIVE',
                 hint: bank ? 'Pay the bank' : 'Give when accepted',
                 compact: widget.onKindSelected != null,
@@ -2781,10 +3396,13 @@ class _TradeComposerState extends State<_TradeComposer> {
                 available: available,
                 holdings: s.current.stores,
                 showCount: !bank,
-                onResource: (v) => setState(() => give = v),
+                onResource: (v) => setState(() {
+                  extraGive.remove(v);
+                  give = v;
+                }),
                 onCount: (v) => setState(() => giveCount = v),
               );
-              final takePanel = TradeLeg(
+              final takeLeg = TradeLeg(
                 title: 'YOU RECEIVE',
                 hint: bank ? 'From the bank' : 'Request from your rival',
                 compact: widget.onKindSelected != null,
@@ -2793,9 +3411,71 @@ class _TradeComposerState extends State<_TradeComposer> {
                 count: bank ? receipt : takeCount,
                 showCount: !bank,
                 highlight: true,
-                onResource: (v) => setState(() => take = v),
+                onResource: (v) => setState(() {
+                  extraTake.remove(v);
+                  take = v;
+                }),
                 onCount: (v) => setState(() => takeCount = v),
               );
+              Widget bundleExtras(
+                Widget leg,
+                Map<Resource, int> extras,
+                Resource primary,
+              ) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  leg,
+                  if (!bank) ...[
+                    PopupMenuButton<Resource>(
+                      tooltip: 'Add another resource',
+                      onSelected: (good) => setState(() => extras[good] = 1),
+                      itemBuilder: (_) => [
+                        for (final good in Resource.values)
+                          if (good != primary && !extras.containsKey(good))
+                            PopupMenuItem(value: good, child: Text(good.name)),
+                      ],
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: Text('+ Add another resource'),
+                      ),
+                    ),
+                    for (final good in Resource.values)
+                      if (good != primary && extras.containsKey(good))
+                        Row(
+                          children: [
+                            Expanded(child: Text(good.name)),
+                            IconButton(
+                              tooltip: 'Remove ${good.name}',
+                              onPressed: (extras[good] ?? 0) > 0
+                                  ? () => setState(() {
+                                      final count = extras[good]! - 1;
+                                      if (count == 0) {
+                                        extras.remove(good);
+                                      } else {
+                                        extras[good] = count;
+                                      }
+                                    })
+                                  : null,
+                              icon: const Icon(Icons.remove),
+                            ),
+                            Text('${extras[good] ?? 0}'),
+                            IconButton(
+                              tooltip: 'Add ${good.name}',
+                              onPressed: (extras[good] ?? 0) < 99
+                                  ? () => setState(
+                                      () => extras[good] =
+                                          (extras[good] ?? 0) + 1,
+                                    )
+                                  : null,
+                              icon: const Icon(Icons.add),
+                            ),
+                          ],
+                        ),
+                  ],
+                ],
+              );
+              final givePanel = bundleExtras(giveLeg, extraGive, give);
+              final takePanel = bundleExtras(takeLeg, extraTake, take);
               if (constraints.maxWidth < 560) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2842,7 +3522,7 @@ class _TradeComposerState extends State<_TradeComposer> {
               child: Text(
                 bank
                     ? 'Exchange $rate ${give.name} for $receipt ${take.name}.'
-                    : 'Offer $giveCount ${give.name} for $takeCount ${take.name} to ${s.players[target].id}.',
+                    : 'Offer ${tradeBundleText(gives)} for ${tradeBundleText(wants)} to ${s.players[target].id}.',
                 style: const TextStyle(
                   color: Color(0xffdfeae9),
                   fontSize: 12,
@@ -2887,6 +3567,8 @@ class _TradeComposerState extends State<_TradeComposer> {
                                 take,
                                 takeCount,
                                 counterOf: widget.counter?.id,
+                                giveBundle: gives,
+                                wantBundle: wants,
                               ),
                       )
                     : null,
@@ -3063,6 +3745,8 @@ class _Painter extends CustomPainter {
     this.selectedKnight, {
     required this.roadReveal,
     required this.numberPulse,
+    this.showTargets = true,
+    this.hoverBuilds = false,
     this.animatedRoad,
     this.animatedRoadStart,
   }) : super(
@@ -3074,6 +3758,8 @@ class _Painter extends CustomPainter {
          ]),
        );
   final MatchState state;
+  final bool showTargets;
+  final bool hoverBuilds;
   final _Move mode;
   final int? selectedKnight;
   final int? animatedRoad;
@@ -3221,48 +3907,9 @@ class _Painter extends CustomPainter {
         _label(canvas, 'B', c, radius * .23, Colors.white);
       }
     }
-    final legalRoads = mode == _Move.road
+    final legalRoads = showTargets && (mode == _Move.road || hoverBuilds)
         ? MatchEngine.legalEdges(state).toSet()
         : <int>{};
-    for (final dock in state.topology.docks) {
-      final a = g.vertex(state.topology.vertices[dock.edge.a]);
-      final b = g.vertex(state.topology.vertices[dock.edge.b]);
-      final middle = (a + b) / 2;
-      final outward = middle - size.center(Offset.zero);
-      final projected = middle + outward / outward.distance * (g.radius * .38);
-      final label = Offset(
-        projected.dx.clamp(40.0, size.width - 40),
-        projected.dy.clamp(9.0, size.height - 9),
-      );
-      canvas.drawLine(
-        a,
-        label,
-        Paint()
-          ..color = const Color(0xffc7ac78)
-          ..strokeWidth = 2,
-      );
-      canvas.drawLine(
-        b,
-        label,
-        Paint()
-          ..color = const Color(0xffc7ac78)
-          ..strokeWidth = 2,
-      );
-      final text = TextPainter(
-        text: TextSpan(
-          text: dock.label,
-          style: const TextStyle(
-            fontFamily: 'NotoSans',
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: Color(0xffffe5b2),
-            backgroundColor: Color(0xff182a31),
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      text.paint(canvas, label - Offset(text.width / 2, text.height / 2));
-    }
     for (final e in state.topology.edges) {
       final owner = state.roads[e.id];
       if (owner == null && !legalRoads.contains(e.id)) continue;
@@ -3298,51 +3945,63 @@ class _Painter extends CustomPainter {
         );
       }
     }
-    final legal = switch (mode) {
-      _Move.inspect => {
-        ...MatchEngine.legalVertices(state),
-        ...MatchEngine.legalUpgrades(state),
+    final legal = <int>{
+      if (hoverBuilds) ...MatchEngine.legalVertices(state),
+      if (hoverBuilds) ...MatchEngine.legalUpgrades(state),
+      if (hoverBuilds)
+        for (final v in state.topology.vertices)
+          if (MatchEngine.legalFort(state, v.id) ||
+              MatchEngine.legalRecruit(state, v.id))
+            v.id,
+      ...switch (mode) {
+        _Move.inspect => {
+          ...MatchEngine.legalVertices(state),
+          ...MatchEngine.legalUpgrades(state),
+        },
+        _Move.village => MatchEngine.legalVertices(state).toSet(),
+        _Move.upgrade => MatchEngine.legalUpgrades(state).toSet(),
+        _Move.fortify => {
+          for (final v in state.sites.keys)
+            if (MatchEngine.legalFort(state, v)) v,
+        },
+        _Move.recruit => {
+          for (var v = 0; v < state.topology.vertices.length; v++)
+            if (MatchEngine.legalRecruit(state, v)) v,
+        },
+        _Move.activate => {
+          for (final v in state.knights.keys)
+            if (MatchEngine.legalActivate(state, v)) v,
+        },
+        _Move.promote => {
+          for (final v in state.knights.keys)
+            if (MatchEngine.legalPromote(state, v)) v,
+        },
+        _Move.knightMove =>
+          selectedKnight == null
+              ? {
+                  for (final v in state.knights.keys)
+                    if (state.knights[v]!.owner == state.active &&
+                        state.knights[v]!.active &&
+                        state.knights[v]!.actedTurn != state.turnSerial &&
+                        MatchEngine.legalKnightDestinations(
+                          state,
+                          v,
+                        ).isNotEmpty)
+                      v,
+                }
+              : MatchEngine.legalKnightDestinations(
+                  state,
+                  selectedKnight!,
+                ).toSet(),
+        _ => <int>{},
       },
-      _Move.village => MatchEngine.legalVertices(state).toSet(),
-      _Move.upgrade => MatchEngine.legalUpgrades(state).toSet(),
-      _Move.fortify => {
-        for (final v in state.sites.keys)
-          if (MatchEngine.legalFort(state, v)) v,
-      },
-      _Move.recruit => {
-        for (var v = 0; v < state.topology.vertices.length; v++)
-          if (MatchEngine.legalRecruit(state, v)) v,
-      },
-      _Move.activate => {
-        for (final v in state.knights.keys)
-          if (MatchEngine.legalActivate(state, v)) v,
-      },
-      _Move.promote => {
-        for (final v in state.knights.keys)
-          if (MatchEngine.legalPromote(state, v)) v,
-      },
-      _Move.knightMove =>
-        selectedKnight == null
-            ? {
-                for (final v in state.knights.keys)
-                  if (state.knights[v]!.owner == state.active &&
-                      state.knights[v]!.active &&
-                      state.knights[v]!.actedTurn != state.turnSerial &&
-                      MatchEngine.legalKnightDestinations(state, v).isNotEmpty)
-                    v,
-              }
-            : MatchEngine.legalKnightDestinations(
-                state,
-                selectedKnight!,
-              ).toSet(),
-      _ => <int>{},
     };
     // Every junction is legal at the start of a match. Use restrained
     // markers so that dozens of bright dots do not overpower the hexes.
     final setupVillage = state.phase == MatchPhase.setupVillage;
     for (final v in state.topology.vertices) {
       final c = g.vertex(v);
-      if (legal.contains(v.id)) {
+      if (showTargets && legal.contains(v.id)) {
         canvas.drawCircle(
           c,
           math.max(setupVillage ? 5 : 7, g.radius * (setupVillage ? .15 : .22)),
@@ -3372,7 +4031,7 @@ class _Painter extends CustomPainter {
         Rect.fromCenter(
           center: c + const Offset(0, 2),
           width: width,
-          height: width * .75,
+          height: site.structure == Structure.village ? width : width * .75,
         ),
         const Radius.circular(3),
       );
@@ -3381,23 +4040,53 @@ class _Painter extends CustomPainter {
         building.deflate(2),
         Paint()..color = seatColors[site.owner],
       );
-      final roof = Path()
-        ..moveTo(c.dx - width * .56, c.dy - width * .22)
-        ..lineTo(c.dx, c.dy - width * .68)
-        ..lineTo(c.dx + width * .56, c.dy - width * .22);
-      canvas.drawPath(
-        roof,
-        Paint()
-          ..color = seatColors[site.owner]
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3,
-      );
-      if (site.structure == Structure.capital) {
-        canvas.drawCircle(
-          c + const Offset(0, -16),
-          3.5,
-          Paint()..color = const Color(0xffffd77e),
+      if (site.structure != Structure.village) {
+        final ink = Paint()..color = const Color(0xff20313b);
+        // Arched entrance and windows make towns readable at board scale.
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(
+              center: c + const Offset(0, 5),
+              width: 5,
+              height: 8,
+            ),
+            const Radius.circular(2),
+          ),
+          ink,
         );
+        for (final dx in [-6.0, 6.0]) {
+          canvas.drawRect(
+            Rect.fromCenter(center: c + Offset(dx, 0), width: 3, height: 4),
+            ink,
+          );
+        }
+        if (site.structure == Structure.capital) {
+          for (final dx in [-10.0, 10.0]) {
+            canvas.drawRect(
+              Rect.fromCenter(center: c + Offset(dx, -6), width: 6, height: 14),
+              Paint()..color = seatColors[site.owner],
+            );
+            for (final tooth in [-2.0, 2.0]) {
+              canvas.drawRect(
+                Rect.fromCenter(
+                  center: c + Offset(dx + tooth, -14),
+                  width: 2,
+                  height: 4,
+                ),
+                Paint()..color = seatColors[site.owner],
+              );
+            }
+            canvas.drawRect(
+              Rect.fromCenter(center: c + Offset(dx, -7), width: 2, height: 4),
+              ink,
+            );
+          }
+          canvas.drawCircle(
+            c + const Offset(0, -5),
+            2,
+            Paint()..color = const Color(0xffffd77e),
+          );
+        }
       }
       if (state.fortified.contains(v.id)) {
         _label(
@@ -3421,26 +4110,61 @@ class _Painter extends CustomPainter {
     for (final entry in state.knights.entries) {
       final knight = entry.value;
       final c = g.vertex(state.topology.vertices[entry.key]);
+      canvas.drawCircle(c, 9, Paint()..color = const Color(0xff182a32));
       canvas.drawCircle(
-        c + const Offset(0, 15),
-        9,
-        Paint()..color = const Color(0xff182a32),
-      );
-      canvas.drawCircle(
-        c + const Offset(0, 15),
+        c,
         7,
         Paint()
           ..color = knight.active
               ? seatColors[knight.owner]
               : const Color(0xff879699),
       );
-      _label(
-        canvas,
-        '${knight.rank.strength}',
-        c + const Offset(0, 15),
-        11,
-        const Color(0xff102028),
+      _label(canvas, '${knight.rank.strength}', c, 11, const Color(0xff102028));
+    }
+    for (final dock in state.topology.docks) {
+      final a = g.vertex(state.topology.vertices[dock.edge.a]);
+      final b = g.vertex(state.topology.vertices[dock.edge.b]);
+      final middle = (a + b) / 2;
+      final outward = middle - size.center(Offset.zero);
+      final projected = middle + outward / outward.distance * (g.radius * .38);
+      final label = Offset(
+        projected.dx.clamp(
+          math.min(40.0, size.width / 2),
+          math.max(size.width / 2, size.width - 40),
+        ),
+        projected.dy.clamp(
+          math.min(9.0, size.height / 2),
+          math.max(size.height / 2, size.height - 9),
+        ),
       );
+      canvas.drawLine(
+        a,
+        label,
+        Paint()
+          ..color = const Color(0xffc7ac78)
+          ..strokeWidth = 2,
+      );
+      canvas.drawLine(
+        b,
+        label,
+        Paint()
+          ..color = const Color(0xffc7ac78)
+          ..strokeWidth = 2,
+      );
+      final text = TextPainter(
+        text: TextSpan(
+          text: dock.label,
+          style: const TextStyle(
+            fontFamily: 'NotoSans',
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: Color(0xffffe5b2),
+            backgroundColor: Color(0xff182a31),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      text.paint(canvas, label - Offset(text.width / 2, text.height / 2));
     }
   }
 
@@ -3509,6 +4233,8 @@ class _Painter extends CustomPainter {
   bool shouldRepaint(_Painter old) =>
       !identical(old.state, state) ||
       old.mode != mode ||
+      old.showTargets != showTargets ||
+      old.hoverBuilds != hoverBuilds ||
       old.selectedKnight != selectedKnight ||
       old.animatedRoad != animatedRoad ||
       old.roadReveal != roadReveal;

@@ -13,6 +13,10 @@ Future<void> scrollToAction(WidgetTester tester, String label) async {
   if (tab.evaluate().isNotEmpty) {
     await tester.tap(tab.first);
     await tester.pumpAndSettle();
+    if (find.byTooltip('Close trade').evaluate().isNotEmpty) {
+      await tester.tap(find.byTooltip('Close trade'));
+      await tester.pumpAndSettle();
+    }
   }
   if (label == 'Cards') return;
   final controller = tester.widget<ListView>(list).controller!;

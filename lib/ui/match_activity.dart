@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../engine/match.dart';
+import '../engine/trade_sentiment.dart';
 import 'trade_feedback.dart';
 
 /// Presentation-only feedback: every cue is derived from a committed event.
@@ -13,11 +15,17 @@ class MatchActivity extends StatefulWidget {
     required this.state,
     required this.viewerSeat,
     this.computerSeats = const <int>{},
+    this.emote,
+    this.emoteSerial = 0,
+    this.emoteTarget,
   });
 
   final MatchState state;
   final int viewerSeat;
   final Set<int> computerSeats;
+  final String? emote;
+  final int emoteSerial;
+  final int? emoteTarget;
 
   @override
   State<MatchActivity> createState() => _MatchActivityState();
@@ -42,10 +50,48 @@ class _ActivityCue {
 class _MatchActivityState extends State<MatchActivity> {
   _ActivityCue? _cue;
   Timer? _dismiss;
+  Timer? _reply;
+  final _random = math.Random();
+
+  void _showEmote(String emoji, int seat) {
+    _dismiss?.cancel();
+    setState(
+      () => _cue = _ActivityCue(
+        index: -DateTime.now().microsecondsSinceEpoch,
+        emoji: emoji,
+        title:
+            '${widget.state.players[seat].id}${seat == widget.viewerSeat && widget.emoteTarget != null ? ' → ${widget.state.players[widget.emoteTarget!].id}' : ''}',
+        detail: '',
+        color: const Color(0xff67dbbf),
+      ),
+    );
+    _dismiss = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _cue = null);
+    });
+  }
 
   @override
   void didUpdateWidget(covariant MatchActivity oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.emoteSerial != oldWidget.emoteSerial && widget.emote != null) {
+      _reply?.cancel();
+      _showEmote(widget.emote!, widget.viewerSeat);
+      final replies = widget.computerSeats
+          .where(
+            (seat) =>
+                (widget.emoteTarget == null || seat == widget.emoteTarget) &&
+                _random.nextDouble() < .35,
+          )
+          .toList();
+      if (replies.isNotEmpty) {
+        final seat = replies[_random.nextInt(replies.length)];
+        _reply = Timer(const Duration(milliseconds: 1400), () {
+          if (mounted) {
+            _showEmote(widget.emote == '😡' ? '😈' : widget.emote!, seat);
+          }
+        });
+      }
+    }
     final state = widget.state;
     if (state.events.length <= oldWidget.state.events.length) return;
     final event = state.events.last;
@@ -54,7 +100,10 @@ class _MatchActivityState extends State<MatchActivity> {
         : event is RespondTrade
         ? event.player
         : oldWidget.state.active;
-    final cue = _describe(state, event, actor);
+    final cue =
+        _tradeDeclineReaction(oldWidget.state, state, event) ??
+        _cutOffReaction(oldWidget.state, state, event, actor) ??
+        _describe(state, event, actor);
     if (cue == null) return;
     _dismiss?.cancel();
     setState(() => _cue = cue);
@@ -67,6 +116,94 @@ class _MatchActivityState extends State<MatchActivity> {
       () {
         if (mounted) setState(() => _cue = null);
       },
+    );
+  }
+
+  _ActivityCue? _tradeDeclineReaction(
+    MatchState before,
+    MatchState after,
+    MatchEvent event,
+  ) {
+    if (event is! RespondTrade ||
+        event.accept ||
+        event.player != widget.viewerSeat ||
+        widget.computerSeats.contains(event.player) ||
+        !TradeSentiment.angryAtDecline(after, after.events.length - 1)) {
+      return null;
+    }
+    final offer = before.offers
+        .where(
+          (offer) =>
+              offer.target == event.player &&
+              (event.offerId == null || event.offerId == offer.id),
+        )
+        .firstOrNull;
+    if (offer == null || !widget.computerSeats.contains(offer.proposer)) {
+      return null;
+    }
+    return _ActivityCue(
+      index: after.events.length,
+      emoji: '😡',
+      title: '${after.players[offer.proposer].id}: Fine, keep your goods!',
+      detail: 'They’ll offer you fewer trades from now on.',
+      color: const Color(0xffffa28e),
+    );
+  }
+
+  _ActivityCue? _cutOffReaction(
+    MatchState before,
+    MatchState after,
+    MatchEvent event,
+    int actor,
+  ) {
+    final vertex = switch (event) {
+      PlaceVillage() => event.vertex,
+      RecruitKnight() => event.vertex,
+      MoveKnight() => event.to,
+      PlaceRoad() =>
+        [
+              before.topology.edges[event.edge].a,
+              before.topology.edges[event.edge].b,
+            ]
+            .where(
+              (v) => before.topology.vertices[v].edges.any(
+                (e) => before.roads[e] != null && before.roads[e] != actor,
+              ),
+            )
+            .firstOrNull,
+      _ => null,
+    };
+    if (vertex == null || before.sites.containsKey(vertex)) {
+      return null;
+    }
+    final junction = before.topology.vertices[vertex];
+    final cutOff = List.generate(before.players.length, (i) => i).where((seat) {
+      if (seat == actor) return false;
+      // Occupying a road endpoint denies expansion; a junction also splits
+      // the road even when a different route preserves its longest-road score.
+      return junction.edges.any((edge) => before.roads[edge] == seat);
+    }).toList()..sort();
+    if (cutOff.isEmpty) return null;
+    if (widget.computerSeats.contains(actor)) {
+      return _ActivityCue(
+        index: after.events.length,
+        emoji: '😈',
+        title: '${after.players[actor].id}: Beat you to it!',
+        detail: 'That route is mine.',
+        color: const Color(0xffd1b2f5),
+        cheeky: true,
+      );
+    }
+    cutOff.removeWhere((seat) => !widget.computerSeats.contains(seat));
+    if (cutOff.isEmpty) return null;
+    final names = cutOff.map((seat) => after.players[seat].id).join(' & ');
+    return _ActivityCue(
+      index: after.events.length,
+      emoji: '😡',
+      title: '$names: Hey! You cut me off!',
+      detail:
+          'Your move blocks ${cutOff.length == 1 ? "their route" : "their routes"}',
+      color: const Color(0xffffa28e),
     );
   }
 
@@ -97,6 +234,13 @@ class _MatchActivityState extends State<MatchActivity> {
     );
 
     switch (event) {
+      case DiscardResources():
+        return cue(
+          '📦',
+          '${state.players[event.player].id} discards resources',
+          '${event.goods.values.fold<int>(0, (a, b) => a + b)} goods returned to the bank',
+          color: blue,
+        );
       case RollDice():
         return cue('🎲', '$prefix rolls the dice', '', color: blue);
       case PlaceVillage():
@@ -233,7 +377,7 @@ class _MatchActivityState extends State<MatchActivity> {
         return cue(
           '🤝',
           '$prefix sends an offer',
-          '${event.giveCount} ${event.give.name} for ${event.wantCount} ${event.want.name}',
+          '${tradeBundleText(event.gives)} for ${tradeBundleText(event.wants)}',
           color: violet,
         );
       case RespondTrade():
@@ -287,6 +431,7 @@ class _MatchActivityState extends State<MatchActivity> {
   @override
   void dispose() {
     _dismiss?.cancel();
+    _reply?.cancel();
     super.dispose();
   }
 

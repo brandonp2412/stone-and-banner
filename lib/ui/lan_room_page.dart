@@ -20,6 +20,9 @@ class _LanRoomPageState extends State<LanRoomPage> {
   final name = TextEditingController(text: 'Player');
   final roomCode = TextEditingController();
   String? savedRoom, savedToken;
+  bool _edited = false;
+  bool _restoring = false;
+  Future<void> _settingsTail = Future<void>.value();
   bool host = true;
   int seats = 3;
 
@@ -40,6 +43,9 @@ class _LanRoomPageState extends State<LanRoomPage> {
         }
       },
     )..addListener(_refresh);
+    for (final field in [address, name, roomCode]) {
+      field.addListener(_saveSettings);
+    }
     _restore();
   }
 
@@ -47,9 +53,45 @@ class _LanRoomPageState extends State<LanRoomPage> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      address.text = prefs.getString('lanUrl') ?? address.text;
+      if (!_edited) {
+        _restoring = true;
+        address.text =
+            prefs.getString('lanSetupUrl') ??
+            prefs.getString('lanUrl') ??
+            address.text;
+        name.text = prefs.getString('lanPlayerName') ?? name.text;
+        roomCode.text = prefs.getString('lanJoinCode') ?? roomCode.text;
+        host = prefs.getBool('lanHost') ?? host;
+        final count = prefs.getInt('lanSeats');
+        if (count == 3 || count == 4) seats = count!;
+        _restoring = false;
+      }
       savedRoom = prefs.getString('lanRoom');
       savedToken = prefs.getString('lanToken');
+    });
+  }
+
+  void _saveSettings() {
+    if (_restoring) return;
+    _edited = true;
+    final url = address.text;
+    final playerName = name.text;
+    final code = roomCode.text;
+    final hosting = host;
+    final count = seats;
+    _settingsTail = _settingsTail.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('lanSetupUrl', url);
+        await prefs.setString('lanPlayerName', playerName);
+        await prefs.setString('lanJoinCode', code);
+        await prefs.setBool('lanHost', hosting);
+        await prefs.setInt('lanSeats', count);
+      } on Object {
+        if (mounted) {
+          setState(() => client.error = 'Could not save LAN settings.');
+        }
+      }
     });
   }
 
@@ -91,7 +133,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
   Widget build(BuildContext context) {
     final state = client.game;
     final seat = client.seat;
-    final activeSeat = state?.tactical?.responder ?? state?.active;
+    final activeSeat = state?.actingSeat;
     final canAct =
         client.connected &&
         !client.pending &&
@@ -189,7 +231,10 @@ class _LanRoomPageState extends State<LanRoomPage> {
               ButtonSegment(value: false, label: Text('Join room')),
             ],
             selected: {host},
-            onSelectionChanged: (value) => setState(() => host = value.first),
+            onSelectionChanged: (value) {
+              setState(() => host = value.first);
+              _saveSettings();
+            },
           ),
           const SizedBox(height: 12),
           TextField(
@@ -207,8 +252,10 @@ class _LanRoomPageState extends State<LanRoomPage> {
                 ButtonSegment(value: 4, label: Text('4 players')),
               ],
               selected: {seats},
-              onSelectionChanged: (value) =>
-                  setState(() => seats = value.first),
+              onSelectionChanged: (value) {
+                setState(() => seats = value.first);
+                _saveSettings();
+              },
             ),
           ] else
             TextField(

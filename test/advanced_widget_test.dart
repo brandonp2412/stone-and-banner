@@ -31,6 +31,49 @@ MatchState readyBoard() {
 }
 
 void main() {
+  testWidgets('build stays visible and disabled before rolling', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final ready = readyBoard();
+    Future<void> show(MatchState state) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MatchView(state: state, onEvent: (_) {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await show(ready);
+    expect(find.text('Road'), findsOneWidget);
+    await show(ready.copyWith(phase: MatchPhase.roll));
+    expect(find.text('Road'), findsOneWidget);
+    final road = tester.widget<OutlinedButton>(
+      find.ancestor(
+        of: find.text('Road'),
+        matching: find.byType(OutlinedButton),
+      ),
+    );
+    expect(road.onPressed, isNull);
+    expect(find.text('Your turn begins'), findsNothing);
+    expect(
+      find.textContaining('Production goes to every eligible'),
+      findsNothing,
+    );
+    await show(ready);
+    await tester.tap(find.text('Realm'));
+    await tester.pumpAndSettle();
+    await show(ready.copyWith(phase: MatchPhase.roll));
+    expect(find.text('Your realm'), findsOneWidget);
+    expect(find.text('Road'), findsNothing);
+  });
+
   testWidgets('touch a Town Development and recruit Knight on board', (
     tester,
   ) async {
@@ -72,14 +115,6 @@ void main() {
     ].first;
 
     await scrollToAction(tester, 'Road');
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Knights & Defense'),
-      100,
-      scrollable: find.byType(Scrollable).last,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Knights & Defense'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Recruit Knight'),

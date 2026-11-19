@@ -162,7 +162,7 @@ void main() {
         while (state.phase != MatchPhase.finished &&
             state.round < 9 &&
             steps < 1800) {
-          final actor = state.tactical?.responder ?? state.active;
+          final actor = state.actingSeat;
           final view = AiActionAdapter.observe(state, actor);
           expect(
             view.legalActions,

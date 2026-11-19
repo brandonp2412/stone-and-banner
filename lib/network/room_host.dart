@@ -107,16 +107,45 @@ class HostedRoom {
               MatchEngine.expectedDice(current).$2,
             )
           : input;
+      if (event is ProposeTrade &&
+          event.counterOf != null &&
+          !current.offers.any(
+            (o) =>
+                o.id == event.counterOf &&
+                o.target == seat &&
+                o.proposer == event.target,
+          )) {
+        throw StateError('Only the recipient can counter an offer.');
+      }
       if (event is TimeoutTactical) {
         throw StateError('Only the server schedules timeouts.');
       }
-      if (current.tactical case final TacticalWindow window) {
+      if (current.pendingDiscards.isNotEmpty) {
+        if (event is! DiscardResources ||
+            event.player != seat ||
+            current.actingSeat != seat) {
+          throw StateError('Waiting for resources to be discarded.');
+        }
+      } else if (current.tactical case final TacticalWindow window) {
         if (event is! RespondTactical ||
             window.responder != seat ||
             event.player != seat) {
           throw StateError('Waiting for the named tactical responder.');
         }
-      } else if (seat != current.active ||
+      } else if ((seat != current.active &&
+              !(event is ProposeTrade &&
+                  event.counterOf != null &&
+                  current.offers.any(
+                    (o) =>
+                        o.id == event.counterOf &&
+                        o.target == seat &&
+                        o.proposer == event.target,
+                  )) &&
+              !(event is RespondTrade &&
+                  event.player == seat &&
+                  current.offers.any(
+                    (o) => o.target == seat && o.proposer == current.active,
+                  ))) ||
           (event is RespondTactical) ||
           (event is RespondTrade && event.player != seat)) {
         throw StateError('This is another player’s turn.');

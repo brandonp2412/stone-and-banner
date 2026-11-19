@@ -202,6 +202,11 @@ class BalanceSimulation {
 
   static ProposeTrade? _offer(MatchState s, BalanceBot bot) {
     if (!bot.trade || s.offers.any((o) => o.proposer == s.active)) return null;
+    if (s.events.reversed
+        .takeWhile((event) => event is! RollDice && event is! EndTurn)
+        .any((event) => event is ProposeTrade)) {
+      return null;
+    }
     final goal = _goal(s, bot);
     final wanted = Resource.values
         .where((r) => _count(s, s.active, r) < (goal[r] ?? 0))
@@ -360,6 +365,18 @@ class BalanceSimulation {
     }
 
     while (s.phase != MatchPhase.finished && s.round <= maxRounds) {
+      if (s.pendingDiscards.isNotEmpty) {
+        final seat = s.actingSeat;
+        final goods = <Resource, int>{};
+        var left = s.pendingDiscards[seat]!;
+        for (final good in Resource.values) {
+          final count = math.min(left, s.players[seat].stores[good] ?? 0);
+          goods[good] = count;
+          left -= count;
+        }
+        dispatch(DiscardResources(seat, goods));
+        continue;
+      }
       if (s.tactical != null) {
         final w = s.tactical!, bot = bots[w.responder];
         var choice = TacticalChoice.pass;
@@ -542,7 +559,8 @@ class BalanceSimulation {
       for (final offer in incoming) {
         final ownWant = _goal(s, bot)[offer.give] ?? 0;
         final accept =
-            _count(s, s.active, offer.want) >= offer.wantCount &&
+            canPayTrade(s.current.stores, offer.wants) &&
+            canPayTrade(s.players[offer.proposer].stores, offer.gives) &&
             (_count(s, s.active, offer.want) > offer.wantCount ||
                 ownWant > _count(s, s.active, offer.give));
         dispatch(RespondTrade(s.active, accept, offerId: offer.id));

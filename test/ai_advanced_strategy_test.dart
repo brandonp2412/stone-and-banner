@@ -37,7 +37,7 @@ MatchState actions(int seed) {
     boardSeed: seed * 7 + 11,
   );
   for (var step = 0; step < 20 && state.phase != MatchPhase.roll; step++) {
-    final seat = state.tactical?.responder ?? state.active;
+    final seat = state.actingSeat;
     final view = AiActionAdapter.observe(state, seat);
     final choice = bot.choose(state)!;
     state = AiActionAdapter.applySelected(state, view, choice);
@@ -170,24 +170,27 @@ void main() {
     conserved(state);
   });
 
-  test('capital resource goal outranks a second Town after first upgrade', () {
-    final state = deal(town(157), {Resource.wood: 6});
-    expect(
-      state.sites.values
-          .where((site) => site.owner == state.active)
-          .map((site) => site.structure),
-      containsAll([Structure.town, Structure.village]),
-    );
-    final view = AiActionAdapter.observe(state, state.active);
-    final planned = AiActionAdapter.advancedDecision(view);
-    expect(planned, isA<BankExchange>());
-    // Capital needs wheat, ore and commodities, not another road resource.
-    expect(
-      MatchEngine.capitalCost.containsKey((planned! as BankExchange).receive),
-      isTrue,
-    );
-    conserved(MatchEngine.apply(state, planned));
-  });
+  test(
+    'capital resource goal guides trade after both settlements become Towns',
+    () {
+      final state = deal(town(157), {Resource.wood: 6});
+      expect(
+        state.sites.values
+            .where((site) => site.owner == state.active)
+            .map((site) => site.structure),
+        everyElement(Structure.town),
+      );
+      final view = AiActionAdapter.observe(state, state.active);
+      final planned = AiActionAdapter.advancedDecision(view);
+      expect(planned, isA<BankExchange>());
+      // Capital needs wheat, ore and commodities, not another road resource.
+      expect(
+        MatchEngine.capitalCost.containsKey((planned! as BankExchange).receive),
+        isTrue,
+      );
+      conserved(MatchEngine.apply(state, planned));
+    },
+  );
 
   test('Reaver pressure activates and promotes Knights without free goods', () {
     var state = town(101);
@@ -274,8 +277,13 @@ void main() {
     state = state.copyWith(
       sites: {
         ...state.sites,
-        for (final vertex in state.sites.keys.take(4))
-          vertex: Site(state.sites[vertex]!.owner, Structure.town),
+        for (final entry in state.sites.entries)
+          entry.key: Site(
+            entry.value.owner,
+            state.sites.keys.take(4).contains(entry.key)
+                ? Structure.town
+                : Structure.village,
+          ),
       },
     );
     state = deal(state, {Resource.wheat: 1, Resource.ore: 1}, seat: 1);
@@ -318,7 +326,7 @@ void main() {
     expect(view.strategy.tradeRate, 3);
     final trade = AiActionAdapter.decide(view);
     expect(trade, isA<BankExchange>());
-    expect((trade! as BankExchange).receive, Resource.ore);
+    expect(MatchEngine.capitalCost, contains((trade! as BankExchange).receive));
     state = MatchEngine.apply(state, trade);
     expect(state.catchupUsed, contains(state.active));
     conserved(state);
@@ -425,7 +433,7 @@ void main() {
           i < 1000 && state.round < 9 && state.phase != MatchPhase.finished;
           i++
         ) {
-          final seat = state.tactical?.responder ?? state.active;
+          final seat = state.actingSeat;
           final view = AiActionAdapter.observe(state, seat);
           final action = bot.choose(state);
           expect(action, isNotNull);

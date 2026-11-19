@@ -85,6 +85,10 @@ void main() {
       find.byType(Dialog),
       findsOneWidget,
     ); // Negotiation overlays the tabletop.
+    await tester.tap(find.byType(DropdownButton<Resource>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('wool (${s.bank[Resource.wool]})').last);
+    await tester.pumpAndSettle();
     expect(find.text('Exchange'), findsOneWidget);
     await tester.tap(find.text('Exchange'));
     await tester.pumpAndSettle();
@@ -122,7 +126,13 @@ void main() {
     await tester.tap(find.text('Player trade'));
     await tester.pumpAndSettle();
     expect(find.text('Standing offer'), findsOneWidget);
-    expect(find.textContaining('Private hands stay hidden'), findsOneWidget);
+    expect(find.text('To Ben'), findsOneWidget);
+    await tester.tap(find.byType(DropdownButton<Resource>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.text('wood (${s.current.stores[Resource.wood]})').last,
+    );
+    await tester.pumpAndSettle();
     expect(
       find.byType(Dialog),
       findsOneWidget,
@@ -189,7 +199,11 @@ void main() {
     var updated = s;
     await showMatch(tester, s, (v) => updated = v);
     expect(find.text('Response for Ben'), findsOneWidget);
-    await tester.ensureVisible(find.text('Pledge 1 ore'));
+    await tester.scrollUntilVisible(
+      find.text('Pledge 1 ore'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Pledge 1 ore'));
     await tester.pumpAndSettle();
@@ -205,7 +219,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(updated.tactical, isNull);
     expect(find.text('Resolve'), findsOneWidget);
-    expect(find.textContaining('Def 2'), findsWidgets);
+    expect(find.textContaining('Defence 2 /'), findsWidgets);
     expect(find.textContaining('Emergency aid +2'), findsOneWidget);
   });
 

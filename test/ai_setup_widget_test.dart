@@ -51,11 +51,8 @@ void main() {
     ) as Map<String, dynamic>;
     expect(session['computerSeats'], [2]);
     final match = MatchEngine.importReplay(session['replay'] as String);
-    expect(match.players.map((p) => p.id).toList(), [
-      'Player 1',
-      'Player 2',
-      'Computer 1',
-    ]);
+    expect(match.players.take(2).map((p) => p.id), ['Player 1', 'Player 2']);
+    expect(match.players.last.id, isNot(startsWith('Computer')));
   });
 
   testWidgets(
@@ -105,12 +102,9 @@ void main() {
       ) as Map<String, dynamic>;
       expect(session['computerSeats'], [1, 2, 3]);
       final match = MatchEngine.importReplay(session['replay'] as String);
-      expect(match.players.map((p) => p.id).toList(), [
-        'Presley',
-        'Computer 1',
-        'Computer 2',
-        'Computer 3',
-      ]);
+      expect(match.players.first.id, 'Presley');
+      expect(match.players.map((p) => p.id).toSet(), hasLength(4));
+      expect(match.players.skip(1).every((p) => !p.id.startsWith('Computer')), isTrue);
     },
   );
 

@@ -36,14 +36,31 @@ class InvasionMeter extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            arrival,
-            style: TextStyle(
-              color: fleetColor,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              height: 1.2,
-            ),
+          // Reserve the tallest countdown at the available width and scale.
+          Stack(
+            children: [
+              for (final label in {
+                arrival,
+                'Invasion in 3 rounds',
+                'Invasion in 1 round',
+                'Invasion now',
+              })
+                Visibility(
+                  visible: label == arrival,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: fleetColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 3),
           Text(

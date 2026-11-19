@@ -35,7 +35,7 @@ void main() {
       );
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
-      await scrollToAction(tester, 'Knights & Defense');
+      await scrollToAction(tester, 'Fortify');
       await expectLater(
         find.byType(Scaffold),
         matchesGoldenFile(

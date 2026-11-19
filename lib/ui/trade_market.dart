@@ -15,10 +15,12 @@ class TradeMarket extends StatelessWidget {
     required this.onEvent,
     required this.viewerSeat,
     this.onReturnToBoard,
+    this.allowOffers = true,
     this.computerSeats = const <int>{},
   });
 
   final MatchState state;
+  final bool allowOffers;
   final Set<int> computerSeats;
   final VoidCallback onBank, onOffer;
   final ValueChanged<TradeProposal> onCounter;
@@ -33,7 +35,10 @@ class TradeMarket extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ownTurn =
-        state.phase == MatchPhase.actions && state.active == viewerSeat;
+        allowOffers &&
+        state.tactical == null &&
+        state.phase == MatchPhase.actions &&
+        state.active == viewerSeat;
     final hasOutgoing = state.offers.any((o) => o.proposer == viewerSeat);
     final incoming = state.offers.where((o) => o.target == viewerSeat).toList();
     final outgoing = state.offers
@@ -84,7 +89,7 @@ class TradeMarket extends StatelessWidget {
         if (ownTurn && incoming.isEmpty && outgoing.isEmpty) ...[
           const SizedBox(height: 8),
           const Text(
-            'Bots consider offers immediately. Human players reply on their turns.',
+            'Bots consider offers immediately. Players can accept or counter offers.',
             style: TextStyle(color: Color(0xffacc4c9), fontSize: 12),
           ),
         ],
@@ -127,7 +132,15 @@ class TradeMarket extends StatelessWidget {
           const SizedBox(height: 9),
           _heading('NEEDS YOUR ANSWER', Icons.mark_email_unread_outlined),
           for (final offer in incoming)
-            _offerCard(context, offer, incoming: true, enabled: ownTurn),
+            _offerCard(
+              context,
+              offer,
+              incoming: true,
+              enabled:
+                  state.phase == MatchPhase.actions &&
+                  state.tactical == null &&
+                  (ownTurn || offer.proposer == state.active),
+            ),
         ],
         if (outgoing.isNotEmpty) ...[
           const SizedBox(height: 9),
@@ -224,13 +237,13 @@ class TradeMarket extends StatelessWidget {
     required bool enabled,
   }) {
     final counterAvailable =
-        enabled && !state.offers.any((o) => o.proposer == viewerSeat);
+        enabled &&
+        allowOffers &&
+        !state.offers.any((o) => o.proposer == viewerSeat);
     final canAccept =
         enabled &&
-        (state.players[viewerSeat].stores[offer.want] ?? 0) >=
-            offer.wantCount &&
-        (state.players[offer.proposer].stores[offer.give] ?? 0) >=
-            offer.giveCount;
+        canPayTrade(state.players[viewerSeat].stores, offer.wants) &&
+        canPayTrade(state.players[offer.proposer].stores, offer.gives);
     return Card(
       key: ValueKey('trade-offer-${offer.id}'),
       margin: const EdgeInsets.only(bottom: 9),
@@ -282,8 +295,7 @@ class TradeMarket extends StatelessWidget {
                 Expanded(
                   child: _goods(
                     incoming ? 'YOU RECEIVE' : 'YOU GIVE',
-                    offer.giveCount,
-                    offer.give,
+                    offer.gives,
                   ),
                 ),
                 const Padding(
@@ -291,11 +303,7 @@ class TradeMarket extends StatelessWidget {
                   child: Icon(Icons.swap_horiz_rounded, color: gold, size: 23),
                 ),
                 Expanded(
-                  child: _goods(
-                    incoming ? 'YOU GIVE' : 'YOU GET',
-                    offer.wantCount,
-                    offer.want,
-                  ),
+                  child: _goods(incoming ? 'YOU GIVE' : 'YOU GET', offer.wants),
                 ),
               ],
             ),
@@ -352,7 +360,7 @@ class TradeMarket extends StatelessWidget {
     );
   }
 
-  Widget _goods(String label, int count, Resource good) => Container(
+  Widget _goods(String label, Map<Resource, int> goods) => Container(
     constraints: const BoxConstraints(minHeight: 54),
     padding: const EdgeInsets.all(7),
     decoration: BoxDecoration(
@@ -373,7 +381,7 @@ class TradeMarket extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          '$count × ${good.name}',
+          tradeBundleText(goods),
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w800,

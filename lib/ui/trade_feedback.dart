@@ -34,8 +34,8 @@ String? tradeFeedbackForResponse(
   }
   final recipient = state.players[response.player].id;
   final terms =
-      '${proposal.giveCount} ${proposal.give.name} for '
-      '${proposal.wantCount} ${proposal.want.name}';
+      '${tradeBundleText(proposal.gives)} for '
+      '${tradeBundleText(proposal.wants)}';
   return response.accept
       ? '$recipient accepted the trade: $terms.'
       : '$recipient declined the trade: $terms. Reserved goods returned.';

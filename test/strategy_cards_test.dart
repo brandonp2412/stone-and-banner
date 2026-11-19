@@ -87,6 +87,30 @@ void checkCards(MatchState s) {
 }
 
 void main() {
+  test('pending trade does not block Fortification Plans', () {
+    final card = StrategyCards.definitions.firstWhere(
+      (card) => card.id == 'fortification-plans',
+    );
+    var state = holding(prepared(), card);
+    state = MatchEngine.apply(
+      state,
+      const ProposeTrade(1, Resource.wood, 1, Resource.brick, 1),
+    );
+    final offer = state.offers.single;
+    final play = MatchEngine.legalCardPlays(state, 0).first;
+    state = MatchEngine.apply(state, play);
+    expect(state.fortified, contains(play.vertex));
+    expect(state.current.cards, isEmpty);
+    expect(state.offers.single.id, offer.id);
+    state = MatchEngine.apply(
+      state,
+      RespondTrade(1, true, offerId: offer.id),
+    );
+    expect(state.offers, isEmpty);
+    checkConservation(state);
+    checkCards(state);
+  });
+
   test('three original decks contain exactly 18 physical cards each', () {
     expect(StrategyCards.definitions.length, 28);
     final unique = StrategyCards.definitions.map((c) => c.id).toSet();

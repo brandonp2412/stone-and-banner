@@ -145,7 +145,7 @@ def inject(cfg: dict, args: argparse.Namespace) -> dict:
             cmd = adb + ["shell", "input", "tap", str(args.x), str(args.y)]
         elif kind == "launch":
             cmd = adb + ["shell", "am", "start", "-n",
-                         "nz.presley.stoneandbanner/.MainActivity"]
+                         "nz.stone_and_banner/.MainActivity"]
         elif kind == "swipe":
             cmd = adb + ["shell", "input", "swipe", str(args.x), str(args.y),
                          str(args.end_x), str(args.end_y), str(args.duration_ms)]

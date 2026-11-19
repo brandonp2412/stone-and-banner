@@ -116,6 +116,12 @@ abstract final class RoomProtocol {
                   ) as PlayStrategyCard,
           );
     return MatchState(
+      pendingDiscards: {
+        for (final entry
+            in ((data['pendingDiscards'] as Map<String, dynamic>?) ?? {})
+                .entries)
+          int.parse(entry.key): entry.value as int,
+      },
       seed: 0,
       board: board,
       topology: BoardTopology(board),
@@ -170,6 +176,8 @@ abstract final class RoomProtocol {
             Resource.values.byName(o[5] as String),
             o[6] as int,
             isCounter: o[7] as bool,
+            giveBundle: o.length > 8 ? decodeTradeBundle(o[8]) : null,
+            wantBundle: o.length > 9 ? decodeTradeBundle(o[9]) : null,
           ),
       ],
       tactical: tactical,
@@ -186,6 +194,10 @@ abstract final class RoomProtocol {
       'road' => PlaceRoad(intAt('edge')),
       'upgrade' => UpgradeSite(intAt('vertex')),
       'roll' => RollDice(intAt('first'), intAt('second')),
+      'resourceDiscard' => DiscardResources(intAt('player'), {
+        for (final entry in (e['goods'] as Map<String, dynamic>).entries)
+          Resource.values.byName(entry.key): entry.value as int,
+      }),
       'bandit' => MoveBandit(intAt('tile'), victim: e['victim'] as int?),
       'bank' => BankExchange(good('give'), good('receive')),
       'offer' => ProposeTrade(
@@ -195,6 +207,8 @@ abstract final class RoomProtocol {
         good('want'),
         intAt('wantCount'),
         counterOf: e['counterOf'] as int?,
+        giveBundle: decodeTradeBundle(e['giveBundle']),
+        wantBundle: decodeTradeBundle(e['wantBundle']),
       ),
       'answer' => RespondTrade(
         intAt('player'),

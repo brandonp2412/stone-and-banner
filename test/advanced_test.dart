@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/advanced.dart';
+import 'package:stone_and_banner/engine/heuristic_ai.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/game.dart';
 import 'package:stone_and_banner/engine/match.dart';
@@ -147,8 +148,32 @@ void main() {
     },
   );
 
+  test('Knights and settlements cannot share a corner', () {
+    var s = draft(76).copyWith(phase: MatchPhase.actions, sites: {});
+    final edgeId = s.roads.keys.firstWhere((e) => s.roads[e] == 0);
+    final edge = s.topology.edges[edgeId];
+    s = fund(s, 0, MatchEngine.recruitCost);
+    s = fund(s, 0, MatchEngine.villageCost);
+    expect(MatchEngine.legalRecruit(s, edge.b), isTrue);
+    for (final owner in [0, 1]) {
+      for (final structure in Structure.values) {
+        final occupied = s.copyWith(sites: {edge.b: Site(owner, structure)});
+        expect(MatchEngine.legalRecruit(occupied, edge.b), isFalse);
+        final moving = occupied.copyWith(
+          knights: {edge.a: const KnightPiece(0, KnightRank.warden, true, -1)},
+        );
+        expect(MatchEngine.legalMoveKnight(moving, edge.a, edge.b), isFalse);
+      }
+    }
+    expect(MatchEngine.legalVillage(s, edge.b), isTrue);
+    final withKnight = s.copyWith(
+      knights: {edge.b: const KnightPiece(0, KnightRank.sentinel, false, -1)},
+    );
+    expect(MatchEngine.legalVillage(withKnight, edge.b), isFalse);
+  });
+
   test('Knight recruit, activation, promotion, movement and displacement', () {
-    var s = draft(76).copyWith(phase: MatchPhase.actions);
+    var s = draft(76).copyWith(phase: MatchPhase.actions, sites: {});
     final edgeId = s.roads.keys.firstWhere((e) => s.roads[e] == 0);
     final edge = s.topology.edges[edgeId];
     final from = edge.a, to = edge.b;
@@ -164,7 +189,16 @@ void main() {
     );
     s = MatchEngine.apply(s, ActivateKnight(from));
     expect(s.knights[from]!.active, true);
-    expect(() => MatchEngine.apply(s, PromoteKnight(from)), throwsStateError);
+    expect(MatchEngine.legalMoveKnight(s, from, to), true);
+    final moved = MatchEngine.apply(s, MoveKnight(from, to));
+    expect(moved.knights[to]!.active, true);
+    expect(moved.knights[from], isNull);
+    expect(MatchEngine.legalMoveKnight(moved, to, from), false);
+    expect(
+      () => MatchEngine.apply(moved, MoveKnight(to, from)),
+      throwsStateError,
+    );
+    conserved(moved);
     s = fund(
       s.copyWith(turnSerial: s.turnSerial + 1),
       0,
@@ -190,7 +224,14 @@ void main() {
   test(
     'failed Invasion uses shield once then scars Town; rebuilding discounted',
     () {
-      var s = draft(91).copyWith(phase: MatchPhase.actions);
+      final initial = draft(91);
+      var s = initial.copyWith(
+        phase: MatchPhase.actions,
+        sites: {
+          for (final entry in initial.sites.entries)
+            entry.key: Site(entry.value.owner, Structure.village),
+        },
+      );
       final v = s.sites.keys.firstWhere((v) => s.sites[v]!.owner == 0);
       s = town(s, v);
       // Two upgraded settlements outnumber a single Fort's defence.
@@ -332,8 +373,15 @@ void main() {
           s = MatchEngine.apply(s, const ResolveInvasion());
         }
         if (s.phase == MatchPhase.roll) s = MatchEngine.roll(s);
+        while (s.pendingDiscards.isNotEmpty) {
+          s = MatchEngine.apply(s, const HeuristicAi().choose(s)!);
+        }
         if (s.phase == MatchPhase.bandit) {
-          s = MatchEngine.apply(s, MoveBandit(s.banditTile == 0 ? 1 : 0));
+          s = MatchEngine.apply(s, MatchEngine.idleEvent(s)!);
+          while (s.tactical != null) {
+            final w = s.tactical!;
+            s = MatchEngine.apply(s, TimeoutTactical(w.id, w.responder));
+          }
         }
         if (s.phase == MatchPhase.actions) {
           final village = s.sites.keys
@@ -401,7 +449,15 @@ void main() {
       0,
       (sum, r) => sum + (state.players[0].stores[r] ?? 0),
     );
-    expect(hand(exposed), 4);
+    expect(hand(exposed), 8);
+    expect(exposed.pendingDiscards, {0: 4});
+    expect(protected.pendingDiscards, isEmpty);
+    final discarded = MatchEngine.apply(
+      exposed,
+      const HeuristicAi().choose(exposed)!,
+    );
+    expect(hand(discarded), 4);
+    conserved(discarded);
     expect(hand(protected), 8);
     expect(exposed.reaverPressure, 1);
     conserved(exposed);

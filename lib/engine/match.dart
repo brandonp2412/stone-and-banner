@@ -22,6 +22,26 @@ class Site {
   final Structure structure;
 }
 
+Map<String, int> encodeTradeBundle(Map<Resource, int> goods) => {
+  for (final good in Resource.values)
+    if (goods.containsKey(good)) good.name: goods[good]!,
+};
+
+Map<Resource, int>? decodeTradeBundle(Object? raw) => raw == null
+    ? null
+    : {
+        for (final entry in (raw as Map).entries)
+          Resource.values.byName(entry.key as String): entry.value as int,
+      };
+
+bool canPayTrade(Map<Resource, int> stores, Map<Resource, int> goods) =>
+    goods.entries.every((e) => (stores[e.key] ?? 0) >= e.value);
+
+String tradeBundleText(Map<Resource, int> goods) => [
+  for (final good in Resource.values)
+    if (goods.containsKey(good)) '${goods[good]} ${good.name}',
+].join(' + ');
+
 class TradeProposal {
   const TradeProposal(
     this.id,
@@ -32,10 +52,15 @@ class TradeProposal {
     this.want,
     this.wantCount, {
     this.isCounter = false,
+    this.giveBundle,
+    this.wantBundle,
   });
   final int id, proposer, target, giveCount, wantCount;
   final Resource give, want;
   final bool isCounter;
+  final Map<Resource, int>? giveBundle, wantBundle;
+  Map<Resource, int> get gives => giveBundle ?? {give: giveCount};
+  Map<Resource, int> get wants => wantBundle ?? {want: wantCount};
 }
 
 enum TacticalKind { bandit, governance, invasion }
@@ -87,13 +112,28 @@ class UpgradeSite extends MatchEvent {
 }
 
 class RollDice extends MatchEvent {
-  const RollDice(this.first, this.second);
+  const RollDice(this.first, this.second, {this.chooseDiscards = true});
+  final bool chooseDiscards;
   final int first, second;
   @override
   Map<String, Object?> toJson() => {
     'type': 'roll',
+    'chooseDiscards': chooseDiscards,
     'first': first,
     'second': second,
+  };
+}
+
+class DiscardResources extends MatchEvent {
+  DiscardResources(this.player, Map<Resource, int> goods)
+    : goods = Map.unmodifiable(goods);
+  final int player;
+  final Map<Resource, int> goods;
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'resourceDiscard',
+    'player': player,
+    'goods': {for (final entry in goods.entries) entry.key.name: entry.value},
   };
 }
 
@@ -128,10 +168,15 @@ class ProposeTrade extends MatchEvent {
     this.want,
     this.wantCount, {
     this.counterOf,
+    this.giveBundle,
+    this.wantBundle,
   });
   final int target, giveCount, wantCount;
   final int? counterOf;
   final Resource give, want;
+  final Map<Resource, int>? giveBundle, wantBundle;
+  Map<Resource, int> get gives => giveBundle ?? {give: giveCount};
+  Map<Resource, int> get wants => wantBundle ?? {want: wantCount};
   @override
   Map<String, Object?> toJson() => {
     'type': 'offer',
@@ -141,6 +186,8 @@ class ProposeTrade extends MatchEvent {
     'want': want.name,
     'wantCount': wantCount,
     'counterOf': counterOf,
+    if (giveBundle != null) 'giveBundle': encodeTradeBundle(gives),
+    if (wantBundle != null) 'wantBundle': encodeTradeBundle(wants),
   };
 }
 
@@ -317,6 +364,7 @@ class MatchState {
     this.turnSerial = 0,
     this.firstCapitalOwner,
     this.lastInvasion = '',
+    Set<int> builders = const {},
     Set<int> catchupUsed = const {},
     Map<StrategyDeck, List<int>> drawPiles = const {},
     Map<StrategyDeck, List<int>> discardPiles = const {},
@@ -325,8 +373,10 @@ class MatchState {
     this.tactical,
     Set<int> reactionsUsed = const {},
     this.invasionAid = 0,
+    Map<int, int> pendingDiscards = const {},
     List<MatchEvent> events = const [],
-  }) : players = List.unmodifiable(players),
+  }) : pendingDiscards = Map.unmodifiable(pendingDiscards),
+       players = List.unmodifiable(players),
        sites = Map.unmodifiable(sites),
        roads = Map.unmodifiable(roads),
        knights = Map.unmodifiable(knights),
@@ -335,6 +385,7 @@ class MatchState {
        dryRolls = Map.unmodifiable(dryRolls),
        reliefUsed = Set.unmodifiable(reliefUsed),
        bank = Map.unmodifiable(bank),
+       builders = Set.unmodifiable(builders),
        catchupUsed = Set.unmodifiable(catchupUsed),
        drawPiles = Map.unmodifiable(
          drawPiles.map(
@@ -366,6 +417,9 @@ class MatchState {
   final Map<Resource, int> bank;
   final MatchPhase phase;
   final int? pendingVillage, dice, longestRoadHolder;
+
+  /// Players who have built something after the free setup placements.
+  final Set<int> builders;
   final Set<int> catchupUsed;
   final Map<StrategyDeck, List<int>> drawPiles, discardPiles;
   final String lastCardEvent;
@@ -373,6 +427,10 @@ class MatchState {
   final TacticalWindow? tactical;
   final Set<int> reactionsUsed;
   final int invasionAid;
+  final Map<int, int> pendingDiscards;
+  int get actingSeat => pendingDiscards.isNotEmpty
+      ? pendingDiscards.keys.first
+      : tactical?.responder ?? active;
   final List<MatchEvent> events;
 
   PlayerState get current => players[active];
@@ -404,6 +462,7 @@ class MatchState {
     int? round,
     int? longestRoadHolder,
     bool clearRoadHolder = false,
+    Set<int>? builders,
     Set<int>? catchupUsed,
     Map<StrategyDeck, List<int>>? drawPiles,
     Map<StrategyDeck, List<int>>? discardPiles,
@@ -413,6 +472,7 @@ class MatchState {
     bool clearTactical = false,
     Set<int>? reactionsUsed,
     int? invasionAid,
+    Map<int, int>? pendingDiscards,
     List<MatchEvent>? events,
   }) => MatchState(
     seed: seed,
@@ -446,6 +506,7 @@ class MatchState {
     longestRoadHolder: clearRoadHolder
         ? null
         : longestRoadHolder ?? this.longestRoadHolder,
+    builders: builders ?? this.builders,
     catchupUsed: catchupUsed ?? this.catchupUsed,
     drawPiles: drawPiles ?? this.drawPiles,
     discardPiles: discardPiles ?? this.discardPiles,
@@ -454,6 +515,7 @@ class MatchState {
     tactical: clearTactical ? null : tactical ?? this.tactical,
     reactionsUsed: reactionsUsed ?? this.reactionsUsed,
     invasionAid: invasionAid ?? this.invasionAid,
+    pendingDiscards: pendingDiscards ?? this.pendingDiscards,
     events: events ?? this.events,
   );
 }
@@ -532,7 +594,7 @@ class MatchEngine {
   }) {
     var state = newGame(names, seed, boardSeed: boardSeed, balance: balance);
     for (final event in events) {
-      state = apply(state, event);
+      state = _apply(state, event, replaying: true);
     }
     return state;
   }
@@ -579,7 +641,15 @@ class MatchEngine {
         ),
         'cardDiscard' => DiscardStrategyCard(e['hand'] as int),
         'invasion' => const ResolveInvasion(),
-        'roll' => RollDice(e['first'] as int, e['second'] as int),
+        'roll' => RollDice(
+          e['first'] as int,
+          e['second'] as int,
+          chooseDiscards: e['chooseDiscards'] == true,
+        ),
+        'resourceDiscard' => DiscardResources(e['player'] as int, {
+          for (final entry in (e['goods'] as Map<String, dynamic>).entries)
+            Resource.values.byName(entry.key): entry.value as int,
+        }),
         'bandit' => MoveBandit(e['tile'] as int, victim: e['victim'] as int?),
         'bank' => BankExchange(resource('give'), resource('receive')),
         'offer' => ProposeTrade(
@@ -589,6 +659,8 @@ class MatchEngine {
           resource('want'),
           e['wantCount'] as int,
           counterOf: e['counterOf'] as int?,
+          giveBundle: decodeTradeBundle(e['giveBundle']),
+          wantBundle: decodeTradeBundle(e['wantBundle']),
         ),
         'answer' => RespondTrade(
           e['player'] as int,
@@ -621,6 +693,10 @@ class MatchEngine {
   }
 
   static String snapshot(MatchState s) => jsonEncode({
+    'pendingDiscards': {
+      for (final entry in s.pendingDiscards.entries)
+        '${entry.key}': entry.value,
+    },
     'seed': s.seed,
     'balance': s.balance.toJson(),
     'phase': s.phase.name,
@@ -631,6 +707,7 @@ class MatchEngine {
     'dice': s.dice,
     'rollCount': s.rollCount,
     'bandit': s.banditTile,
+    'builders': s.builders.toList()..sort(),
     'holder': s.longestRoadHolder,
     'pressure': s.reaverPressure,
     'invasions': s.invasions,
@@ -694,6 +771,10 @@ class MatchEngine {
           o.want.name,
           o.wantCount,
           o.isCounter,
+          if (o.giveBundle != null || o.wantBundle != null) ...[
+            encodeTradeBundle(o.gives),
+            encodeTradeBundle(o.wants),
+          ],
         ],
     ],
     'tactical': s.tactical == null
@@ -759,7 +840,8 @@ class MatchEngine {
   static bool legalVillage(MatchState s, int vertex) {
     if (vertex < 0 ||
         vertex >= s.topology.vertices.length ||
-        s.sites.containsKey(vertex)) {
+        s.sites.containsKey(vertex) ||
+        s.knights.containsKey(vertex)) {
       return false;
     }
     if (s.topology.neighbours(vertex).any(s.sites.containsKey)) return false;
@@ -851,7 +933,7 @@ class MatchEngine {
         vertex < 0 ||
         vertex >= s.topology.vertices.length ||
         s.knights.containsKey(vertex) ||
-        (s.sites[vertex] != null && s.sites[vertex]!.owner != s.active) ||
+        s.sites.containsKey(vertex) ||
         s.knights.values.where((k) => k.owner == s.active).length >= 3 ||
         !affordable(
           s,
@@ -901,7 +983,7 @@ class MatchEngine {
         to < 0 ||
         to >= s.topology.vertices.length ||
         from == to ||
-        (s.sites[to] != null && s.sites[to]!.owner != s.active) ||
+        s.sites.containsKey(to) ||
         (occupant != null &&
             (occupant.owner == s.active ||
                 occupant.rank.strength >= knight.rank.strength))) {
@@ -1050,7 +1132,6 @@ class MatchEngine {
   /// Empty options never block End Turn or the explicit discard action.
   static List<PlayStrategyCard> legalCardPlays(MatchState s, int handIndex) {
     if (s.phase != MatchPhase.actions ||
-        s.offers.isNotEmpty ||
         handIndex < 0 ||
         handIndex >= s.current.cards.length) {
       return [];
@@ -1185,10 +1266,16 @@ class MatchEngine {
         rewards[event.receive!] = card.amount;
       case CardPower.freeRoad:
         s = _recalculateRoads(
-          s.copyWith(roads: {...s.roads, event.vertex!: s.active}),
+          s.copyWith(
+            roads: {...s.roads, event.vertex!: s.active},
+            builders: {...s.builders, s.active},
+          ),
         );
       case CardPower.freeFort:
-        s = s.copyWith(fortified: {...s.fortified, event.vertex!});
+        s = s.copyWith(
+          fortified: {...s.fortified, event.vertex!},
+          builders: {...s.builders, s.active},
+        );
       case CardPower.swap:
       case CardPower.portSwap:
       case CardPower.leverageSwap:
@@ -1253,11 +1340,19 @@ class MatchEngine {
     return apply(s, RollDice(a, b));
   }
 
-  static List<int> banditVictims(MatchState s, int tile) {
+  static List<int> banditVictims(MatchState s, int tile) =>
+      _banditVictims(s, tile);
+
+  static List<int> _banditVictims(
+    MatchState s,
+    int tile, {
+    bool replaying = false,
+  }) {
     _require(tile >= 0 && tile < s.board.tiles.length, 'Unknown tile.');
     return [
       for (var i = 0; i < s.players.length; i++)
         if (i != s.active &&
+            (replaying || s.builders.contains(i)) &&
             s.topology.tileVertices[tile].any((v) => s.sites[v]?.owner == i) &&
             s.players[i].stores.values.any((n) => n > 0))
           i,
@@ -1266,7 +1361,31 @@ class MatchEngine {
 
   /// Deterministic fallback for an expired turn. Reactions wait for a response.
   static MatchEvent? idleEvent(MatchState s) {
-    if (s.tactical != null) return null;
+    if (s.pendingDiscards.isNotEmpty) {
+      final seat = s.pendingDiscards.keys.first;
+      var remaining = s.pendingDiscards[seat]!;
+      final goods = <Resource, int>{};
+      final stores = Map<Resource, int>.of(s.players[seat].stores);
+      while (remaining > 0) {
+        final choices =
+            Resource.values.where((r) => (stores[r] ?? 0) > 0).toList()
+              ..sort((a, b) => (stores[b] ?? 0).compareTo(stores[a] ?? 0));
+        if (choices.isEmpty) return null;
+        final good = choices.first;
+        goods[good] = (goods[good] ?? 0) + 1;
+        stores[good] = stores[good]! - 1;
+        remaining--;
+      }
+      return DiscardResources(seat, goods);
+    }
+    if (s.tactical != null) {
+      return TimeoutTactical(s.tactical!.id, s.tactical!.responder);
+    }
+    if (s.phase == MatchPhase.bandit) {
+      final tile = (s.banditTile + 1) % s.board.tiles.length;
+      final victims = banditVictims(s, tile);
+      return MoveBandit(tile, victim: victims.isEmpty ? null : victims.first);
+    }
     return switch (s.phase) {
       MatchPhase.setupVillage => PlaceVillage(
         MatchEngine.legalVertices(s).first,
@@ -1358,7 +1477,11 @@ class MatchEngine {
     }
     final players = List<PlayerState>.of(s.players);
     players[s.active] = s.current.copyWith(stores: stores);
-    return s.copyWith(players: players, bank: bank);
+    return s.copyWith(
+      players: players,
+      bank: bank,
+      builders: {...s.builders, s.active},
+    );
   }
 
   static MatchState _produce(MatchState s, int number) {
@@ -1456,6 +1579,22 @@ class MatchEngine {
       dryRolls: dry,
       reliefUsed: relieved,
     );
+  }
+
+  static Map<int, int> discardsOnSeven(MatchState s) {
+    final result = <int, int>{};
+    for (var i = 0; i < s.players.length; i++) {
+      final p = s.players[i];
+      final total = p.stores.values.fold<int>(0, (a, b) => a + b);
+      final forts = s.fortified.where((v) => s.sites[v]?.owner == i).length;
+      final capacity =
+          7 +
+          forts * 2 +
+          (p.level(StrategyDeck.governance) >= 3 ? 2 : 0) +
+          (p.level(StrategyDeck.commerce) >= 3 ? 2 : 0);
+      if (total > capacity) result[i] = total ~/ 2;
+    }
+    return result;
   }
 
   static MatchState _discardOnSeven(MatchState s) {
@@ -1780,7 +1919,14 @@ class MatchEngine {
     return s.copyWith(players: players, bank: bank);
   }
 
-  static MatchState apply(MatchState state, MatchEvent event) {
+  static MatchState apply(MatchState state, MatchEvent event) =>
+      _apply(state, event);
+
+  static MatchState _apply(
+    MatchState state,
+    MatchEvent event, {
+    bool replaying = false,
+  }) {
     _require(
       state.phase != MatchPhase.finished && winner(state) == null,
       'Match is finished.',
@@ -1791,9 +1937,40 @@ class MatchEngine {
           event is TimeoutTactical,
       'Resolve or pass the tactical window first.',
     );
+    _require(
+      state.pendingDiscards.isEmpty || event is DiscardResources,
+      'Choose resources to discard first.',
+    );
     var s = state;
 
-    if (event is RespondTactical || event is TimeoutTactical) {
+    if (event is DiscardResources) {
+      final required = s.pendingDiscards[event.player];
+      _require(
+        required != null && event.player == s.actingSeat,
+        'Not waiting for this player to discard.',
+      );
+      _require(
+        event.goods.values.fold<int>(0, (a, b) => a + b) == required,
+        'Discard exactly half your hand, rounded down.',
+      );
+      final hand = Map<Resource, int>.of(s.players[event.player].stores);
+      final bank = Map<Resource, int>.of(s.bank);
+      for (final entry in event.goods.entries) {
+        _require(
+          entry.value >= 0 && entry.value <= (hand[entry.key] ?? 0),
+          'Invalid discard quantity.',
+        );
+        hand[entry.key] = (hand[entry.key] ?? 0) - entry.value;
+        bank[entry.key] = (bank[entry.key] ?? 0) + entry.value;
+      }
+      final players = List<PlayerState>.of(s.players);
+      players[event.player] = players[event.player].copyWith(stores: hand);
+      s = s.copyWith(
+        players: players,
+        bank: bank,
+        pendingDiscards: {...s.pendingDiscards}..remove(event.player),
+      );
+    } else if (event is RespondTactical || event is TimeoutTactical) {
       s = _react(s, event);
     } else if (event is PlaceVillage) {
       _require(
@@ -1911,10 +2088,7 @@ class MatchEngine {
       s = s.copyWith(
         knights: {
           ...s.knights,
-          event.vertex: s.knights[event.vertex]!.copyWith(
-            active: true,
-            actedTurn: s.turnSerial,
-          ),
+          event.vertex: s.knights[event.vertex]!.copyWith(active: true),
         },
       );
     } else if (event is PromoteKnight) {
@@ -1950,7 +2124,7 @@ class MatchEngine {
                   (v) =>
                       !knights.containsKey(v) &&
                       v != event.from &&
-                      s.sites[v]?.owner != s.active,
+                      !s.sites.containsKey(v),
                 )
                 .toList()
               ..sort();
@@ -1983,7 +2157,11 @@ class MatchEngine {
       if (value != 7) {
         s = _produce(s, value);
       } else {
-        s = _discardOnSeven(s).copyWith(reaverPressure: s.reaverPressure + 1);
+        s =
+            (event.chooseDiscards
+                    ? s.copyWith(pendingDiscards: discardsOnSeven(s))
+                    : _discardOnSeven(s))
+                .copyWith(reaverPressure: s.reaverPressure + 1);
       }
       s = _drawStrategy(s);
     } else if (event is MoveBandit) {
@@ -1994,10 +2172,15 @@ class MatchEngine {
             event.tile != s.banditTile,
         'Choose another tile.',
       );
-      final eligible = banditVictims(s, event.tile);
+      // Historical thefts remain valid when restoring older saved matches.
+      final eligible = _banditVictims(s, event.tile, replaying: replaying);
+      _require(
+        replaying || eligible.isEmpty || event.victim != null,
+        'Choose a player to rob.',
+      );
       _require(
         event.victim == null || eligible.contains(event.victim),
-        'Victim must have goods and border the selected tile.',
+        'Victim must have built after setup, have goods, and border the selected tile.',
       );
       s = event.victim != null && canIntercept(s, event.victim!)
           ? s.copyWith(
@@ -2047,19 +2230,35 @@ class MatchEngine {
         },
       );
     } else if (event is ProposeTrade) {
+      final original = event.counterOf == null
+          ? null
+          : s.offers.where((o) => o.id == event.counterOf).firstOrNull;
+      final proposer = original?.target ?? s.active;
+      _require(
+        original == null ||
+            original.proposer == s.active ||
+            original.target == s.active,
+        'Cannot counter an unrelated turn.',
+      );
       _require(s.phase == MatchPhase.actions, 'Offer during your actions.');
       _require(
         event.target >= 0 &&
             event.target < s.players.length &&
-            event.target != s.active,
+            event.target != proposer,
         'Choose another player.',
       );
       _require(
-        event.give != event.want && event.giveCount > 0 && event.wantCount > 0,
+        event.gives.isNotEmpty &&
+            event.wants.isNotEmpty &&
+            [
+              ...event.gives.values,
+              ...event.wants.values,
+            ].every((n) => n > 0) &&
+            event.gives.keys.every((good) => !event.wants.containsKey(good)),
         'Invalid offer.',
       );
       _require(
-        s.offers.every((o) => o.proposer != s.active),
+        s.offers.every((o) => o.proposer != proposer),
         'One standing offer per player.',
       );
       var counter = false;
@@ -2068,9 +2267,9 @@ class MatchEngine {
             .where(
               (o) =>
                   o.id == id &&
-                  o.target == s.active &&
+                  o.target == proposer &&
                   o.proposer == event.target &&
-                  o.proposer != s.active,
+                  o.proposer != proposer,
             )
             .toList();
         _require(originals.length == 1, 'Cannot counter this offer.');
@@ -2078,7 +2277,7 @@ class MatchEngine {
         counter = true;
       }
       _require(
-        (s.current.stores[event.give] ?? 0) >= event.giveCount,
+        canPayTrade(s.players[proposer].stores, event.gives),
         'You need the offered goods to propose a trade.',
       );
       // Offers are non-binding: no goods leave either hand until accepted.
@@ -2087,13 +2286,19 @@ class MatchEngine {
           ...s.offers,
           TradeProposal(
             s.events.length,
-            s.active,
+            proposer,
             event.target,
             event.give,
             event.giveCount,
             event.want,
             event.wantCount,
             isCounter: counter,
+            giveBundle: event.giveBundle == null
+                ? null
+                : Map.unmodifiable(event.gives),
+            wantBundle: event.wantBundle == null
+                ? null
+                : Map.unmodifiable(event.wants),
           ),
         ],
       );
@@ -2121,21 +2326,25 @@ class MatchEngine {
       if (event.accept) {
         final seller = s.players[event.player];
         _require(
-          (seller.stores[offer.want] ?? 0) >= offer.wantCount,
+          canPayTrade(seller.stores, offer.wants),
           'Requested goods are no longer available. Decline instead.',
         );
         final buyers = s.players.toList();
         final proposer = buyers[offer.proposer];
         _require(
-          (proposer.stores[offer.give] ?? 0) >= offer.giveCount,
+          canPayTrade(proposer.stores, offer.gives),
           'The proposer no longer has the offered goods. Decline instead.',
         );
         final from = Map<Resource, int>.of(seller.stores);
         final to = Map<Resource, int>.of(proposer.stores);
-        from[offer.want] = from[offer.want]! - offer.wantCount;
-        from[offer.give] = (from[offer.give] ?? 0) + offer.giveCount;
-        to[offer.give] = to[offer.give]! - offer.giveCount;
-        to[offer.want] = (to[offer.want] ?? 0) + offer.wantCount;
+        for (final e in offer.wants.entries) {
+          from[e.key] = (from[e.key] ?? 0) - e.value;
+          to[e.key] = (to[e.key] ?? 0) + e.value;
+        }
+        for (final e in offer.gives.entries) {
+          to[e.key] = (to[e.key] ?? 0) - e.value;
+          from[e.key] = (from[e.key] ?? 0) + e.value;
+        }
         buyers[event.player] = seller.copyWith(stores: from);
         buyers[offer.proposer] = proposer.copyWith(stores: to);
         s = s.copyWith(players: buyers);

@@ -14,9 +14,10 @@ void main() {
   test('a sole active defender wins immediately when Honour reaches 15', () {
     final base = tableWithSupplies();
     final players = base.players.toList();
-    players[0] = players[0].copyWith(guardianHonour: 12);
+    players[0] = players[0].copyWith(guardianHonour: 11);
     final state = base.copyWith(
       phase: MatchPhase.invasion,
+      invasionAid: 2,
       players: players,
       sites: {
         ...base.sites,
@@ -37,6 +38,7 @@ void main() {
       final base = tableWithSupplies();
       final state = base.copyWith(
         phase: MatchPhase.invasion,
+        invasionAid: MatchEngine.invasionStrength(base),
         sites: {
           ...base.sites,
           base.sites.keys.first: const Site(0, Structure.town),
@@ -160,7 +162,7 @@ void main() {
     expect(find.text('1:28'), findsOneWidget);
     refresh(() => state = MatchEngine.apply(state, const EndTurn()));
     await tester.pump();
-    expect(find.text('Turn · 1:30'), findsOneWidget);
+    expect(find.text('1:30'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

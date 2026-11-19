@@ -42,6 +42,23 @@ abstract final class AiCardStrategy {
     return _utility(after, goal) - _utility(before, goal);
   }
 
+  static double _bundleGain(
+    AiTurnView view,
+    Map<Resource, int> gives,
+    Map<Resource, int> wants,
+  ) {
+    if (!canPayTrade(view.ownGoods, gives)) return -1000;
+    final after = Map<Resource, int>.of(view.ownGoods);
+    for (final e in gives.entries) {
+      after[e.key] = (after[e.key] ?? 0) - e.value;
+    }
+    for (final e in wants.entries) {
+      after[e.key] = (after[e.key] ?? 0) + e.value;
+    }
+    final goal = _goal(view);
+    return _utility(after, goal) - _utility(view.ownGoods, goal);
+  }
+
   static MatchEvent? tactical(AiTurnView view) {
     final responses = view.legalActions.whereType<RespondTactical>().toList();
     if (responses.isEmpty) return null;
@@ -94,14 +111,7 @@ abstract final class AiCardStrategy {
       (e) => e.offerId == offer.id && e.accept,
     );
     if (accepts.isNotEmpty &&
-        _tradeGain(
-              view,
-              offer.want,
-              offer.wantCount,
-              offer.give,
-              offer.giveCount,
-            ) >
-            0.5) {
+        _bundleGain(view, offer.wants, offer.gives) > 0.5) {
       return accepts.first;
     }
     if (!offer.isCounter) {
@@ -110,24 +120,15 @@ abstract final class AiCardStrategy {
           .where((e) => e.counterOf == offer.id)
           .toList();
       counters.sort((a, b) {
-        final quality = _tradeGain(
+        final quality = _bundleGain(
           view,
-          b.give,
-          b.giveCount,
-          b.want,
-          b.wantCount,
-        ).compareTo(_tradeGain(view, a.give, a.giveCount, a.want, a.wantCount));
+          b.gives,
+          b.wants,
+        ).compareTo(_bundleGain(view, a.gives, a.wants));
         return quality != 0 ? quality : a.give.index.compareTo(b.give.index);
       });
       if (counters.isNotEmpty &&
-          _tradeGain(
-                view,
-                counters.first.give,
-                counters.first.giveCount,
-                counters.first.want,
-                counters.first.wantCount,
-              ) >
-              0.5) {
+          _bundleGain(view, counters.first.gives, counters.first.wants) > 0.5) {
         return counters.first;
       }
     }
@@ -220,7 +221,7 @@ abstract final class AiCardStrategy {
     return null;
   }
 
-  /// A bounded 1:1 public offer. The rival may decline; never assume their
+  /// A bounded public bundle offer. The rival may decline; never assume their
   /// private stores. Keep one outstanding offer per proposer as per reducer.
   static MatchEvent? propose(AiTurnView view) {
     if (view.phase != MatchPhase.actions ||
@@ -232,20 +233,18 @@ abstract final class AiCardStrategy {
         .whereType<ProposeTrade>()
         .where(
           (a) =>
-              a.counterOf == null &&
-              _tradeGain(view, a.give, a.giveCount, a.want, a.wantCount) > 0.5,
+              a.counterOf == null && _bundleGain(view, a.gives, a.wants) > 0.5,
         )
         .toList();
     if (candidates.isEmpty) return null;
+    // Prefer modest asks; bundles must justify their extra cost and friction.
+    double value(ProposeTrade offer) =>
+        _bundleGain(view, offer.gives, offer.wants) /
+        (offer.gives.values.fold<int>(0, (a, b) => a + b) +
+            offer.wants.values.fold<int>(0, (a, b) => a + b));
     final next = (view.seat + 1) % view.publicScores.length;
     candidates.sort((a, b) {
-      final score = _tradeGain(
-        view,
-        b.give,
-        b.giveCount,
-        b.want,
-        b.wantCount,
-      ).compareTo(_tradeGain(view, a.give, a.giveCount, a.want, a.wantCount));
+      final score = value(b).compareTo(value(a));
       if (score != 0) return score;
       final target = (a.target == next ? 0 : 1).compareTo(
         b.target == next ? 0 : 1,

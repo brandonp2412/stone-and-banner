@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -48,6 +49,9 @@ class StoneBannerApp extends StatefulWidget {
 
 class _StoneBannerAppState extends State<StoneBannerApp>
     with WidgetsBindingObserver {
+  static const _setupKey = 'stone_banner_setup_v1';
+  bool _setupEdited = false;
+  bool _restoringSetup = false;
   static const _savedMatchKey = 'stone_banner_local_replay_v1';
   static const _savedSessionKey = 'stone_banner_local_session_v2';
   late final AiTurnCoordinator ai;
@@ -63,6 +67,10 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       aiSeats.isNotEmpty &&
       match!.players.length - aiSeats.length == 1;
   bool _foreground = true;
+  bool pauseInBackground = true;
+  ThemeMode themeMode = ThemeMode.dark;
+  double aiDelaySeconds = 2.4;
+  bool get _canRun => _foreground || !pauseInBackground;
   int aiMoveCount = 0;
   String? aiError;
 
@@ -75,7 +83,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
 
   void _syncAi() {
     if (mounted &&
-        _foreground &&
+        _canRun &&
         page == Page.board &&
         !handoff &&
         aiError == null &&
@@ -88,15 +96,15 @@ class _StoneBannerAppState extends State<StoneBannerApp>
 
   bool _commitAi(MatchState expected, MatchState next) {
     if (!mounted ||
-        !_foreground ||
+        !_canRun ||
         page != Page.board ||
         handoff ||
         !identical(match, expected) ||
         !aiActing) {
       return false;
     }
-    final oldOwner = expected.tactical?.responder ?? expected.active;
-    final nextOwner = next.tactical?.responder ?? next.active;
+    final oldOwner = expected.actingSeat;
+    final nextOwner = next.actingSeat;
     setState(() {
       match = next;
       aiMoveCount++;
@@ -128,20 +136,69 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       commit: _commitAi,
       isComputerSeat: (seat) => aiSeats.contains(seat),
       // Give each committed computer action room for its on-screen animation.
-      delay: const Duration(milliseconds: 950),
+      delay: const Duration(milliseconds: 2400),
       decide: (state) => compute(_chooseComputerEvent, state),
       onError: (error) {
         if (mounted) setState(() => aiError = error.toString());
       },
     );
+    for (final name in names) {
+      name.addListener(_saveSetup);
+    }
     unawaited(_loadSaved());
   }
 
   Future<void> _loadSaved() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(() {
+          themeMode = ThemeMode.values.firstWhere(
+            (m) => m.name == prefs.getString("themeMode"),
+            orElse: () => ThemeMode.dark,
+          );
+          pauseInBackground = prefs.getBool("pauseInBackground") ?? true;
+          aiDelaySeconds = prefs.getDouble("aiDelaySeconds") ?? 2.4;
+          ai.delay = Duration(milliseconds: (aiDelaySeconds * 1000).round());
+        });
+      }
+      if (mounted && !_setupEdited) {
+        try {
+          final raw = prefs.getString(_setupKey);
+          if (raw != null) {
+            final data = jsonDecode(raw) as Map<String, dynamic>;
+            _restoringSetup = true;
+            setState(() {
+              if (data['seats'] == 3 || data['seats'] == 4) {
+                seats = data['seats'] as int;
+              }
+              if (data['computerOpponents'] is bool) {
+                computerOpponents = data['computerOpponents'] as bool;
+              }
+              final count = data['aiOpponentCount'];
+              if (count is int && count > 0 && count < seats) {
+                aiOpponentCount = count;
+              }
+              final storedNames = data['names'];
+              if (storedNames is List) {
+                for (
+                  var i = 0;
+                  i < names.length && i < storedNames.length;
+                  i++
+                ) {
+                  if (storedNames[i] is String) names[i].text = storedNames[i];
+                }
+              }
+            });
+          }
+        } on Object {
+          // Invalid setup preferences must not prevent match recovery.
+        } finally {
+          _restoringSetup = false;
+        }
+      }
       var replay = prefs.getString(_savedMatchKey);
-      var seats = <int>{};
+      var restoredAiSeats = <int>{};
       final session = prefs.getString(_savedSessionKey);
       if (session != null) {
         try {
@@ -153,7 +210,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
               ids is List &&
               ids.every((id) => id is int && id >= 0)) {
             replay = encoded;
-            seats = ids.cast<int>().toSet();
+            restoredAiSeats = ids.cast<int>().toSet();
           }
         } on Object {
           // Legacy replay remains available if this metadata was damaged.
@@ -162,7 +219,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       if (mounted && match == null) {
         setState(() {
           savedReplay = replay;
-          savedAiSeats = seats;
+          savedAiSeats = restoredAiSeats;
         });
         // Do not interrupt navigation if storage finishes loading late.
         if (replay != null && page == Page.home) resume();
@@ -170,6 +227,32 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     } on Object {
       if (mounted) fail('Could not load the saved local match.');
     }
+  }
+
+  void _updateSetup(VoidCallback update) {
+    setState(update);
+    _saveSetup();
+  }
+
+  void _saveSetup() {
+    if (_restoringSetup) return;
+    _setupEdited = true;
+    final encoded = jsonEncode({
+      'names': [for (final name in names) name.text],
+      'seats': seats,
+      'computerOpponents': computerOpponents,
+      'aiOpponentCount': aiOpponentCount,
+    });
+    _saveTail = _saveTail.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (!await prefs.setString(_setupKey, encoded)) {
+          throw StateError('Storage rejected settings.');
+        }
+      } on Object {
+        if (mounted) fail('Could not save game settings.');
+      }
+    });
   }
 
   void _save(MatchState state) {
@@ -212,7 +295,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         aiError = null;
         page = Page.board;
         handoff =
-            !aiSeats.contains(loaded.tactical?.responder ?? loaded.active) &&
+            !aiSeats.contains(loaded.actingSeat) &&
             !(aiSeats.length == loaded.players.length - 1);
       });
       _syncAi();
@@ -258,7 +341,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       fail('Give each human player a different name.');
       return;
     }
-    if (savedReplay != null) {
+    if (savedReplay != null &&
+        MatchEngine.importReplay(savedReplay!).phase != MatchPhase.finished) {
       final replace = await showDialog<bool>(
         context: dialogContext,
         builder: (context) => AlertDialog(
@@ -287,10 +371,20 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   void start() {
     try {
       final firstComputer = humanSeats;
+      final botNames = [
+        "Rowan the Mason",
+        "Elara of Ashvale",
+        "Cedric Ironwood",
+        "Mira Stoneward",
+        "Oswin the Bold",
+        "Tamsin Oakbanner",
+        "Alden of Greyford",
+        "Briar the Merchant",
+      ]..shuffle(math.Random());
       final s = MatchEngine.newGame([
         for (var i = 0; i < seats; i++)
           i >= firstComputer
-              ? 'Computer ${i - firstComputer + 1}'
+              ? botNames[i - firstComputer]
               : names[i].text.trim(),
       ], widget.worldSeedFactory());
       ai.pause();
@@ -348,9 +442,27 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     if (page != Page.board || handoff || aiActing || match == null) return;
     try {
       final previous = match!;
+      // While a bot awaits a human reply, only that reply may use dispatch.
+      if (aiSeats.contains(previous.actingSeat) &&
+          !(event is ProposeTrade &&
+              event.counterOf != null &&
+              previous.offers.any(
+                (o) =>
+                    o.id == event.counterOf &&
+                    o.target ==
+                        AiTurnCoordinator.actingSeat(
+                          previous,
+                          aiSeats.contains,
+                        ),
+              )) &&
+          (event is! RespondTrade ||
+              event.player !=
+                  AiTurnCoordinator.actingSeat(previous, aiSeats.contains))) {
+        return;
+      }
       final s = MatchEngine.apply(previous, event);
-      final oldOwner = previous.tactical?.responder ?? previous.active;
-      final nextOwner = s.tactical?.responder ?? s.active;
+      final oldOwner = previous.actingSeat;
+      final nextOwner = s.actingSeat;
       setState(() {
         handoff =
             oldOwner != nextOwner &&
@@ -373,7 +485,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     if (raw == null || !mounted || !dialogContext.mounted) return;
     try {
       final loaded = MatchEngine.importReplay(ReplayCodes.expand(raw));
-      if (savedReplay != null) {
+      if (savedReplay != null &&
+          MatchEngine.importReplay(savedReplay!).phase != MatchPhase.finished) {
         final replace = await showDialog<bool>(
           context: dialogContext,
           builder: (context) => AlertDialog(
@@ -440,12 +553,13 @@ class _StoneBannerAppState extends State<StoneBannerApp>
               ChoiceChip(
                 label: const Text('Hot-seat'),
                 selected: !computerOpponents,
-                onSelected: (_) => setState(() => computerOpponents = false),
+                onSelected: (_) =>
+                    _updateSetup(() => computerOpponents = false),
               ),
               ChoiceChip(
                 label: const Text('Vs AI'),
                 selected: computerOpponents,
-                onSelected: (_) => setState(() => computerOpponents = true),
+                onSelected: (_) => _updateSetup(() => computerOpponents = true),
               ),
             ],
           ),
@@ -458,7 +572,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                 ChoiceChip(
                   label: Text('$count players'),
                   selected: seats == count,
-                  onSelected: (_) => setState(() {
+                  onSelected: (_) => _updateSetup(() {
                     seats = count;
                     if (aiOpponentCount >= seats) aiOpponentCount = seats - 1;
                   }),
@@ -488,7 +602,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                           label: Text('$i AI'),
                           selected: aiOpponentCount == i,
                           onSelected: (_) =>
-                              setState(() => aiOpponentCount = i),
+                              _updateSetup(() => aiOpponentCount = i),
                         ),
                     ],
                   ),
@@ -531,7 +645,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (savedReplay != null)
+                if (savedReplay != null &&
+                    MatchEngine.importReplay(savedReplay!).phase !=
+                        MatchPhase.finished)
                   const Padding(
                     padding: EdgeInsets.only(bottom: 4),
                     child: Text(
@@ -574,6 +690,108 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     },
   );
 
+  Future<void> _showSettings(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StatefulBuilder(
+          builder: (context, refresh) => Scaffold(
+            appBar: AppBar(title: const Text('Settings')),
+            body: ListView(
+              children: [
+                FutureBuilder<SharedPreferences>(
+                  future: SharedPreferences.getInstance(),
+                  builder: (context, snapshot) {
+                    final prefs = snapshot.data;
+                    return SwitchListTile(
+                      title: const Text('Gameplay hints'),
+                      value: prefs?.getBool('gameplay_hints_enabled') ?? true,
+                      onChanged: prefs == null
+                          ? null
+                          : (value) async {
+                              await prefs.setBool(
+                                'gameplay_hints_enabled',
+                                value,
+                              );
+                              refresh(() {});
+                            },
+                    );
+                  },
+                ),
+                ValueListenableBuilder<ResourceIconStyle>(
+                  valueListenable: resourceIconStyle,
+                  builder: (context, style, _) => ListTile(
+                    title: const Text('Resource icons'),
+                    trailing: DropdownButton<ResourceIconStyle>(
+                      value: style,
+                      items: [
+                        for (final option in ResourceIconStyle.values)
+                          DropdownMenuItem(
+                            value: option,
+                            child: Text(option.label),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) selectResourceIconStyle(value);
+                      },
+                    ),
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Appearance'),
+                  trailing: DropdownButton<ThemeMode>(
+                    value: themeMode,
+                    items: [
+                      for (final mode in ThemeMode.values)
+                        DropdownMenuItem(value: mode, child: Text(mode.name)),
+                    ],
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      setState(() => themeMode = value);
+                      refresh(() {});
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString('themeMode', value.name);
+                    },
+                  ),
+                ),
+                SwitchListTile(
+                  title: const Text('Pause offline games in background'),
+                  subtitle: const Text('Online games always continue.'),
+                  value: pauseInBackground,
+                  onChanged: (value) async {
+                    setState(() => pauseInBackground = value);
+                    refresh(() {});
+                    _syncAi();
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setBool('pauseInBackground', value);
+                  },
+                ),
+                ListTile(
+                  title: const Text('Computer action delay'),
+                  subtitle: Text(
+                    '${aiDelaySeconds.toStringAsFixed(1)} seconds · press Space to finish computer turns immediately',
+                  ),
+                ),
+                Slider(
+                  value: aiDelaySeconds,
+                  min: 0.2,
+                  max: 5,
+                  divisions: 24,
+                  onChanged: (value) async {
+                    setState(() => aiDelaySeconds = value);
+                    ai.delay = Duration(milliseconds: (value * 1000).round());
+                    refresh(() {});
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setDouble('aiDelaySeconds', value);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final current = match;
@@ -595,7 +813,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           surface: const Color(0xff192529),
         ),
       ),
-      themeMode: ThemeMode.dark,
+      themeMode: themeMode,
       home: Builder(
         builder: (context) => PopScope(
           canPop: page == Page.home,
@@ -610,6 +828,16 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             skipTraversal: true,
             onKeyEvent: (_, event) {
               if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.space &&
+                  aiActing &&
+                  page == Page.board &&
+                  Navigator.of(context).canPop() == false &&
+                  FocusManager.instance.primaryFocus?.context?.widget
+                      is! EditableText) {
+                ai.fastForward();
+                return KeyEventResult.handled;
+              }
+              if (event is KeyDownEvent &&
                   event.logicalKey == LogicalKeyboardKey.escape &&
                   (page != Page.home || Navigator.of(context).canPop())) {
                 Navigator.of(context).maybePop();
@@ -621,6 +849,13 @@ class _StoneBannerAppState extends State<StoneBannerApp>
               appBar: page == Page.board
                   ? null
                   : AppBar(
+                      actions: [
+                        IconButton(
+                          tooltip: 'Settings',
+                          icon: const Icon(Icons.settings),
+                          onPressed: () => _showSettings(context),
+                        ),
+                      ],
                       toolbarHeight: 48,
                       centerTitle: false,
                       leading: page == Page.home
@@ -695,8 +930,12 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                 ai.pause();
                                 setState(() => page = Page.rules);
                               },
+                              onSettings: () => _showSettings(context),
+                              pauseInBackground: pauseInBackground,
                               computerSeats: aiSeats,
-                              visibleSeat: oneHumanMatch ? 0 : current.active,
+                              visibleSeat: oneHumanMatch
+                                  ? 0
+                                  : current.actingSeat,
                               observing: aiActing,
                               automationError: aiError,
                               onResumeAutomation: () {

@@ -76,11 +76,18 @@ class StrategyHand extends StatelessWidget {
     required this.state,
     required this.onEvent,
     this.onlineOptions,
+    this.allowActions = true,
     this.onOpenRealm,
   });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
   final Map? onlineOptions;
+  final bool allowActions;
+
+  bool get _canAct =>
+      allowActions &&
+      state.phase == MatchPhase.actions &&
+      state.tactical == null;
   final VoidCallback? onOpenRealm;
 
   String _optionLabel(StrategyCard card, PlayStrategyCard option) {
@@ -117,7 +124,9 @@ class StrategyHand extends StatelessWidget {
 
   Future<void> _showCard(BuildContext context, int handIndex) async {
     final card = state.current.cards[handIndex].definition;
-    final options = onlineOptions == null
+    final options = !_canAct
+        ? <PlayStrategyCard>[]
+        : onlineOptions == null
         ? MatchEngine.legalCardPlays(state, handIndex)
         : [
             for (final e in (onlineOptions!['$handIndex'] as List? ?? []))
@@ -263,33 +272,35 @@ class StrategyHand extends StatelessWidget {
                   spacing: 8,
                   children: [
                     TextButton.icon(
-                      onPressed: () async {
-                        final confirmed = await showDialog<bool>(
-                          context: sheetContext,
-                          builder: (dialogContext) => AlertDialog(
-                            title: const Text('Discard this card?'),
-                            content: Text(
-                              '${card.name} will leave your hand without using its effect.',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.pop(dialogContext, false),
-                                child: const Text('Keep card'),
-                              ),
-                              FilledButton(
-                                onPressed: () =>
-                                    Navigator.pop(dialogContext, true),
-                                child: const Text('Discard'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirmed == true && sheetContext.mounted) {
-                          Navigator.pop(sheetContext);
-                          onEvent(DiscardStrategyCard(handIndex));
-                        }
-                      },
+                      onPressed: !_canAct
+                          ? null
+                          : () async {
+                              final confirmed = await showDialog<bool>(
+                                context: sheetContext,
+                                builder: (dialogContext) => AlertDialog(
+                                  title: const Text('Discard this card?'),
+                                  content: Text(
+                                    '${card.name} will leave your hand without using its effect.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, false),
+                                      child: const Text('Keep card'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, true),
+                                      child: const Text('Discard'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed == true && sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                                onEvent(DiscardStrategyCard(handIndex));
+                              }
+                            },
                       icon: const Icon(Icons.delete_outline),
                       label: const Text('Discard this card'),
                     ),

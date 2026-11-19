@@ -15,6 +15,30 @@ void main() {
     return s;
   }
 
+  testWidgets('Space fast-forward bypasses subsequent presentation waits', (
+    tester,
+  ) async {
+    var state = MatchEngine.newGame(['A', 'B', 'C'], 607);
+    var commits = 0;
+    late AiTurnCoordinator coordinator;
+    coordinator = AiTurnCoordinator(
+      read: () => state,
+      isComputerSeat: (_) => true,
+      delay: const Duration(seconds: 5),
+      commit: (before, next) {
+        state = next;
+        if (++commits == 2) coordinator.pause();
+        return true;
+      },
+    );
+    coordinator.resume();
+    coordinator.fastForward();
+    await tester.pump();
+    expect(commits, 2);
+    await tester.pump(const Duration(seconds: 5));
+    await coordinator.settled;
+  });
+
   testWidgets('decision time overlaps a regular presentation cadence', (
     tester,
   ) async {
@@ -186,7 +210,13 @@ void main() {
         ai.resume();
         await ai.settled;
         expect(ai.isRunning, isFalse);
-        expect((s.tactical?.responder ?? s.active), 0);
+        expect(AiTurnCoordinator.actingSeat(s, (seat) => seat != 0), 0);
+        if (s.active != 0 && s.tactical == null) {
+          final offer = s.offers.firstWhere(
+            (o) => o.proposer == s.active && o.target == 0,
+          );
+          s = MatchEngine.apply(s, RespondTrade(0, false, offerId: offer.id));
+        }
         final replay = MatchEngine.importReplay(MatchEngine.exportReplay(s));
         expect(replay.events.length, s.events.length);
         expect(replay.phase, s.phase);

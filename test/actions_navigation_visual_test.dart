@@ -40,7 +40,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Road'), findsOneWidget);
     expect(find.text('Player trade'), findsNothing);
-    expect(find.text('Knights & Defense'), findsOneWidget);
+    expect(find.text('Knights & Defense'), findsNothing);
     expect(find.text('Fortify'), findsOneWidget);
     await expectLater(
       find.byType(Scaffold),
@@ -49,6 +49,9 @@ void main() {
     expect(find.text('Fortify'), findsOneWidget);
     await tester.tap(find.text('Trade'));
     await tester.pumpAndSettle();
+    expect(find.text('Bank exchange'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close trade'));
+    await tester.pumpAndSettle();
     expect(find.text('Road'), findsNothing);
     expect(find.text('Player trade'), findsOneWidget);
     await tester.tap(find.text('Cards'));
@@ -56,7 +59,43 @@ void main() {
     expect(find.text('Player trade'), findsNothing);
     await tester.tap(find.text('Realm'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Your realm'),
+      100,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('mobile-action-hub')),
+        matching: find.byType(Scrollable),
+      ),
+    );
     expect(find.text('Your realm'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop Trade tab opens inline actions without a modal', (
+    tester,
+  ) async {
+    await tester.runAsync(loadResourceIcons);
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MatchView(state: tableWithSupplies(), onEvent: (_) {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Trade'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.text('Player trade'), findsOneWidget);
+    expect(find.text('Bank trade'), findsOneWidget);
+    await tester.ensureVisible(find.text('Bank trade'));
+    await tester.tap(find.text('Bank trade'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

@@ -7,9 +7,19 @@ import 'package:stone_and_banner/ui/invasion_feedback.dart';
 
 import 'stage5_widget_test.dart' show drafted;
 
+MatchState villagesOnly() {
+  final base = drafted();
+  return base.copyWith(
+    sites: {
+      for (final entry in base.sites.entries)
+        entry.key: Site(entry.value.owner, Structure.village),
+    },
+  );
+}
+
 void main() {
   test('early fleet leaves Villages intact and explains why', () {
-    final before = drafted().copyWith(
+    final before = villagesOnly().copyWith(
       phase: MatchPhase.invasion,
       reaverPressure: 3,
     );
@@ -28,7 +38,7 @@ void main() {
   });
 
   test('forecast and result explain Town loss, shield, and Honour', () {
-    final base = drafted().copyWith(
+    final base = villagesOnly().copyWith(
       phase: MatchPhase.invasion,
       reaverPressure: 3,
     );
@@ -67,7 +77,7 @@ void main() {
   testWidgets(
     'resolution stays visible across following turns until dismissed',
     (tester) async {
-      final before = drafted().copyWith(
+      final before = villagesOnly().copyWith(
         phase: MatchPhase.invasion,
         reaverPressure: 3,
       );

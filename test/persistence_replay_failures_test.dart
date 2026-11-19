@@ -6,6 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/main.dart';
 
+Future<void> returnHome(WidgetTester tester) async {
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -36,6 +41,7 @@ void main() {
 
       await tester.pumpWidget(const StoneBannerApp());
       await tester.pumpAndSettle();
+      await returnHome(tester);
       expect(find.text('Continue saved match'), findsOneWidget);
 
       Future<void> enterReplay() async {
@@ -76,6 +82,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pumpWidget(const StoneBannerApp());
       await tester.pumpAndSettle();
+      await returnHome(tester);
       await tester.tap(find.text('Continue saved match'));
       await tester.pumpAndSettle();
       expect(find.text('Pass the device'), findsOneWidget);
@@ -98,6 +105,7 @@ void main() {
     });
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
+    await returnHome(tester);
     await tester.ensureVisible(find.text('Import replay'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Import replay'));
@@ -127,6 +135,7 @@ void main() {
     });
     await tester.pumpWidget(const StoneBannerApp());
     await tester.pumpAndSettle();
+    await returnHome(tester);
     expect(find.text('Continue saved match'), findsOneWidget);
     await tester.tap(find.text('Continue saved match'));
     await tester.pumpAndSettle();

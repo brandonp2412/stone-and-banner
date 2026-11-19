@@ -1,4 +1,5 @@
 import 'action_helpers.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
@@ -75,7 +76,8 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    var state = withCard('fortification-plans');
+    final base = withCard('fortification-plans');
+    var state = base.copyWith(fortified: base.sites.keys.toSet());
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(

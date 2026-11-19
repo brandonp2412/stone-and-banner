@@ -31,7 +31,26 @@ class AiTurnCoordinator {
   final bool Function(int seat) isComputerSeat;
   final void Function(int count)? onProgress;
   final void Function(Object error)? onError;
-  final Duration delay;
+  Duration delay;
+  Completer<void>? _delayGate;
+  bool _fastForward = false;
+
+  void fastForward() {
+    _fastForward = true;
+    skipDelay();
+  }
+
+  void skipDelay() =>
+      _delayGate?.isCompleted == false ? _delayGate!.complete() : null;
+
+  Future<void> _presentationDelay() async {
+    if (_fastForward) return;
+    final gate = Completer<void>();
+    _delayGate = gate;
+    await Future.any([Future<void>.delayed(delay), gate.future]);
+    if (identical(_delayGate, gate)) _delayGate = null;
+  }
+
   final int maxEventsPerRun;
   final AiDecision _decide;
 
@@ -43,12 +62,13 @@ class AiTurnCoordinator {
   static int actingSeat(MatchState state, bool Function(int) isComputerSeat) {
     if (state.tactical == null && state.phase == MatchPhase.actions) {
       for (final offer in state.offers) {
-        if (offer.proposer == state.active && isComputerSeat(offer.target)) {
+        if (offer.proposer == state.active &&
+            (isComputerSeat(offer.target) || isComputerSeat(offer.proposer))) {
           return offer.target;
         }
       }
     }
-    return state.tactical?.responder ?? state.active;
+    return state.actingSeat;
   }
 
   bool get isPaused => _paused;
@@ -68,6 +88,7 @@ class AiTurnCoordinator {
   /// hot-seat privacy handoff, lifecycle suspension and match replacement.
   void pause() {
     _paused = true;
+    _fastForward = false;
     _generation++;
   }
 
@@ -78,9 +99,11 @@ class AiTurnCoordinator {
         final before = read();
         if (before == null || before.phase == MatchPhase.finished) return;
         final seat = actingSeat(before, isComputerSeat);
-        final immediateReply =
-            seat != (before.tactical?.responder ?? before.active);
-        if (!isComputerSeat(seat)) return;
+        final immediateReply = seat != (before.actingSeat);
+        if (!isComputerSeat(seat)) {
+          _fastForward = false;
+          return;
+        }
         if (events >= maxEventsPerRun) {
           throw StateError('Computer move limit reached. Resume to continue.');
         }
@@ -108,7 +131,7 @@ class AiTurnCoordinator {
           // Every visible computer action receives the same presentation
           // interval, regardless of whether the previous event was a trade,
           // dice roll, construction or turn transition.
-          Future<void>.delayed(delay),
+          _presentationDelay(),
         ]);
         if (_paused || ticket != _generation) return;
 

@@ -103,7 +103,7 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(result["input"], "launch")
         self.assertEqual(
             call.call_args.args[0][-2:],
-            ["-n", "nz.presley.stoneandbanner/.MainActivity"],
+            ["-n", "nz.stone_and_banner/.MainActivity"],
         )
 
     def test_failed_input_still_captures_an_auditable_frame(self):

@@ -135,14 +135,6 @@ void main() {
         await scrollToAction(tester, 'Road');
         await tester.pumpAndSettle();
         await tester.scrollUntilVisible(
-          find.text('Knights & Defense'),
-          80,
-          scrollable: find.byType(Scrollable).last,
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Knights & Defense'));
-        await tester.pumpAndSettle();
-        await tester.scrollUntilVisible(
           find.text(action.key),
           80,
           scrollable: find.byType(Scrollable).last,

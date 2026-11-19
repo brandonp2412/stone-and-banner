@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/ai.dart';
 import 'package:stone_and_banner/engine/board.dart';
+import 'package:stone_and_banner/engine/game.dart';
 import 'package:stone_and_banner/engine/heuristic_ai.dart';
 import 'package:stone_and_banner/engine/match.dart';
 
@@ -173,6 +174,12 @@ void main() {
     }
     // Existing early villages need wheat/ore to upgrade. No free resources
     // are introduced: both the fixture and the move conserve bank stock.
+    state = state.copyWith(
+      sites: {
+        for (final entry in state.sites.entries)
+          entry.key: Site(entry.value.owner, Structure.village),
+      },
+    );
     final stocked = deal(state, {Resource.wood: 6});
     final move = ai.choose(stocked);
     expect(move, isA<BankExchange>());
