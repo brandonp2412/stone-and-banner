@@ -45,6 +45,8 @@ class P2pRoom extends ChangeNotifier {
 
   bool isHost = false, connected = false, pending = false, preparing = false;
   String? message, roomId, invitationLink, answerLink, guestPeer;
+  String? networkDiagnostic, connectionPath;
+  final Map<String, String> peerPaths = {};
   int capacity = 3, version = 0;
   int? seat;
   bool started = false;
@@ -97,6 +99,24 @@ class P2pRoom extends ChangeNotifier {
       preparing = false;
       if (!_disposed) notifyListeners();
     }
+  }
+
+  /// Release unused invitations so a timed-out or rejected offer can be
+  /// replaced without consuming a room seat permanently.
+  void clearUnusedInvites() {
+    if (!isHost || started || preparing) return;
+    for (final id in _invited.toList()) {
+      if (_peerSeats.containsKey(id)) continue;
+      _rtc.close(id);
+      _invited.remove(id);
+      _answered.remove(id);
+      _open.remove(id);
+      peerPaths.remove(id);
+    }
+    invitationLink = null;
+    networkDiagnostic = null;
+    message = null;
+    notifyListeners();
   }
 
   Future<void> join(String name, Map<String, dynamic> offer) async {
@@ -177,6 +197,11 @@ class P2pRoom extends ChangeNotifier {
         }
       case 'error':
         message = raw;
+      case 'diagnostic':
+        networkDiagnostic = raw;
+      case 'path':
+        connectionPath = raw;
+        peerPaths[peer] = raw;
       case 'message':
         try {
           if (raw.length > 131072) {

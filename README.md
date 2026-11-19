@@ -23,21 +23,23 @@ link**. The host pastes each response link into their original host tab (or
 opens it in a *new* tab to forward it automatically). When all 3–4 players
 are connected, the host starts the match.
 
-WebRTC DataChannels transmit only peer-to-peer traffic. There is **no
-signalling server, STUN server, TURN relay, account, or remote match storage**.
-The host browser performs all game-state authority and sends each player a
-filtered view. Do not close, refresh, or navigate away from the host tab:
-connections and this P2P game session are not restored afterwards.
-Invitation links are single-use; do not share them publicly.
+WebRTC DataChannels carry **only direct encrypted peer-to-peer game traffic**.
+No signalling server, TURN relay, accounts, or remote match storage are used.
+Public STUN servers operated by Google (stun.l.google.com:19302) and
+Cloudflare (stun.cloudflare.com:3478) help the browsers discover publicly
+reachable UDP endpoints and attempt NAT hole punching. STUN operators see
+connection metadata including your public IP; game moves are **never** sent
+to them. The host browser still performs game-state authority and transmits
+a filtered view to each player. Do not close, refresh, or navigate away from
+the host tab: the P2P session cannot be restored afterwards.
 
-**WAN limitation:** With no STUN/TURN, browsers usually cannot negotiate a
-connection between separate NATs, especially when local ICE candidates are
-obfuscated with mDNS. This mode works best on the same LAN or where both peers
-have genuinely reachable addresses and compatible firewall rules. If
-connectivity fails, the existing [LAN WebSocket host](#web) remains available
-for direct networking; do not mistake a generated link for guaranteed WAN
-connectivity.
-
+**WAN limitation:** STUN improves connectivity across home routers, but
+carrier-grade NAT, symmetric NAT, and restrictive firewalls can still make
+direct connections impossible. There is deliberately no TURN relay fallback
+or other hosted multiplayer service. If a connection attempt fails, the host
+can choose **Replace expired or unused invitations** and share new links,
+or participants can try a different network or direct public IPv6. Local-LAN
+play continues to work if STUN is unavailable.
 
 Play online: https://brandonp2412.github.io/stone-and-banner/
 

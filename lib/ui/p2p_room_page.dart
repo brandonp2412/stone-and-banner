@@ -92,9 +92,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     ),
     const SizedBox(height: 8),
     const Text(
-      'No signalling server, STUN, TURN, or accounts. '
-      'Exchange an invitation and response link over chat. '
-      'Keep both tabs open. NAT/firewalls may block cross-network connections.',
+      'No signalling server, relay, or accounts. '
+      'Free public STUN servers help peers traverse home routers; game moves '
+      'stay encrypted and direct. Exchange invitation and response links '
+      'over chat. Some NATs and firewalls still block connections.',
     ),
     const SizedBox(height: 14),
     TextField(
@@ -194,6 +195,13 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
         const SizedBox(height: 10),
         _copy('invite link', link),
       ],
+      TextButton.icon(
+        onPressed: room.preparing || room.started
+            ? null
+            : room.clearUnusedInvites,
+        icon: const Icon(Icons.refresh),
+        label: const Text('Replace expired or unused invitations'),
+      ),
       const SizedBox(height: 14),
       const Text(
         'Friend opens the invite and sends back a response link. '
@@ -252,6 +260,28 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
       ],
     ],
     const SizedBox(height: 14),
+    if (room.networkDiagnostic != null) ...[
+      Text(
+        room.networkDiagnostic!,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      const SizedBox(height: 6),
+    ],
+    if (room.connectionPath != null) ...[
+      Row(
+        children: [
+          const Icon(Icons.lock_outline, size: 16),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              room.connectionPath!,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 6),
+    ],
     Text('Players', style: Theme.of(context).textTheme.titleMedium),
     for (var i = 0; i < room.capacity; i++)
       ListTile(
@@ -278,7 +308,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
       ),
     const SizedBox(height: 12),
     const Text(
-      'No relay fallback. Some separate networks cannot connect without STUN/TURN.',
+      'Public STUN only discovers addresses; gameplay never traverses a '
+      'relay. If blocked by CGNAT or restrictive firewalls, direct '
+      'connections cannot be guaranteed. Your public IP may be visible '
+      'to your peers and STUN operators.',
     ),
   ]);
 
