@@ -15,3 +15,5 @@ Home
 "
 - Bots should give up on waiting for user trades if they wait long enough with the modal open
 - Allow bank trading multiples
+- Bots should lean towards accepting a trade if it is unbelievably good, e.g. i just got declined asking for 1 wheat and i was going to give 2 brick + 1 ore
+- Allow dismissing the discard resources modal (goes into an icon somewhere on the screen, can recall later before time limit when it forcibly takes away half)
