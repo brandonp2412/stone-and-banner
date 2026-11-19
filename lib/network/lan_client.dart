@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../engine/match.dart';
 import 'room_protocol.dart';
@@ -12,7 +12,8 @@ class LanRoomClient extends ChangeNotifier {
   LanRoomClient({this.onSession});
   final void Function(String url, String room, String token)? onSession;
 
-  WebSocket? _socket;
+  WebSocketChannel? _socket;
+  int _connectionGeneration = 0;
   Timer? _retry;
   Map<String, Object?>? _firstMessage;
   Map<String, Object?>? _outstanding;
@@ -45,10 +46,15 @@ class LanRoomClient extends ChangeNotifier {
 
   void _connect(String address, Map<String, Object?> first) {
     _retry?.cancel();
-    _socket?.close();
+    _socket?.sink.close();
+    _socket = null;
+    _connectionGeneration++;
     url = address.trim();
-    if (Uri.tryParse(url)?.scheme != 'ws') {
-      error = 'Use a ws:// LAN host URL.';
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        (uri.scheme != 'ws' && uri.scheme != 'wss') ||
+        uri.host.isEmpty) {
+      error = 'Enter a ws:// or wss:// host URL.';
       notifyListeners();
       return;
     }
@@ -62,19 +68,22 @@ class LanRoomClient extends ChangeNotifier {
 
   Future<void> _open() async {
     if (_disposed || connected) return;
+    final generation = _connectionGeneration;
+    WebSocketChannel? socket;
     try {
-      final socket = await WebSocket.connect(url)
-          .timeout(const Duration(seconds: 5));
-      if (_disposed) {
-        socket.close();
+      final channel = WebSocketChannel.connect(Uri.parse(url));
+      socket = channel;
+      await channel.ready.timeout(const Duration(seconds: 5));
+      if (_disposed || generation != _connectionGeneration) {
+        await channel.sink.close();
         return;
       }
-      _socket = socket;
+      _socket = channel;
       connected = true;
       connecting = false;
       error = null;
       notifyListeners();
-      socket.listen(
+      channel.stream.listen(
         (raw) {
           if (raw is! String || _disposed) return;
           try {
@@ -84,12 +93,14 @@ class LanRoomClient extends ChangeNotifier {
             notifyListeners();
           }
         },
-        onDone: () => _disconnected(socket),
-        onError: (_) => _disconnected(socket),
+        onDone: () => _disconnected(channel),
+        onError: (_) => _disconnected(channel),
         cancelOnError: true,
       );
       _send(_firstMessage!);
     } on Object catch (_) {
+      await socket?.sink.close();
+      if (_disposed || generation != _connectionGeneration) return;
       connected = false;
       connecting = false;
       error = room == null ? 'Cannot reach that LAN host.' : null;
@@ -98,7 +109,7 @@ class LanRoomClient extends ChangeNotifier {
     }
   }
 
-  void _disconnected(WebSocket socket) {
+  void _disconnected(WebSocketChannel socket) {
     if (_disposed || _socket != socket) return;
     connected = false;
     connecting = false;
@@ -125,8 +136,8 @@ class LanRoomClient extends ChangeNotifier {
   }
 
   void _send(Map<String, Object?> message) {
-    if (_socket?.readyState == WebSocket.open) {
-      _socket!.add(jsonEncode(message));
+    if (connected && _socket != null) {
+      _socket!.sink.add(jsonEncode(message));
     }
   }
 
@@ -191,7 +202,8 @@ class LanRoomClient extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _retry?.cancel();
-    _socket?.close();
+    _connectionGeneration++;
+    _socket?.sink.close();
     super.dispose();
   }
 }

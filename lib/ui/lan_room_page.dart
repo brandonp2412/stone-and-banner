@@ -178,7 +178,8 @@ class _LanRoomPageState extends State<LanRoomPage> {
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               labelText: 'Host WebSocket URL',
-              helperText: 'Example: ws://host.example.test:8765/room',
+              helperText:
+                  'Example: ws://192.168.1.10:8765/room (use wss:// on HTTPS)',
             ),
           ),
           const SizedBox(height: 14),

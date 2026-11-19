@@ -21,11 +21,14 @@ MatchEvent? _chooseComputerEvent(MatchState state) =>
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  // Browser tabs cannot be forced into immersive landscape mode.
+  if (!kIsWeb) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
   registerResourceIconLicenses();
   await Future.wait([loadResourceIcons(), restoreResourceIconStyle()]);
   runApp(const StoneBannerApp());
