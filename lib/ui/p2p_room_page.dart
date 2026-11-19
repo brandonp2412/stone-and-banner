@@ -174,6 +174,38 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     ),
     const SizedBox(height: 10),
     if (room.isHost) ...[
+      Row(
+        children: [
+          const Icon(Icons.smart_toy_outlined, size: 21),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Computer opponents: ${room.botCount}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Remove AI opponent',
+            onPressed: room.botCount > 0 && !room.started
+                ? () => room.setBotCount(room.botCount - 1)
+                : null,
+            icon: const Icon(Icons.remove_circle_outline),
+          ),
+          IconButton(
+            tooltip: 'Add AI opponent',
+            onPressed: room.botCount < room.availableBotSeats && !room.started
+                ? () => room.setBotCount(room.botCount + 1)
+                : null,
+            icon: const Icon(Icons.add_circle_outline),
+          ),
+        ],
+      ),
+      Text(
+        'Fill any empty seats with the same AI as solo play. '
+        'Friends always keep their own seats.',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      const SizedBox(height: 12),
       FilledButton.tonalIcon(
         onPressed: room.preparing || room.started
             ? null
@@ -287,24 +319,40 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
       ListTile(
         dense: true,
         leading: Icon(
-          i < room.connectedPlayers.length && room.connectedPlayers[i]
+          room.botSeats.contains(i)
+              ? Icons.smart_toy_outlined
+              : i < room.connectedPlayers.length && room.connectedPlayers[i]
               ? Icons.link
               : Icons.link_off,
         ),
         title: Text(
-          i < room.players.length ? room.players[i] : 'Waiting for player…',
+          i < room.players.length
+              ? room.botSeats.contains(i)
+                    ? '${room.players[i]} · AI'
+                    : room.players[i]
+              : room.botSeats.contains(i)
+              ? 'AI opponent (reserved)'
+              : 'Waiting for player…',
         ),
         subtitle: Text('Seat ${i + 1}'),
       ),
     if (room.isHost)
       FilledButton.icon(
-        onPressed:
-            room.players.length == room.capacity &&
-                room.connectedPlayers.every((v) => v)
-            ? room.start
+        onPressed: room.canStart
+            ? () {
+                try {
+                  room.start();
+                } on Object catch (error) {
+                  setState(() => parseError = '$error');
+                }
+              }
             : null,
         icon: const Icon(Icons.play_arrow),
-        label: const Text('Start multiplayer match'),
+        label: Text(
+          room.botCount == 0
+              ? 'Start multiplayer match'
+              : 'Start with ${room.botCount} AI opponent${room.botCount == 1 ? '' : 's'}',
+        ),
       ),
     const SizedBox(height: 12),
     const Text(
@@ -352,6 +400,9 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
                         online: true,
                         onlineView: room.view,
                         viewingSeat: room.seat,
+                        computerSeats: room.botSeats,
+                        automationError: room.aiError,
+                        onResumeAutomation: room.isHost ? room.retryBots : null,
                         observing: !canAct,
                         waitingMessage: canAct
                             ? null

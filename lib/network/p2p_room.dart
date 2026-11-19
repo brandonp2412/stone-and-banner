@@ -4,11 +4,17 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../engine/ai_turn_coordinator.dart';
+import '../engine/heuristic_ai.dart';
+
 import '../engine/match.dart';
 import 'p2p_links.dart';
 import 'p2p_transport.dart';
 import 'room_host.dart';
 import 'room_protocol.dart';
+
+MatchEvent? _chooseMultiplayerBotEvent(MatchState state) =>
+    const HeuristicAi().choose(state);
 
 String _randomId(int bytes) {
   final rng = Random.secure();
@@ -20,7 +26,19 @@ String _randomId(int bytes) {
 
 /// One authoritative host browser, with private views sent over WebRTC.
 class P2pRoom extends ChangeNotifier {
-  P2pRoom() {
+  P2pRoom({Duration botMoveDelay = const Duration(milliseconds: 2400)}) {
+    _ai = AiTurnCoordinator(
+      read: () => _room?.state,
+      commit: _commitBotMove,
+      isComputerSeat: botSeats.contains,
+      delay: botMoveDelay,
+      decide: (state) => compute(_chooseMultiplayerBotEvent, state),
+      onError: (error) {
+        if (_disposed) return;
+        aiError = '$error';
+        notifyListeners();
+      },
+    );
     _rtc = P2pTransport(_onEvent);
     _rtc.listenAnswers((link) {
       if (_disposed || !isHost) return;
@@ -33,6 +51,14 @@ class P2pRoom extends ChangeNotifier {
   }
 
   late final P2pTransport _rtc;
+  late final AiTurnCoordinator _ai;
+
+  /// Bot seats run exclusively on the host with the local-game AI strategy.
+  final Set<int> botSeats = {};
+  int botCount = 0;
+  int aiMoveCount = 0;
+  String? aiError;
+  Future<void> get aiSettled => _ai.settled;
   HostedRoom? _room;
   final Map<String, int> _peerSeats = {};
   final Set<String> _invited = {};
@@ -69,14 +95,111 @@ class P2pRoom extends ChangeNotifier {
     notifyListeners();
   }
 
+  int get pendingInvites =>
+      _invited.where((id) => !_peerSeats.containsKey(id)).length;
+
+  int get availableBotSeats =>
+      (capacity - players.length - pendingInvites).clamp(0, 4);
+
+  bool get canStart =>
+      isHost &&
+      !started &&
+      _room != null &&
+      _room!.seats.length + botCount == capacity &&
+      _room!.seats.every((player) => player.connected);
+
+  void _planBotSeats() {
+    if (started) return;
+    botSeats
+      ..clear()
+      ..addAll([
+        for (
+          var i = _room!.seats.length;
+          i < _room!.seats.length + botCount;
+          i++
+        )
+          i,
+      ]);
+  }
+
+  /// Bots are reserved in the lobby and assigned only when the match starts.
+  void setBotCount(int requested) {
+    if (!isHost || started || _room == null) {
+      throw StateError('Only the host can change bots before starting.');
+    }
+    if (requested < 0 ||
+        requested > capacity - _room!.seats.length - pendingInvites) {
+      throw StateError('Not enough unreserved seats for that many bots.');
+    }
+    botCount = requested;
+    _planBotSeats();
+    _broadcast();
+  }
+
+  bool _commitBotMove(MatchState expected, MatchState next) {
+    final room = _room;
+    if (_disposed ||
+        !isHost ||
+        room?.state != expected ||
+        !started ||
+        next.events.length != expected.events.length + 1) {
+      return false;
+    }
+    final bot = AiTurnCoordinator.actingSeat(expected, botSeats.contains);
+    if (!botSeats.contains(bot)) return false;
+    // Use the same AI policy as local games, but apply the selected event
+    // through the authoritative multiplayer reducer and audit log.
+    final result = room!.move(
+      bot,
+      _randomId(16),
+      room.version,
+      next.events.last.toJson(),
+    );
+    if (result['ok'] != true) {
+      aiError = result['error'] as String? ?? 'Computer move rejected.';
+      notifyListeners();
+      return false;
+    }
+    aiMoveCount++;
+    _broadcast();
+    _schedule();
+    return true;
+  }
+
+  void _syncAi() {
+    final state = _room?.state;
+    if (_disposed ||
+        !isHost ||
+        aiError != null ||
+        state == null ||
+        state.phase == MatchPhase.finished) {
+      _ai.pause();
+      return;
+    }
+    if (botSeats.contains(
+      AiTurnCoordinator.actingSeat(state, botSeats.contains),
+    )) {
+      _ai.resume();
+    } else {
+      _ai.pause();
+    }
+  }
+
+  void retryBots() {
+    if (!isHost || !started || _disposed) return;
+    aiError = null;
+    _syncAi();
+    notifyListeners();
+  }
+
   /// One unique invitation per remote participant. Host browser must remain open.
   Future<void> invite() async {
     final room = _room;
     if (!isHost || room == null || started) {
       throw StateError('Open a host lobby first.');
     }
-    if (_invited.length + 1 >= capacity) {
-      throw StateError('All remote seats already have invitations.');
+    if (_invited.length + 1 + botCount >= capacity) {
+      throw StateError('All remote seats are reserved by players or bots.');
     }
     preparing = true;
     message = null;
@@ -239,8 +362,14 @@ class P2pRoom extends ChangeNotifier {
         return;
       }
       room.seats[number].connected = true;
-      message = null;
+      // Mark this invitation as fulfilled before counting unused invitations,
+      // or the newly connected guest incorrectly evicts a reserved bot.
       _peerSeats[peer] = number;
+      if (botCount > capacity - room.seats.length - pendingInvites) {
+        botCount = (capacity - room.seats.length - pendingInvites).clamp(0, 4);
+      }
+      _planBotSeats();
+      message = null;
       _send(peer, {'op': 'welcome', 'room': room.id, 'seat': number});
       _broadcast();
       return;
@@ -287,6 +416,10 @@ class P2pRoom extends ChangeNotifier {
         players = (msg['players'] as List).cast<String>();
         connectedPlayers = (msg['connected'] as List).cast<bool>();
         started = msg['started'] as bool;
+        botSeats
+          ..clear()
+          ..addAll((msg['bots'] as List? ?? const []).cast<int>());
+        botCount = botSeats.length;
       case 'state':
         version = msg['version'] as int;
         view = Map<String, dynamic>.from(msg['view'] as Map);
@@ -327,7 +460,7 @@ class P2pRoom extends ChangeNotifier {
   void _broadcast() {
     _refreshHost();
     for (final peer in _peerSeats.keys) {
-      _send(peer, _room!.lobby());
+      _send(peer, {..._room!.lobby(), 'bots': botSeats.toList()..sort()});
       _stateFor(peer, _peerSeats[peer]!);
     }
     notifyListeners();
@@ -346,8 +479,31 @@ class P2pRoom extends ChangeNotifier {
   }
 
   void start() {
-    if (_room == null) return;
-    _room!.start(0);
+    final room = _room;
+    if (!canStart || room == null) {
+      throw StateError(
+        'Connect friends or fill the remaining seats with bots.',
+      );
+    }
+    const botNames = [
+      'Mira Stoneward',
+      'Oswin the Bold',
+      'Tamsin Oakbanner',
+      'Alden of Greyford',
+      'Briar the Merchant',
+    ];
+    for (final index in botSeats.toList()..sort()) {
+      if (index != room.seats.length) {
+        throw StateError('A guest joined while assigning bot seats.');
+      }
+      final selected = botNames.firstWhere(
+        (name) =>
+            !room.seats.any((s) => s.name.toLowerCase() == name.toLowerCase()),
+        orElse: () => 'Bot ${index + 1}',
+      );
+      room.join(selected).connected = true;
+    }
+    room.start(0);
     message = null;
     _broadcast();
     _schedule();
@@ -383,6 +539,7 @@ class P2pRoom extends ChangeNotifier {
     final state = room?.state;
     if (state == null || state.phase == MatchPhase.finished) {
       _clock?.cancel();
+      _syncAi();
       return;
     }
     final key = [
@@ -392,7 +549,10 @@ class P2pRoom extends ChangeNotifier {
       state.tactical?.id,
       state.tactical?.responder,
     ].join(':');
-    if (_clockKey == key && _clock?.isActive == true) return;
+    if (_clockKey == key && _clock?.isActive == true) {
+      _syncAi();
+      return;
+    }
     _clock?.cancel();
     _clockKey = key;
     _clock = Timer(const Duration(seconds: 90), () {
@@ -405,11 +565,13 @@ class P2pRoom extends ChangeNotifier {
       if (advanced) _broadcast();
       _schedule();
     });
+    _syncAi();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _ai.pause();
     _clock?.cancel();
     _rtc.dispose();
     super.dispose();

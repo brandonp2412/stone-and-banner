@@ -21,7 +21,11 @@ one **invite link per guest**, and sends the links via any chat. Each guest
 opens their invitation, chooses a unique name, then sends back a **response
 link**. The host pastes each response link into their original host tab (or
 opens it in a *new* tab to forward it automatically). When all 3–4 players
-are connected, the host starts the match.
+are connected, the host starts the match. The host can also tap **Add AI
+opponent** to reserve any unfilled seats for computer players, mixing remote
+friends and bots in the same 3–4 player game. AI seats use the same
+HeuristicAi/AiTurnCoordinator as the local game and run entirely in the host
+browser; no bot service is required.
 
 WebRTC DataChannels carry **only direct encrypted peer-to-peer game traffic**.
 No signalling server, TURN relay, accounts, or remote match storage are used.
