@@ -13,6 +13,12 @@ No project SDK, wrapper, or graphics environment overrides are required.
 
 ## Web
 
+Play online: https://brandonp2412.github.io/stone-and-banner/
+
+The GitHub Actions workflow builds and publishes this site after each push to
+`main`, and can also be run manually from GitHub Actions.
+
+
 ```sh
 flutter pub get
 flutter run -d web-server --web-hostname 127.0.0.1 --web-port 8080
