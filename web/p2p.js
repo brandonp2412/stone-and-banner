@@ -13,6 +13,57 @@
   const responseChannel = typeof BroadcastChannel === "undefined"
       ? null : new BroadcastChannel("stone-banner-p2p-responses-v1");
   const responses = new Set();
+  const pendingForwards = new Map();
+  let hosting = false;
+
+  // Same-tab response navigation must preserve the authoritative host.
+  // Fragment-only URLs fire hashchange without reloading the document.
+  window.addEventListener("hashchange", () => {
+    if (!hosting || !location.hash.startsWith("#p2p=")) return;
+    const link = location.href;
+    try {
+      const encoded = location.hash.substring("#p2p=".length);
+      const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+      const payload = JSON.parse(atob(base64));
+      if (payload?.type !== "answer") return;
+    } catch (_) {
+      return;
+    }
+    history.replaceState(history.state, "", location.pathname + location.search);
+    for (const callback of responses) callback(link, "");
+  });
+
+  // Cross-tab signalling uses an acknowledged same-origin BroadcastChannel.
+  // It cannot reach separate browser profiles or in-app browser partitions.
+  function forwardAnswer(link) {
+    if (!responseChannel || typeof link !== "string" || link.length > 30000)
+      return Promise.resolve(false);
+    const id = crypto.randomUUID();
+    return new Promise((resolve) => {
+      let remaining = 5;
+      const send = () => {
+        if (--remaining < 0) {
+          clearInterval(timer);
+          pendingForwards.delete(id);
+          resolve(false);
+          return;
+        }
+        responseChannel.postMessage({kind: "answer", id, link});
+      };
+      const timer = setInterval(send, 1200);
+      pendingForwards.set(id, (accepted) => {
+        clearInterval(timer);
+        pendingForwards.delete(id);
+        resolve(accepted);
+      });
+      send();
+    });
+  }
+
+  function acknowledgeAnswer(id, accepted) {
+    if (responseChannel && id)
+      responseChannel.postMessage({kind: "ack", id, accepted: !!accepted});
+  }
 
   function signal(id, event, data = "") {
     const peer = peers.get(id);
@@ -168,10 +219,18 @@
     },
     onAnswer(callback) { responses.add(callback); },
     offAnswer(callback) { responses.delete(callback); },
-    postAnswer(encoded) { responseChannel?.postMessage(encoded); },
+    forwardAnswer,
+    acknowledgeAnswer,
+    setHosting(value) { hosting = !!value; },
   };
   responseChannel?.addEventListener("message", (event) => {
-    if (typeof event.data === "string" && event.data.length < 30000)
-      for (const callback of responses) callback(event.data);
+    const data = event.data;
+    if (data?.kind === "ack" && typeof data.id === "string") {
+      pendingForwards.get(data.id)?.(data.accepted === true);
+    } else if (data?.kind === "answer" &&
+               typeof data.link === "string" && data.link.length < 30000 &&
+               typeof data.id === "string" && data.id.length < 150) {
+      for (const callback of responses) callback(data.link, data.id);
+    }
   });
 })();

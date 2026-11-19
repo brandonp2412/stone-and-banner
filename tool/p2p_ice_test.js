@@ -30,7 +30,7 @@ function browserHarness(withPublicCandidate, {gathering = false} = {}) {
     close() {}
   }
 
-  const browser = {RTCPeerConnection: FakeConnection};
+  const browser = {RTCPeerConnection: FakeConnection, addEventListener() {}};
   const context = {
     window: browser,
     RTCPeerConnection: FakeConnection,

@@ -13,7 +13,9 @@ class P2pTransport {
   void send(String id, String message) =>
       throw UnsupportedError('Browser only.');
   void close(String id) {}
-  void listenAnswers(void Function(String) callback) {}
+  void listenAnswers(void Function(String link, String receiptId) callback) {}
   void dispose() {}
-  static void broadcastAnswer(String message) {}
+  static Future<bool> forwardAnswer(String message) async => false;
+  static void acknowledgeAnswer(String id, bool accepted) {}
+  static void setHosting(bool hosting) {}
 }

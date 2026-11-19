@@ -6,7 +6,17 @@ abstract final class P2pLinks {
     final encoded = base64Url
         .encode(utf8.encode(jsonEncode({'v': 1, ...message})))
         .replaceAll('=', '');
-    return origin.replace(query: '', fragment: 'p2p=$encoded').toString();
+    // Keep the same document URL so that opening a response in the original
+    // host tab changes only the fragment, never reloading the live room.
+    return Uri(
+      scheme: origin.scheme,
+      userInfo: origin.userInfo,
+      host: origin.host,
+      port: origin.hasPort ? origin.port : null,
+      path: origin.path,
+      query: origin.query.isEmpty ? null : origin.query,
+      fragment: 'p2p=$encoded',
+    ).toString();
   }
 
   static Map<String, dynamic> parse(String input) {

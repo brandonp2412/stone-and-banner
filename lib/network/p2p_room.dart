@@ -40,13 +40,19 @@ class P2pRoom extends ChangeNotifier {
       },
     );
     _rtc = P2pTransport(_onEvent);
-    _rtc.listenAnswers((link) {
+    _rtc.listenAnswers((link, receiptId) async {
       if (_disposed || !isHost) return;
-      acceptAnswer(link).catchError((Object error) {
+      try {
+        final reply = P2pLinks.parse(link);
+        if (reply['type'] != 'answer' || reply['room'] != roomId) return;
+        await acceptAnswer(link);
+        P2pTransport.acknowledgeAnswer(receiptId, true);
+      } on Object catch (error) {
+        P2pTransport.acknowledgeAnswer(receiptId, false);
         if (_disposed) return;
         message = 'Cannot accept response: $error';
         notifyListeners();
-      });
+      }
     });
   }
 
@@ -63,6 +69,7 @@ class P2pRoom extends ChangeNotifier {
   final Map<String, int> _peerSeats = {};
   final Set<String> _invited = {};
   final Set<String> _answered = {};
+  final Map<String, Future<void>> _acceptingAnswers = {};
   final Set<String> _open = {};
   Timer? _clock;
   String? _clockKey;
@@ -88,6 +95,7 @@ class P2pRoom extends ChangeNotifier {
     _room = LanRoomRegistry().create(seats, seed, name);
     _room!.seats[0].connected = true;
     isHost = true;
+    P2pTransport.setHosting(true);
     connected = true;
     roomId = _room!.id;
     seat = 0;
@@ -284,20 +292,27 @@ class P2pRoom extends ChangeNotifier {
     if (!isHost ||
         data['type'] != 'answer' ||
         data['room'] != roomId ||
-        !_invited.contains(id) ||
-        _answered.contains(id)) {
+        !_invited.contains(id)) {
       throw StateError('Response does not match a pending invitation.');
     }
-    _answered.add(id);
+    if (_answered.contains(id)) return;
+    // Retries must await the same actual operation; don't acknowledge an
+    // in-flight answer before setRemoteDescription has succeeded.
+    final accept = _acceptingAnswers.putIfAbsent(
+      id,
+      () => _rtc.accept(id, data['sdp'] as String),
+    );
     try {
-      await _rtc.accept(id, data['sdp'] as String);
+      await accept;
       if (_disposed) return;
+      _answered.add(id);
       message = null;
-    } on Object {
-      _answered.remove(id);
-      rethrow;
+      notifyListeners();
+    } finally {
+      if (identical(_acceptingAnswers[id], accept)) {
+        _acceptingAnswers.remove(id);
+      }
     }
-    notifyListeners();
   }
 
   void _onEvent(String peer, String type, String raw) {
@@ -573,6 +588,7 @@ class P2pRoom extends ChangeNotifier {
     _disposed = true;
     _ai.pause();
     _clock?.cancel();
+    if (isHost) P2pTransport.setHosting(false);
     _rtc.dispose();
     super.dispose();
   }
