@@ -31,8 +31,12 @@ jobs:
           cache: true
       - name: Resolve dependencies
         run: flutter pub get
+      - name: Test P2P invitations and room authority
+        run: flutter test test/p2p_links_test.dart test/stage6_room_test.dart
       - name: Build website
         run: flutter build web --release --base-href /stone-and-banner/
+      - name: Bust browser bridge cache on each deployment
+        run: sed -i "s|p2p.js?v=2|p2p.js?v=$GITHUB_SHA|" build/web/index.html
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload website

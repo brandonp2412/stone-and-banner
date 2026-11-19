@@ -16,6 +16,8 @@ import 'ui/match_screen.dart';
 import 'ui/game_notice.dart';
 import 'ui/resource_icon.dart';
 import 'ui/lan_room_page.dart';
+import 'ui/p2p_room_page.dart';
+import 'network/p2p_transport.dart';
 
 MatchEvent? _chooseComputerEvent(MatchState state) =>
     const HeuristicAi().choose(state);
@@ -814,7 +816,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         ),
       ),
       themeMode: themeMode,
-      home: Builder(
+      home: kIsWeb && P2pTransport.initialLink() != null
+          ? const P2pRoomPage()
+          : Builder(
         builder: (context) => PopScope(
           canPop: page == Page.home,
           onPopInvokedWithResult: (didPop, result) {
@@ -886,6 +890,13 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                       onContinue: savedReplay == null ? null : resume,
                       onRules: () => setState(() => page = Page.rules),
                       onImport: () => importMatch(context),
+                      onP2p: kIsWeb
+                          ? () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const P2pRoomPage(),
+                                ),
+                              )
+                          : null,
                       onLan: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const LanRoomPage(),
@@ -1222,8 +1233,10 @@ class _LandingHall extends StatelessWidget {
     required this.onRules,
     required this.onImport,
     required this.onLan,
+    required this.onP2p,
   });
   final VoidCallback onNew, onRules, onImport, onLan;
+  final VoidCallback? onP2p;
   final VoidCallback? onContinue;
 
   @override
@@ -1326,6 +1339,12 @@ class _LandingHall extends StatelessWidget {
                       icon: const Icon(Icons.menu_book_outlined, size: 18),
                       label: const Text('Learn the rules'),
                     ),
+                    if (onP2p != null)
+                      TextButton.icon(
+                        onPressed: onP2p,
+                        icon: const Icon(Icons.link, size: 18),
+                        label: const Text('P2P multiplayer'),
+                      ),
                     TextButton.icon(
                       onPressed: onLan,
                       icon: const Icon(Icons.groups_outlined, size: 18),

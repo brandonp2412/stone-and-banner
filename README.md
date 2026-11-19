@@ -13,6 +13,32 @@ No project SDK, wrapper, or graphics environment overrides are required.
 
 ## Web
 
+### Server-free WebRTC multiplayer (browser)
+
+Open [Stone & Banner](https://brandonp2412.github.io/stone-and-banner/) and
+choose **P2P multiplayer**. The host keeps their browser tab open, generates
+one **invite link per guest**, and sends the links via any chat. Each guest
+opens their invitation, chooses a unique name, then sends back a **response
+link**. The host pastes each response link into their original host tab (or
+opens it in a *new* tab to forward it automatically). When all 3–4 players
+are connected, the host starts the match.
+
+WebRTC DataChannels transmit only peer-to-peer traffic. There is **no
+signalling server, STUN server, TURN relay, account, or remote match storage**.
+The host browser performs all game-state authority and sends each player a
+filtered view. Do not close, refresh, or navigate away from the host tab:
+connections and this P2P game session are not restored afterwards.
+Invitation links are single-use; do not share them publicly.
+
+**WAN limitation:** With no STUN/TURN, browsers usually cannot negotiate a
+connection between separate NATs, especially when local ICE candidates are
+obfuscated with mDNS. This mode works best on the same LAN or where both peers
+have genuinely reachable addresses and compatible firewall rules. If
+connectivity fails, the existing [LAN WebSocket host](#web) remains available
+for direct networking; do not mistake a generated link for guaranteed WAN
+connectivity.
+
+
 Play online: https://brandonp2412.github.io/stone-and-banner/
 
 The GitHub Actions workflow builds and publishes this site after each push to

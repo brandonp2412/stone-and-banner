@@ -22,9 +22,11 @@ class RoomSeat {
 class HostedRoom {
   HostedRoom(this.id, this.capacity, this.boardSeed)
     : assert(capacity == 3 || capacity == 4),
+      // 52 random bits: safe as a JS integer on Flutter web as well as native.
+      // JavaScript bit shifts truncate to 32 bits, so do not use << 32.
       secretSeed =
-          Random.secure().nextInt(1 << 32) |
-          (Random.secure().nextInt(1 << 30) << 32);
+          Random.secure().nextInt(1 << 30) +
+          Random.secure().nextInt(1 << 22) * (1 << 30);
 
   final String id;
   final int capacity, boardSeed, secretSeed;
