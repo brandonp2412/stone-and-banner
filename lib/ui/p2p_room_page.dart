@@ -126,16 +126,23 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
       ? _answerPage()
       : _pane([
           Text(
-            'Direct P2P multiplayer',
+            kIsWeb ? 'Host or join a game' : 'Direct P2P multiplayer',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
           const Text(
-            'No signalling server, relay, or accounts. '
-            'Free public STUN servers help peers traverse home routers; game moves '
-            'stay encrypted and direct. Exchange invitation and response links '
-            'over chat. Some NATs and firewalls still block connections.',
+            'Host directly from this device. No game server or account required. '
+            'Players exchange an invitation and response link over chat to establish '
+            'an encrypted WebRTC connection; some networks block direct connections.',
           ),
+          if (kIsWeb) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Browsers cannot listen for LAN connections like the Android and '
+              'Linux apps. This mode uses peer-to-peer WebRTC instead, including '
+              'when both devices are on the same Wi-Fi.',
+            ),
+          ],
           const SizedBox(height: 14),
           if (!kIsWeb && incoming == null) ...[
             const SizedBox(height: 8),
@@ -208,7 +215,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
                 }
               },
               icon: const Icon(Icons.groups),
-              label: const Text('Host P2P match'),
+              label: Text(kIsWeb ? 'Host game' : 'Host P2P match'),
             ),
           ],
         ]);
@@ -474,7 +481,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
         room.connected && !room.pending && game != null && room.seat == active;
     return Scaffold(
       appBar: game == null
-          ? AppBar(title: const Text('P2P multiplayer'))
+          ? AppBar(title: Text(kIsWeb ? 'Multiplayer' : 'P2P multiplayer'))
           : null,
       body: Column(
         children: [

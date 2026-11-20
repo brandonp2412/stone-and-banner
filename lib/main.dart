@@ -890,14 +890,16 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                       onContinue: savedReplay == null ? null : resume,
                       onRules: () => setState(() => page = Page.rules),
                       onImport: () => importMatch(context),
-                      onP2p: () => Navigator.of(context).push(
+                      onP2p: kIsWeb ? null : () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const P2pRoomPage(),
                         ),
                       ),
                       onLan: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => const LanRoomPage(),
+                          builder: (_) => kIsWeb
+                              ? const P2pRoomPage()
+                              : const LanRoomPage(),
                         ),
                       ),
                     ),
@@ -1346,7 +1348,7 @@ class _LandingHall extends StatelessWidget {
                     TextButton.icon(
                       onPressed: onLan,
                       icon: const Icon(Icons.groups_outlined, size: 18),
-                      label: const Text('LAN multiplayer'),
+                      label: Text(kIsWeb ? 'Host / join multiplayer' : 'LAN multiplayer'),
                     ),
                     TextButton.icon(
                       onPressed: onImport,
