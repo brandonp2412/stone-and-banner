@@ -890,13 +890,11 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                       onContinue: savedReplay == null ? null : resume,
                       onRules: () => setState(() => page = Page.rules),
                       onImport: () => importMatch(context),
-                      onP2p: kIsWeb
-                          ? () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const P2pRoomPage(),
-                                ),
-                              )
-                          : null,
+                      onP2p: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const P2pRoomPage(),
+                        ),
+                      ),
                       onLan: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const LanRoomPage(),

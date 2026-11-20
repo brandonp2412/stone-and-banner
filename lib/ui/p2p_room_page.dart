@@ -18,6 +18,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   late final P2pRoom room;
   final name = TextEditingController(text: 'Host');
   final answerField = TextEditingController();
+  final inviteField = TextEditingController();
   Map<String, dynamic>? incoming;
   String? parseError;
   int seats = 3;
@@ -44,7 +45,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   void initState() {
     super.initState();
     room = P2pRoom()..addListener(_refresh);
-    final incomingLink = kIsWeb ? P2pTransport.initialLink() : null;
+    final incomingLink = P2pTransport.initialLink();
     if (incomingLink != null) {
       try {
         incoming = P2pLinks.parse(incomingLink);
@@ -61,6 +62,22 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     }
   }
 
+  void _useInviteLink() {
+    try {
+      final value = P2pLinks.parse(inviteField.text);
+      if (value['type'] != 'offer') {
+        throw const FormatException('Paste a host invitation, not a response.');
+      }
+      setState(() {
+        incoming = value;
+        name.text = 'Guest';
+        parseError = null;
+      });
+    } on Object catch (e) {
+      setState(() => parseError = '$e');
+    }
+  }
+
   void _refresh() {
     if (mounted) setState(() {});
   }
@@ -71,6 +88,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     room.dispose();
     name.dispose();
     answerField.dispose();
+    inviteField.dispose();
     super.dispose();
   }
 
@@ -119,6 +137,24 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
             'over chat. Some NATs and firewalls still block connections.',
           ),
           const SizedBox(height: 14),
+          if (!kIsWeb && incoming == null) ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: inviteField,
+              minLines: 1,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Invitation link from friend',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              onPressed: _useInviteLink,
+              icon: const Icon(Icons.link),
+              label: const Text('Join from invitation'),
+            ),
+          ],
           TextField(
             controller: name,
             maxLength: 32,
@@ -231,7 +267,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     const SizedBox(height: 7),
     Text(
       room.isHost
-          ? 'You are the authoritative host. KEEP this tab open when your '
+          ? 'You are the authoritative host. Keep this session open when your '
                 'friend replies; never replace it with their link.'
           : room.connected
           ? 'Connected to host · Seat ${room.seat! + 1}'
@@ -302,9 +338,9 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
       const SizedBox(height: 14),
       const Text(
         'Your friend must send a response link back because WebRTC needs '
-        'connection details from both browsers. Do not leave this host tab. '
-        'Open their response link in a separate tab in the SAME browser '
-        '(it will apply automatically), or copy and paste it below.',
+        'connection details from both devices. Keep this host session open. '
+        'On web, open their response link in another tab in the SAME browser '
+        '(it applies automatically), or paste the response below on any platform.',
       ),
       const SizedBox(height: 7),
       TextField(
@@ -340,7 +376,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
       _copy('response link', link),
       const SizedBox(height: 7),
       const Text(
-        'Send this link back to the host. Both tabs must remain open.',
+        'Send this link back to the host. Keep both apps or browser tabs open.',
       ),
       if (!room.connected) ...[
         const SizedBox(height: 9),

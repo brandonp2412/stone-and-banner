@@ -24,7 +24,7 @@ String _randomId(int bytes) {
   ].join();
 }
 
-/// One authoritative host browser, with private views sent over WebRTC.
+/// One authoritative host device, with private views sent over WebRTC.
 class P2pRoom extends ChangeNotifier {
   P2pRoom({Duration botMoveDelay = const Duration(milliseconds: 2400)}) {
     _ai = AiTurnCoordinator(
@@ -200,7 +200,7 @@ class P2pRoom extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// One unique invitation per remote participant. Host browser must remain open.
+  /// One unique invitation per remote participant. Host device must stay online.
   Future<void> invite() async {
     final room = _room;
     if (!isHost || room == null || started) {
@@ -217,12 +217,12 @@ class P2pRoom extends ChangeNotifier {
       final sdp = await _rtc.offer(id);
       if (_disposed) return;
       _invited.add(id);
-      invitationLink = P2pLinks.link(Uri.base, {
-        'type': 'offer',
-        'room': room.id,
-        'peer': id,
-        'sdp': sdp,
-      });
+      invitationLink = P2pLinks.link(
+        kIsWeb
+            ? Uri.base
+            : Uri.parse('https://brandonp2412.github.io/stone-and-banner/'),
+        {'type': 'offer', 'room': room.id, 'peer': id, 'sdp': sdp},
+      );
     } on Object catch (e) {
       _rtc.close(id);
       message = 'Cannot create invitation: $e';
@@ -270,12 +270,12 @@ class P2pRoom extends ChangeNotifier {
     try {
       final sdp = await _rtc.answer(guestPeer!, offer['sdp'] as String);
       if (_disposed) return;
-      answerLink = P2pLinks.link(Uri.base, {
-        'type': 'answer',
-        'room': roomId,
-        'peer': guestPeer,
-        'sdp': sdp,
-      });
+      answerLink = P2pLinks.link(
+        kIsWeb
+            ? Uri.base
+            : Uri.parse('https://brandonp2412.github.io/stone-and-banner/'),
+        {'type': 'answer', 'room': roomId, 'peer': guestPeer, 'sdp': sdp},
+      );
     } on Object catch (e) {
       _rtc.close(guestPeer!);
       guestPeer = null;
@@ -331,7 +331,7 @@ class P2pRoom extends ChangeNotifier {
           _broadcast();
         } else if (!isHost && peer == guestPeer) {
           connected = false;
-          message = 'Connection lost. Host and guests must keep their browser tabs open.';
+          message = 'Connection lost. Keep the host and guest sessions open.';
         }
       case 'error':
         message = raw;

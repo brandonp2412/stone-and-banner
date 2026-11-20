@@ -74,6 +74,13 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# flutter_webrtc 1.6.x retains a Windows-only messenger reference in its
+# cross-platform translation unit. GCC reports it as set-but-unused on Linux;
+# suppress only this upstream warning for that plugin, not for our runner.
+if(TARGET flutter_webrtc_plugin AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(flutter_webrtc_plugin PRIVATE -Wno-unused-but-set-variable)
+endif()
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
