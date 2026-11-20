@@ -273,11 +273,85 @@
     summarizeCandidates(id, complete);
     return descriptionWithDirectAddress(connection);
   }
+  // Some mobile networks map the same outbound UDP socket to *different*
+  // public ports for each STUN destination. On such networks, a standard
+  // server-reflexive offer may be unreachable from the peer even though a
+  // nearby UDP mapping succeeds. This is a bounded, lower-priority, direct-
+  // only ICE fallback; it never routes game traffic through a relay or VPN.
+  // Activate only when two STUN observations prove endpoint-dependent port
+  // mapping. In particular, never modify normal same-LAN offers.
+  function endpointDependentCandidateOffer(description) {
+    if (description?.type !== "offer" || typeof description.sdp !== "string")
+      return {description, count: 0};
+    const rows = description.sdp.split(/\r?\n/);
+    const candidates = rows.filter(row => row.startsWith("a=candidate:"));
+    const srflx = candidates.map(row => ({parts: row.split(/\s+/)}))
+      .filter(({parts}) => {
+        const marker = parts.indexOf("typ");
+        return parts.length >= 8 && parts[2].toLowerCase() === "udp" &&
+          marker >= 0 && parts[marker + 1] === "srflx" &&
+          parts.indexOf("raddr") >= 0 && parts.indexOf("rport") >= 0;
+      });
+    // Multiple observations for one socket, with incompatible public ports,
+    // are required. Avoid guessing on independent interfaces/sockets.
+    const groups = new Map();
+    for (const {parts} of srflx) {
+      const address = parts[4];
+      const port = Number(parts[5]);
+      const raddr = parts[parts.indexOf("raddr") + 1];
+      const rport = parts[parts.indexOf("rport") + 1];
+      if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(address) ||
+          validPrivateIPv4(address) || address.startsWith("127.") ||
+          !Number.isInteger(port) || port < 1024 || port > 65535)
+        continue;
+      const key = [parts[1], address, raddr, rport].join("|");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(parts);
+    }
+    // Use the strongest sign of symmetric NAT; constrain the number and
+    // range of checks to avoid a large SDP/UDP flood.
+    const group = [...groups.values()].find(values =>
+      new Set(values.map(parts => parts[5])).size >= 2);
+    if (!group) return {description, count: 0};
+    const first = group[0];
+    const observed = new Set(group.map(parts => Number(parts[5])));
+    const ports = new Set();
+    for (let delta = 1; delta <= 96 && ports.size < 280; delta++) {
+      for (const port of observed) {
+        if (port - delta > 1024 && !observed.has(port - delta))
+          ports.add(port - delta);
+        if (port + delta <= 65535 && !observed.has(port + delta))
+          ports.add(port + delta);
+        if (ports.size >= 280) break;
+      }
+    }
+    const extras = [];
+    for (const port of ports) {
+      const parts = [...first];
+      parts[0] = "a=candidate:" + String(940000000 + port);
+      parts[3] = "1677729500";
+      parts[5] = String(port);
+      extras.push(parts.join(" "));
+    }
+    if (!extras.length) return {description, count: 0};
+    const end = rows.findIndex(row => row.startsWith("a=end-of-candidates"));
+    if (end >= 0) rows.splice(end, 0, ...extras);
+    else {
+      const last = rows.findLastIndex(row => row.startsWith("a=candidate:"));
+      rows.splice(last + 1, 0, ...extras);
+    }
+    return {description: {type: description.type, sdp: rows.join("\r\n")},
+      count: extras.length};
+  }
+
   async function answer(id, remote) {
     const connection = peers.get(id).connection;
     const description = JSON.parse(remote);
     if (description.type !== "offer") throw Error("Not a WebRTC offer.");
-    await connection.setRemoteDescription(description);
+    const probed = endpointDependentCandidateOffer(description);
+    if (probed.count > 0)
+      signal(id, "diagnostic", `Endpoint-dependent carrier NAT detected: testing ${probed.count} nearby direct UDP port mappings (no relay).`);
+    await connection.setRemoteDescription(probed.description);
     await connection.setLocalDescription(await connection.createAnswer());
     const complete = await waitForCandidates(connection);
     summarizeCandidates(id, complete);

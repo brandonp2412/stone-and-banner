@@ -8,6 +8,7 @@ const path = require('node:path');
 function browserHarness(withPublicCandidate, {gathering = false} = {}) {
   const calls = [];
   const configs = [];
+  const connections = [];
   const storage = new Map();
   const candidates = withPublicCandidate
     ? 'a=candidate:1 1 udp 123 203.0.113.10 5555 typ srflx\r\n'
@@ -16,6 +17,7 @@ function browserHarness(withPublicCandidate, {gathering = false} = {}) {
   class FakeConnection {
     constructor(configuration) {
       configs.push(configuration);
+      connections.push(this);
       this.iceGatheringState = gathering ? 'gathering' : 'complete';
       this.connectionState = 'new';
       this.listeners = new Map();
@@ -23,6 +25,8 @@ function browserHarness(withPublicCandidate, {gathering = false} = {}) {
     }
     createDataChannel() { return {readyState: 'connecting', close() {}}; }
     createOffer() { return Promise.resolve({type: 'offer', sdp: 'v=0\r\n'}); }
+    createAnswer() { return Promise.resolve({type: 'answer', sdp: 'v=0\r\n'}); }
+    async setRemoteDescription(description) { this.remoteDescription = description; }
     async setLocalDescription(description) {
       this.localDescription = {...description, sdp: description.sdp + candidates};
     }
@@ -46,8 +50,41 @@ function browserHarness(withPublicCandidate, {gathering = false} = {}) {
   };
   const source = fs.readFileSync(path.resolve(__dirname, '../web/p2p.js'), 'utf8');
   vm.runInNewContext(source, context);
-  return {browser, configs, calls, storage};
+  return {browser, configs, calls, storage, connections};
 }
+
+test('carrier NAT port-dependent mappings enable bounded direct-only UDP alternatives', async () => {
+  const {browser, connections} = browserHarness(true);
+  browser.stoneP2p.create('cellular-guest', false, () => {});
+  const sdp = 'v=0\r\n' +
+    'a=candidate:1 1 udp 1680000000 203.0.113.20 33330 typ srflx raddr 100.70.80.9 rport 48576\r\n' +
+    'a=candidate:2 1 udp 1680000000 203.0.113.20 33308 typ srflx raddr 100.70.80.9 rport 48576\r\n' +
+    'a=end-of-candidates\r\n';
+  const answer = JSON.parse(await browser.stoneP2p.answer('cellular-guest',
+    JSON.stringify({type: 'offer', sdp})));
+  assert.equal(answer.type, 'answer');
+  // Inspect the SDP applied to the guest, rather than just a helper return.
+  // Each alternative retains the real ICE credentials, IP and protocol.
+  const remote = connections[0].remoteDescription;
+  assert.equal(remote.type, 'offer');
+  const candidates = remote.sdp.split('\r\n').filter(row => row.startsWith('a=candidate:'));
+  assert.ok(candidates.length > 100 && candidates.length < 300, 'bounded extra candidates');
+  assert.ok(candidates.some(row => row.includes(' 203.0.113.20 33329 typ srflx')));
+  assert.ok(candidates.some(row => row.includes(' 203.0.113.20 33331 typ srflx')));
+  assert.ok(candidates.every(row => !row.includes('typ relay')));
+  assert.equal(candidates.at(-1).includes('raddr 100.70.80.9 rport 48576'), true);
+});
+
+test('no candidate probing on ordinary single-mapping LAN or STUN offers', async () => {
+  const {browser, connections} = browserHarness(true);
+  const reports = [];
+  browser.stoneP2p.create('ordinary-guest', false, (event, data) => reports.push([event, data]));
+  await browser.stoneP2p.answer('ordinary-guest', JSON.stringify({type: 'offer', sdp:
+    'v=0\r\na=candidate:1 1 udp 123 192.168.1.10 44300 typ host\r\n' +
+    'a=candidate:2 1 udp 123 203.0.113.20 33330 typ srflx raddr 100.70.80.9 rport 48576\r\n'}));
+  assert.ok(!reports.some(([event, data]) => event === 'diagnostic' && /endpoint-dependent/i.test(data)));
+  assert.equal(connections[0].remoteDescription.sdp.split('a=candidate:').length - 1, 2);
+});
 
 test('public STUN adds only direct candidates, without TURN or relays', async () => {
   const {browser, configs} = browserHarness(true);
