@@ -21,7 +21,8 @@ class LanRoomClient extends ChangeNotifier {
   String url = '';
   String? room, token, error;
   int? seat;
-  int capacity = 3, version = 0;
+  int capacity = 3, version = 0, botCount = 0;
+  List<int> botSeats = [];
   List<String> players = [];
   List<bool> connectedPlayers = [];
   MatchState? game;
@@ -152,6 +153,8 @@ class LanRoomClient extends ChangeNotifier {
         _send({'op': 'sync', 'from': version});
         if (_outstanding != null) _send(_outstanding!);
       case 'lobby':
+        botCount = (msg['botCount'] as int?) ?? 0;
+        botSeats = (msg['bots'] as List? ?? const []).cast<int>();
         capacity = msg['capacity'] as int;
         players = (msg['players'] as List).cast<String>();
         connectedPlayers = (msg['connected'] as List).cast<bool>();
@@ -178,6 +181,7 @@ class LanRoomClient extends ChangeNotifier {
   }
 
   void start() => _send({'op': 'start'});
+  void setBots(int count) => _send({'op': 'setBots', 'count': count});
 
   void dispatch(MatchEvent event) {
     if (!connected || pending || game == null) return;
