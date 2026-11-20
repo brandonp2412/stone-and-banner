@@ -27,6 +27,10 @@ function browserHarness(withPublicCandidate, {gathering = false} = {}) {
     createOffer() { return Promise.resolve({type: 'offer', sdp: 'v=0\r\n'}); }
     createAnswer() { return Promise.resolve({type: 'answer', sdp: 'v=0\r\n'}); }
     async setRemoteDescription(description) { this.remoteDescription = description; }
+    async getStats() {
+      return new Map([['pair', {type: 'candidate-pair', state: 'in-progress',
+        requestsSent: 202, requestsReceived: 0, responsesReceived: 0}]]);
+    }
     async setLocalDescription(description) {
       this.localDescription = {...description, sdp: description.sdp + candidates};
     }
@@ -73,6 +77,11 @@ test('carrier NAT port-dependent mappings enable bounded direct-only UDP alterna
   assert.ok(candidates.some(row => row.includes(' 203.0.113.20 33331 typ srflx')));
   assert.ok(candidates.every(row => !row.includes('typ relay')));
   assert.equal(candidates.at(-1).includes('raddr 100.70.80.9 rport 48576'), true);
+  const report = JSON.parse(await browser.stoneP2p.diagnostics('cellular-guest'));
+  assert.ok(report.carrierNatProbeCandidates > 100);
+  assert.equal(report.connectivityChecks.requestsSent, 202);
+  assert.equal(report.connectivityChecks.responsesReceived, 0);
+  assert.ok(!JSON.stringify(report).includes('203.0.113.20'));
 });
 
 test('no candidate probing on ordinary single-mapping LAN or STUN offers', async () => {

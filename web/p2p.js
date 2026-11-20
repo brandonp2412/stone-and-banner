@@ -146,6 +146,10 @@
     if (peer) peer.callback(event, data);
   }
 
+  function peerNatProbeCount(id) {
+    return peers.get(id)?.natProbeCandidates || 0;
+  }
+
   function attachChannel(id, channel) {
     const peer = peers.get(id);
     if (!peer) return;
@@ -166,7 +170,7 @@
     if (!window.RTCPeerConnection) throw Error("WebRTC is unavailable.");
     if (peers.has(id)) throw Error("Peer already exists.");
     const connection = new RTCPeerConnection({iceServers, iceTransportPolicy: "all"});
-    peers.set(id, {connection, callback, channel: null});
+    peers.set(id, {connection, callback, channel: null, natProbeCandidates: 0});
     connection.ondatachannel = (event) => attachChannel(id, event.channel);
     connection.onconnectionstatechange = () => {
       const state = connection.connectionState;
@@ -175,7 +179,9 @@
           ? "Host is awaiting the guest’s response link; this is not yet a network failure."
           : isHost
             ? "WebRTC ICE failed. This can be LAN mDNS discovery, a blocked UDP route, or an incomplete candidate list—not necessarily NAT. Copy diagnostics to investigate."
-            : "WebRTC ICE failed. Ensure the host applied your response link. If both are on Wi-Fi, mDNS/UDP discovery may be blocked. Copy diagnostics to investigate.";
+            : peerNatProbeCount(id) > 0
+              ? `Direct WebRTC failed despite trying ${peerNatProbeCount(id)} alternate UDP candidates. Your carrier may be blocking inbound peer connectivity. Copy diagnostics for the ICE check counts; no relay is used.`
+              : "WebRTC ICE failed. Ensure the host applied your response link. If both are on Wi-Fi, mDNS/UDP discovery may be blocked. Copy diagnostics to investigate.";
         signal(id, "error", message);
       }
       if (state === "disconnected" || state === "closed") signal(id, "close");
@@ -349,12 +355,13 @@
     const description = JSON.parse(remote);
     if (description.type !== "offer") throw Error("Not a WebRTC offer.");
     const probed = endpointDependentCandidateOffer(description);
-    if (probed.count > 0)
-      signal(id, "diagnostic", `Endpoint-dependent carrier NAT detected: testing ${probed.count} nearby direct UDP port mappings (no relay).`);
+    peers.get(id).natProbeCandidates = probed.count;
     await connection.setRemoteDescription(probed.description);
     await connection.setLocalDescription(await connection.createAnswer());
     const complete = await waitForCandidates(connection);
     summarizeCandidates(id, complete);
+    if (probed.count > 0)
+      signal(id, "diagnostic", `Carrier NAT maps UDP destinations to different ports. Testing ${probed.count} direct alternatives; this is not guaranteed and uses no relay.`);
     return descriptionWithDirectAddress(connection);
   }
   async function accept(id, remote) {
@@ -397,10 +404,23 @@
       localCandidates: candidateDetails(connection.localDescription),
       remoteCandidates: candidateDetails(connection.remoteDescription),
       privateAddressHintConfigured: !!directAddress,
+      carrierNatProbeCandidates: peer.natProbeCandidates || 0,
+      connectivityChecks: null,
       selectedPair: null,
     };
     try {
       const stats = await connection.getStats();
+      const checks = {candidatePairs: 0, requestsSent: 0, responsesReceived: 0,
+        requestsReceived: 0, succeededPairs: 0};
+      stats.forEach(item => {
+        if (item.type !== "candidate-pair") return;
+        checks.candidatePairs++;
+        checks.requestsSent += item.requestsSent || 0;
+        checks.responsesReceived += item.responsesReceived || 0;
+        checks.requestsReceived += item.requestsReceived || 0;
+        if (item.state === "succeeded") checks.succeededPairs++;
+      });
+      result.connectivityChecks = checks;
       let pair;
       stats.forEach(item => {
         if (item.type === "transport" && item.selectedCandidatePairId) {
