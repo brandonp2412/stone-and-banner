@@ -1,6 +1,6 @@
 # Stone & Banner
 
-Original offline-first strategy game for **Android, Linux and web**, built in **Flutter/Dart**.
+Offline-first strategy game for **Android, Linux and web**, built in **Flutter/Dart**.
 The app provides a playable 3–4-seat pass-and-play match: 19 hexes, legal roads
 and settlements, seeded dice, finite resources, Bandit, bank and accepted player
 trades, 15-VP win condition, and portable deterministic event replay.
