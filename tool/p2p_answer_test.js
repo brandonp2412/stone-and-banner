@@ -92,13 +92,21 @@ test('a response opened in the original host tab does not destroy it', () => {
   const host = makeBrowser(bus);
   const received = [];
   host.api.setHosting(true);
-  host.api.onAnswer((link, receiptId) => received.push({link, receiptId}));
+  host.api.onAnswer((link, receiptId) => {
+    received.push({link, receiptId});
+    host.api.acknowledgeAnswer(receiptId, true);
+  });
   const encoded = Buffer.from(JSON.stringify({type: 'answer'})).toString('base64url');
   const reply = 'https://brandonp2412.github.io/stone-and-banner/#p2p=' + encoded;
   host.location.href = reply;
   host.location.hash = '#p2p=' + encoded;
-  host.listeners.get('hashchange')();
-  assert.deepEqual(received, [{link: reply, receiptId: ''}]);
+  let stopped = false;
+  host.listeners.get('hashchange')({stopImmediatePropagation() {stopped = true;}});
+  assert.equal(received.length, 1);
+  assert.equal(received[0].link, reply);
+  assert.match(received[0].receiptId, /^receipt-/);
+  assert.equal(stopped, true, 'prevent Flutter hash routing from replacing the host');
   assert.deepEqual(host.history.replaced, ['/stone-and-banner/']);
   assert.equal(host.location.hash, '');
+  assert.equal(host.intervals.size, 0, 'host must stop retries once accepted');
 });
