@@ -44,6 +44,27 @@ void main() {
     expect(() => P2pLinks.parse(wrong), throwsFormatException);
   });
 
+  test(
+    'legacy native LAN invites fail with a clear cross-platform message',
+    () {
+      for (final invite in [
+        '192.168.1.10:8765/ABCD1234',
+        'ws://192.168.1.10:8765/room',
+      ]) {
+        expect(
+          () => P2pLinks.parse(invite),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('native-app LAN invite'),
+            ),
+          ),
+        );
+      }
+    },
+  );
+
   test('oversized and malformed payloads are rejected', () {
     expect(() => P2pLinks.parse('x' * 30001), throwsFormatException);
     expect(

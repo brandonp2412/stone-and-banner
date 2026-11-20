@@ -80,6 +80,63 @@ class P2pRoom extends ChangeNotifier {
   String? message, roomId, invitationLink, answerLink, guestPeer;
   String? networkDiagnostic, connectionPath;
   final Map<String, String> peerPaths = {};
+  final List<String> _diagnosticEvents = [];
+
+  void _recordDiagnostic(String value) {
+    final timestamp = DateTime.now().toUtc().toIso8601String();
+    _diagnosticEvents.add('$timestamp $value');
+    if (_diagnosticEvents.length > 50) _diagnosticEvents.removeAt(0);
+  }
+
+  Future<String> diagnosticReport({String? uiError}) async {
+    final ids = isHost ? _invited.toList() : <String>[?guestPeer];
+    final peerReports = <Map<String, dynamic>>[];
+    for (final id in ids) {
+      try {
+        final details = jsonDecode(await _rtc.diagnostics(id));
+        peerReports.add({'peerIndex': ids.indexOf(id) + 1, 'report': details});
+      } on Object catch (error) {
+        peerReports.add({
+          'peerIndex': ids.indexOf(id) + 1,
+          'diagnosticsError': error.runtimeType.toString(),
+        });
+      }
+    }
+    // Avoid disclosing full IP addresses, peer IDs, SDP and ICE secrets.
+    final report = <String, Object?>{
+      'app': 'Stone & Banner',
+      'protocol': 'WebRTC',
+      'timestampUtc': DateTime.now().toUtc().toIso8601String(),
+      'platform': kIsWeb ? 'web' : 'native',
+      'role': isHost ? 'host' : 'guest',
+      'status': {
+        'roomCreated': roomId != null,
+        'connected': connected,
+        'preparing': preparing,
+        'started': started,
+        'waitingForResponse':
+            isHost && _invited.any((id) => !_answered.contains(id)),
+        'guestAnswerGenerated': answerLink != null,
+        'activePeerConnections': ids.length,
+        'successfulPeerChannels': _open.length,
+        'seatsConnected': connectedPlayers.where((value) => value).length,
+      },
+      'uiError': _redact(uiError),
+      'roomMessage': _redact(message),
+      'networkDiagnostic': _redact(networkDiagnostic),
+      'connectionPath': _redact(connectionPath),
+      'timeline': _diagnosticEvents,
+      'peers': peerReports,
+    };
+    return const JsonEncoder.withIndent('  ').convert(report);
+  }
+
+  static String? _redact(String? value) => value
+      ?.replaceAll(RegExp(r'(?:\d{1,3}\.){3}\d{1,3}'), '[IPv4 redacted]')
+      .replaceAll(
+        RegExp(r'[a-f0-9]{8}-[a-f0-9-]{8,}\.local'),
+        '[mDNS redacted]',
+      );
   int capacity = 3, version = 0;
   int? seat;
   bool started = false;
@@ -95,6 +152,7 @@ class P2pRoom extends ChangeNotifier {
     _room = LanRoomRegistry().create(seats, seed, name);
     _room!.seats[0].connected = true;
     isHost = true;
+    _recordDiagnostic('host lobby created');
     P2pTransport.setHosting(true);
     connected = true;
     roomId = _room!.id;
@@ -215,6 +273,7 @@ class P2pRoom extends ChangeNotifier {
     final id = _randomId(12);
     try {
       final sdp = await _rtc.offer(id);
+      _recordDiagnostic('host local offer generated');
       if (_disposed) return;
       _invited.add(id);
       invitationLink = P2pLinks.link(
@@ -269,6 +328,9 @@ class P2pRoom extends ChangeNotifier {
     notifyListeners();
     try {
       final sdp = await _rtc.answer(guestPeer!, offer['sdp'] as String);
+      _recordDiagnostic(
+        'guest remote offer applied and local answer generated',
+      );
       if (_disposed) return;
       answerLink = P2pLinks.link(
         kIsWeb
@@ -306,6 +368,7 @@ class P2pRoom extends ChangeNotifier {
       await accept;
       if (_disposed) return;
       _answered.add(id);
+      _recordDiagnostic('host remote answer applied');
       message = null;
       notifyListeners();
     } finally {
@@ -317,6 +380,11 @@ class P2pRoom extends ChangeNotifier {
 
   void _onEvent(String peer, String type, String raw) {
     if (_disposed) return;
+    if (type != 'message') {
+      _recordDiagnostic(
+        'transport event $type: ${type == 'ice' || type == 'diagnostic' || type == 'error' ? _redact(raw) : ''}',
+      );
+    }
     switch (type) {
       case 'open':
         _open.add(peer);
@@ -335,6 +403,8 @@ class P2pRoom extends ChangeNotifier {
         }
       case 'error':
         message = raw;
+      case 'ice':
+        networkDiagnostic = 'ICE: $raw';
       case 'diagnostic':
         networkDiagnostic = raw;
       case 'path':

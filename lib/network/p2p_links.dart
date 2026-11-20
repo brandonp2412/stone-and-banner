@@ -24,6 +24,17 @@ abstract final class P2pLinks {
     if (value.isEmpty || value.length > 30000) {
       throw const FormatException('Invalid or oversized P2P link.');
     }
+    // Native WebSocket LAN invites cannot be opened from a GitHub Pages
+    // browser. Reject them immediately instead of showing 'Connecting'.
+    if (RegExp(
+      r'^(?:(?:ws|wss|https?)://)?\d{1,3}(?:\.\d{1,3}){3}:\d+/(?:[0-9a-fA-F]{8}|room(?:/.*)?)$',
+    ).hasMatch(value)) {
+      throw const FormatException(
+        'That is a native-app LAN invite. It cannot connect to a browser. '
+        'On the host, open Multiplayer → Host game, then share the '
+        'WebRTC invitation link instead.',
+      );
+    }
     final fragment = Uri.tryParse(value)?.fragment ?? '';
     final raw = fragment.startsWith('p2p=')
         ? fragment.substring(4)

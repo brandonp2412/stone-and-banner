@@ -15,22 +15,95 @@
   const responses = new Set();
   const pendingForwards = new Map();
   let hosting = false;
+  const directAddressKey = "stone-banner-p2p-direct-address";
 
-  // Same-tab response navigation must preserve the authoritative host.
-  // Fragment-only URLs fire hashchange without reloading the document.
-  window.addEventListener("hashchange", () => {
-    if (!hosting || !location.hash.startsWith("#p2p=")) return;
+  // The browser may hide a WireGuard/LAN interface behind mDNS or omit it
+  // entirely. A user-supplied address advertises another route to the *same*
+  // browser UDP socket; it never introduces a signalling or gameplay server.
+  function validPrivateIPv4(value) {
+    if (typeof value !== "string" || !/^\d{1,3}(\.\d{1,3}){3}$/.test(value))
+      return false;
+    const a = value.split(".").map(Number);
+    if (a.some(n => n > 255) || a[3] === 0 || a[3] === 255) return false;
+    return a[0] === 10 || (a[0] === 172 && a[1] >= 16 && a[1] <= 31) ||
+      (a[0] === 192 && a[1] === 168) ||
+      (a[0] === 100 && a[1] >= 64 && a[1] <= 127);
+  }
+  let directAddress = "";
+  try {
+    const saved = localStorage.getItem(directAddressKey);
+    if (validPrivateIPv4(saved)) directAddress = saved;
+  } catch (_) { /* Private browsing may disallow persistence. */ }
+
+  function setDirectAddress(value) {
+    const address = String(value).trim();
+    if (address && !validPrivateIPv4(address))
+      throw Error("Use a reachable private IPv4 address (e.g. 10.x or 192.168.x.x).");
+    directAddress = address;
+    try {
+      if (address) localStorage.setItem(directAddressKey, address);
+      else localStorage.removeItem(directAddressKey);
+    } catch (_) { /* Still usable for the current tab. */ }
+  }
+
+  function descriptionWithDirectAddress(connection) {
+    const description = connection.localDescription;
+    if (!directAddress || !description?.sdp) return JSON.stringify(description);
+    const rows = description.sdp.split(/\r\n/);
+    const index = rows.findIndex(line => line.startsWith("a=candidate:") &&
+      / 1 udp /i.test(line) && / typ host(?: |$)/.test(line));
+    if (index < 0) return JSON.stringify(description);
+    const parts = rows[index].split(" ");
+    if (parts.length < 8) return JSON.stringify(description);
+    if (parts[4] === directAddress) return JSON.stringify(description);
+    // A distinct foundation makes this an additional, independently checked
+    // address. Preserve the *real* UDP socket port and ICE credentials.
+    parts[0] = "a=candidate:8717234";
+    parts[3] = String(Math.min(Number(parts[3]) - 1, 2113937150));
+    parts[4] = directAddress;
+    rows.splice(index + 1, 0, parts.join(" "));
+    return JSON.stringify({type: description.type, sdp: rows.join("\r\n")});
+  }
+
+  // Stop Flutter's hash router from consuming an answer as navigation, and
+  // retry delivery until the Dart host confirms setRemoteDescription succeeded.
+  window.addEventListener("hashchange", (event) => {
+    if (!location.hash.startsWith("#p2p=")) return;
     const link = location.href;
+    let type;
     try {
       const encoded = location.hash.substring("#p2p=".length);
       const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
-      const payload = JSON.parse(atob(base64));
-      if (payload?.type !== "answer") return;
+      type = JSON.parse(atob(base64))?.type;
+      if (type !== "offer" && type !== "answer") return;
     } catch (_) {
       return;
     }
+    event?.stopImmediatePropagation?.();
+    if (!hosting) {
+      // Opening a link into an already-open home/guest document is a same-page
+      // navigation. Reload so initialLink captures it and Flutter opens P2P.
+      location.reload();
+      return;
+    }
+    // A host must never be replaced with a guest invitation.
     history.replaceState(history.state, "", location.pathname + location.search);
-    for (const callback of responses) callback(link, "");
+    if (type === "offer") return;
+    const receiptId = crypto.randomUUID();
+    let remaining = 5;
+    const timer = setInterval(() => {
+      if (!pendingForwards.has(receiptId) || remaining-- <= 0) {
+        clearInterval(timer);
+        pendingForwards.delete(receiptId);
+        return;
+      }
+      for (const callback of responses) callback(link, receiptId);
+    }, 750);
+    pendingForwards.set(receiptId, () => {
+      pendingForwards.delete(receiptId);
+      clearInterval(timer);
+    });
+    for (const callback of responses) callback(link, receiptId);
   });
 
   // Cross-tab signalling uses an acknowledged same-origin BroadcastChannel.
@@ -61,6 +134,9 @@
   }
 
   function acknowledgeAnswer(id, accepted) {
+    // A response opened in the same tab must acknowledge locally; BroadcastChannel
+    // never delivers messages to the object that originally posted them.
+    pendingForwards.get(id)?.(!!accepted);
     if (responseChannel && id)
       responseChannel.postMessage({kind: "ack", id, accepted: !!accepted});
   }
@@ -94,8 +170,14 @@
     connection.ondatachannel = (event) => attachChannel(id, event.channel);
     connection.onconnectionstatechange = () => {
       const state = connection.connectionState;
-      if (state === "failed")
-        signal(id, "error", "Direct connection failed (NAT/firewall). No relay is configured. Try another network or reachable IPv6.");
+      if (state === "failed") {
+        const message = isHost && !connection.remoteDescription
+          ? "Host is awaiting the guest’s response link; this is not yet a network failure."
+          : isHost
+            ? "WebRTC ICE failed. This can be LAN mDNS discovery, a blocked UDP route, or an incomplete candidate list—not necessarily NAT. Copy diagnostics to investigate."
+            : "WebRTC ICE failed. Ensure the host applied your response link. If both are on Wi-Fi, mDNS/UDP discovery may be blocked. Copy diagnostics to investigate.";
+        signal(id, "error", message);
+      }
       if (state === "disconnected" || state === "closed") signal(id, "close");
     };
     if (isHost) attachChannel(id, connection.createDataChannel("stone-banner", {ordered: true}));
@@ -169,11 +251,16 @@
       const remote = stats.get(selected?.remoteCandidateId);
       if (!local || !remote) return;
       // Do not expose or log IP addresses.
-      const internet = [local.candidateType, remote.candidateType].some(
-        type => type === "srflx" || type === "prflx");
-      signal(id, "path", internet
-        ? "Direct encrypted P2P via NAT traversal (STUN-assisted)."
-        : "Direct encrypted P2P connection established.");
+      const usesPrivateRoute = [local, remote].every(candidate =>
+        candidate.candidateType === "host" || candidate.candidateType === "prflx") &&
+        [local, remote].some(candidate => validPrivateIPv4(candidate.address || candidate.ip));
+      const internet = [local, remote].some(candidate =>
+        candidate.candidateType === "srflx");
+      signal(id, "path", usesPrivateRoute
+        ? "Direct encrypted P2P over a private LAN/VPN route (no relay)."
+        : internet
+          ? "Direct encrypted P2P via public NAT traversal (STUN-assisted)."
+          : "Direct encrypted P2P connection established.");
     } catch (_) {
       signal(id, "path", "Direct encrypted P2P connection established.");
     }
@@ -184,7 +271,7 @@
     await connection.setLocalDescription(await connection.createOffer());
     const complete = await waitForCandidates(connection);
     summarizeCandidates(id, complete);
-    return JSON.stringify(connection.localDescription);
+    return descriptionWithDirectAddress(connection);
   }
   async function answer(id, remote) {
     const connection = peers.get(id).connection;
@@ -194,7 +281,7 @@
     await connection.setLocalDescription(await connection.createAnswer());
     const complete = await waitForCandidates(connection);
     summarizeCandidates(id, complete);
-    return JSON.stringify(connection.localDescription);
+    return descriptionWithDirectAddress(connection);
   }
   async function accept(id, remote) {
     const description = JSON.parse(remote);
@@ -202,9 +289,78 @@
     await peers.get(id).connection.setRemoteDescription(description);
   }
 
+  // Detailed, redacted connection diagnostics. Never include raw SDP, host IPs,
+  // ICE passwords or certificate fingerprints in a report copied for support.
+  function candidateDetails(description) {
+    const rows = (description?.sdp || "").split(/\r?\n/);
+    return rows.filter(row => row.startsWith("a=candidate:")).map(row => {
+      const parts = row.split(/\s+/);
+      const typeAt = parts.indexOf("typ");
+      const address = parts[4] || "";
+      return {
+        type: typeAt >= 0 ? parts[typeAt + 1] : "unknown",
+        protocol: (parts[2] || "").toLowerCase(),
+        family: address.endsWith(".local") ? "mDNS" : address.includes(":") ? "IPv6" : "IPv4",
+        mdns: address.endsWith(".local"),
+        privateIPv4: validPrivateIPv4(address),
+      };
+    });
+  }
+
+  async function diagnostics(id) {
+    const peer = peers.get(id);
+    if (!peer) return JSON.stringify({status: "no active peer connection"});
+    const connection = peer.connection;
+    const result = {
+      engine: "browser WebRTC",
+      connectionState: connection.connectionState,
+      iceConnectionState: connection.iceConnectionState,
+      iceGatheringState: connection.iceGatheringState,
+      signalingState: connection.signalingState,
+      dataChannelState: peer.channel?.readyState || "not created",
+      localDescription: connection.localDescription?.type || "none",
+      remoteDescription: connection.remoteDescription?.type || "none",
+      localCandidates: candidateDetails(connection.localDescription),
+      remoteCandidates: candidateDetails(connection.remoteDescription),
+      privateAddressHintConfigured: !!directAddress,
+      selectedPair: null,
+    };
+    try {
+      const stats = await connection.getStats();
+      let pair;
+      stats.forEach(item => {
+        if (item.type === "transport" && item.selectedCandidatePairId) {
+          pair = stats.get(item.selectedCandidatePairId);
+        }
+      });
+      if (!pair) {
+        stats.forEach(item => {
+          if (item.type === "candidate-pair" && item.state === "succeeded" && item.nominated) pair = item;
+        });
+      }
+      if (pair) {
+        const local = stats.get(pair.localCandidateId);
+        const remote = stats.get(pair.remoteCandidateId);
+        result.selectedPair = {
+          state: pair.state,
+          nominated: !!pair.nominated,
+          rttMs: typeof pair.currentRoundTripTime === "number"
+            ? Math.round(pair.currentRoundTripTime * 1000) : null,
+          localType: local?.candidateType || null,
+          remoteType: remote?.candidateType || null,
+          localProtocol: local?.protocol || null,
+          remoteProtocol: remote?.protocol || null,
+        };
+      }
+    } catch (error) {
+      result.statsError = String(error).slice(0, 180);
+    }
+    return JSON.stringify(result);
+  }
+
   window.stoneP2p = {
     initialLink() { return initialLink; },
-    create, offer, answer, accept,
+    create, offer, answer, accept, diagnostics,
     send(id, message) {
       const channel = peers.get(id)?.channel;
       if (channel?.readyState !== "open") throw Error("Peer not connected.");
@@ -222,6 +378,8 @@
     forwardAnswer,
     acknowledgeAnswer,
     setHosting(value) { hosting = !!value; },
+    directAddress() { return directAddress; },
+    setDirectAddress,
   };
   responseChannel?.addEventListener("message", (event) => {
     const data = event.data;

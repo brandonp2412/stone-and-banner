@@ -7,6 +7,7 @@ import '../network/p2p_links.dart';
 import '../network/p2p_room.dart';
 import '../network/p2p_transport.dart';
 import 'match_screen.dart';
+import 'lan_room_page.dart';
 
 class P2pRoomPage extends StatefulWidget {
   const P2pRoomPage({super.key});
@@ -19,6 +20,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   final name = TextEditingController(text: 'Host');
   final answerField = TextEditingController();
   final inviteField = TextEditingController();
+  final directAddress = TextEditingController();
   Map<String, dynamic>? incoming;
   String? parseError;
   int seats = 3;
@@ -45,6 +47,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   void initState() {
     super.initState();
     room = P2pRoom()..addListener(_refresh);
+    if (kIsWeb) directAddress.text = P2pTransport.directAddress();
     final incomingLink = P2pTransport.initialLink();
     if (incomingLink != null) {
       try {
@@ -89,8 +92,81 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     name.dispose();
     answerField.dispose();
     inviteField.dispose();
+    directAddress.dispose();
     super.dispose();
   }
+
+  Future<void> _editDirectAddress() async {
+    directAddress.text = P2pTransport.directAddress();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Private LAN / WireGuard route'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Optional: enter this device’s private IPv4 address reachable '
+              'by the other player. This can connect browsers over a shared '
+              'WireGuard or LAN network without a relay. Set it on both devices '
+              'before generating invitations and responses. The address is '
+              'included in the links you share. Restart pairing after changing it. '
+              'On iPhone, find your IP under Settings → Wi-Fi → ⓘ → IP Address.',
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: directAddress,
+              keyboardType: TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'This device’s Wi-Fi IPv4 address',
+                hintText: '10.0.0.2',
+                border: OutlineInputBorder(),
+                helperText: 'Optional. Use your own IP, not the host’s.',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              try {
+                P2pTransport.setDirectAddress(directAddress.text);
+                Navigator.pop(dialogContext);
+              } on Object catch (e) {
+                ScaffoldMessenger.of(dialogContext)
+                    .showSnackBar(SnackBar(content: Text('$e')));
+              }
+            },
+            child: const Text('Save LAN address'),
+          ),
+        ],
+      ),
+    );
+    if (mounted) {
+      directAddress.text = P2pTransport.directAddress();
+      setState(() {});
+    }
+  }
+
+  Widget _directAddressAction() => kIsWeb
+      ? Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _editDirectAddress,
+            icon: const Icon(Icons.vpn_lock_outlined, size: 18),
+            label: Text(
+              directAddress.text.isEmpty
+                  ? 'Same Wi-Fi not connecting? Set your device’s LAN IP'
+                  : 'LAN address configured: ${directAddress.text}',
+            ),
+          ),
+        )
+      : const SizedBox.shrink();
 
   Widget _copy(String label, String link) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -115,6 +191,38 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     ],
   );
 
+  bool _copyingDiagnostics = false;
+
+  Future<void> _copyDiagnostics() async {
+    if (_copyingDiagnostics) return;
+    setState(() => _copyingDiagnostics = true);
+    try {
+      final report = await room.diagnosticReport(uiError: parseError);
+      await Clipboard.setData(ClipboardData(text: report));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Connection diagnostics copied')),
+        );
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => parseError = 'Could not copy diagnostics: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _copyingDiagnostics = false);
+    }
+  }
+
+  Widget _copyDiagnosticsButton() => OutlinedButton.icon(
+    onPressed: _copyingDiagnostics ? null : _copyDiagnostics,
+    icon: const Icon(Icons.content_copy, size: 18),
+    label: Text(
+      _copyingDiagnostics
+          ? 'Collecting diagnostics…'
+          : 'Copy connection diagnostics',
+    ),
+  );
+
   Widget _pane(List<Widget> children) => Center(
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 590),
@@ -132,19 +240,18 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
           const SizedBox(height: 8),
           const Text(
             'Host directly from this device. No game server or account required. '
-            'Players exchange an invitation and response link over chat to establish '
-            'an encrypted WebRTC connection; some networks block direct connections.',
+            'To connect, your friend opens your invite and sends the response '
+            'back to you. Apply their response in this host lobby to finish pairing.',
           ),
           if (kIsWeb) ...[
             const SizedBox(height: 8),
             const Text(
-              'Browsers cannot listen for LAN connections like the Android and '
-              'Linux apps. This mode uses peer-to-peer WebRTC instead, including '
-              'when both devices are on the same Wi-Fi.',
+              'Browser and native apps use peer-to-peer WebRTC here. '
+              'The connection can stay entirely on your local Wi-Fi.',
             ),
           ],
           const SizedBox(height: 14),
-          if (!kIsWeb && incoming == null) ...[
+          if (incoming == null) ...[
             const SizedBox(height: 8),
             TextField(
               controller: inviteField,
@@ -170,6 +277,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
               border: OutlineInputBorder(),
             ),
           ),
+          _directAddressAction(),
           if (incoming?['type'] == 'offer') ...[
             const Text(
               'Invitation received. Join to generate a response link.',
@@ -215,8 +323,24 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
                 }
               },
               icon: const Icon(Icons.groups),
-              label: Text(kIsWeb ? 'Host game' : 'Host P2P match'),
+              label: Text(
+                kIsWeb
+                    ? 'Host game'
+                    : 'Host game (Android, iPhone, web, Linux)',
+              ),
             ),
+            if (!kIsWeb) ...[
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const LanRoomPage()),
+                ),
+                icon: const Icon(Icons.settings_ethernet),
+                label: const Text(
+                  'Advanced: native-app LAN rooms (Android/Linux only)',
+                ),
+              ),
+            ],
           ],
         ]);
 
@@ -313,6 +437,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
         'Friends always keep their own seats.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
+      _directAddressAction(),
       const SizedBox(height: 12),
       FilledButton.tonalIcon(
         onPressed: room.preparing || room.started
@@ -465,6 +590,8 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
         ),
       ),
     const SizedBox(height: 12),
+    _copyDiagnosticsButton(),
+    const SizedBox(height: 12),
     const Text(
       'Public STUN only discovers addresses; gameplay never traverses a '
       'relay. If blocked by CGNAT or restrictive firewalls, direct '
@@ -489,6 +616,11 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
             MaterialBanner(
               content: Text(parseError ?? room.message!),
               actions: [
+                TextButton.icon(
+                  onPressed: _copyingDiagnostics ? null : _copyDiagnostics,
+                  icon: const Icon(Icons.copy),
+                  label: const Text('Copy diagnostics'),
+                ),
                 TextButton(
                   onPressed: () => setState(() {
                     parseError = null;

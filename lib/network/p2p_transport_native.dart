@@ -33,6 +33,10 @@ class P2pTransport {
   static Future<bool> forwardAnswer(String message) async => false;
   static void acknowledgeAnswer(String id, bool accepted) {}
   static void setHosting(bool hosting) {}
+  // Native WebRTC enumerates LAN and WireGuard interfaces itself. Browsers
+  // need an explicit private-address hint when those interfaces are hidden.
+  static String directAddress() => '';
+  static void setDirectAddress(String address) {}
 
   // Native applications receive links by pasting them into the lobby.
   void listenAnswers(void Function(String link, String receiptId) callback) {}
@@ -85,13 +89,17 @@ class P2pTransport {
         _signal(
           id,
           'error',
-          'Direct connection failed (NAT/firewall). No relay configured.',
+          'WebRTC ICE failed; check local UDP and candidate discovery. '
+              'Copy diagnostics to investigate; this is not necessarily NAT.',
         );
       } else if (state ==
               RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         _signal(id, 'close');
       }
+    };
+    connection.onIceConnectionState = (state) {
+      _signal(id, 'ice', state.toString());
     };
     connection.onIceGatheringState = (state) {
       if (state == RTCIceGatheringState.RTCIceGatheringStateComplete &&
@@ -188,6 +196,66 @@ class P2pTransport {
       throw FormatException('Invalid WebRTC $expected.');
     }
     return RTCSessionDescription(data['sdp'] as String, expected);
+  }
+
+  static List<Map<String, Object>> _candidateDetails(String? sdp) {
+    if (sdp == null) return [];
+    return [
+      for (final row in sdp.split(RegExp(r'\r?\n')))
+        if (row.startsWith('a=candidate:')) _candidateDetail(row),
+    ];
+  }
+
+  static Map<String, Object> _candidateDetail(String row) {
+    final words = row.split(RegExp(r'\s+'));
+    final typeIndex = words.indexOf('typ');
+    final address = words.length > 4 ? words[4] : '';
+    final parts = address.split('.');
+    final privateIp =
+        parts.length == 4 &&
+        (parts[0] == '10' ||
+            parts[0] == '192' && parts[1] == '168' ||
+            parts[0] == '172' &&
+                (int.tryParse(parts[1]) ?? 0) >= 16 &&
+                (int.tryParse(parts[1]) ?? 0) <= 31);
+    return {
+      'type': typeIndex >= 0 && typeIndex + 1 < words.length
+          ? words[typeIndex + 1]
+          : 'unknown',
+      'protocol': words.length > 2 ? words[2].toLowerCase() : 'unknown',
+      'family': address.endsWith('.local')
+          ? 'mDNS'
+          : address.contains(':')
+          ? 'IPv6'
+          : 'IPv4',
+      'mdns': address.endsWith('.local'),
+      'privateIPv4': privateIp,
+    };
+  }
+
+  /// Redacted WebRTC diagnostics for support. Never include raw SDP/IP/ICE keys.
+  Future<String> diagnostics(String id) async {
+    final peer = _peers[id];
+    if (peer == null) {
+      return jsonEncode({'status': 'no active peer connection'});
+    }
+    final connection = peer.connection;
+    final local = await connection.getLocalDescription();
+    final remote = await connection.getRemoteDescription();
+    return jsonEncode({
+      'engine': 'flutter_webrtc native',
+      'iceConnectionState':
+          connection.iceConnectionState?.toString() ?? 'unknown',
+      'iceGatheringState':
+          connection.iceGatheringState?.toString() ?? 'unknown',
+      'signalingState': connection.signalingState?.toString() ?? 'unknown',
+      'connectionState': connection.connectionState?.toString() ?? 'unknown',
+      'dataChannelState': peer.channel?.state?.toString() ?? 'not created',
+      'localDescription': local?.type ?? 'none',
+      'remoteDescription': remote?.type ?? 'none',
+      'localCandidates': _candidateDetails(local?.sdp),
+      'remoteCandidates': _candidateDetails(remote?.sdp),
+    });
   }
 
   void send(String id, String message) {

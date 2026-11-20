@@ -11,6 +11,8 @@ external JSPromise<JSString> _offer(JSString id);
 external JSPromise<JSString> _answer(JSString id, JSString remote);
 @JS('stoneP2p.accept')
 external JSPromise<JSAny?> _accept(JSString id, JSString remote);
+@JS('stoneP2p.diagnostics')
+external JSPromise<JSString> _diagnostics(JSString id);
 @JS('stoneP2p.send')
 external void _send(JSString id, JSString message);
 @JS('stoneP2p.close')
@@ -25,6 +27,12 @@ external JSPromise<JSBoolean> _forwardAnswer(JSString message);
 external void _acknowledgeAnswer(JSString id, JSBoolean accepted);
 @JS('stoneP2p.setHosting')
 external void _setHosting(JSBoolean hosting);
+
+@JS('stoneP2p.directAddress')
+external JSString _directAddress();
+
+@JS('stoneP2p.setDirectAddress')
+external void _setDirectAddress(JSString address);
 
 class P2pTransport {
   static String? initialLink() {
@@ -63,6 +71,9 @@ class P2pTransport {
     await _accept(id.toJS, answer.toJS).toDart;
   }
 
+  Future<String> diagnostics(String id) async =>
+      (await _diagnostics(id.toJS).toDart).toDart;
+
   void send(String id, String message) => _send(id.toJS, message.toJS);
   void close(String id) {
     _close(id.toJS);
@@ -90,4 +101,7 @@ class P2pTransport {
   static void acknowledgeAnswer(String id, bool accepted) =>
       _acknowledgeAnswer(id.toJS, accepted.toJS);
   static void setHosting(bool hosting) => _setHosting(hosting.toJS);
+  static String directAddress() => _directAddress().toDart;
+  static void setDirectAddress(String address) =>
+      _setDirectAddress(address.toJS);
 }

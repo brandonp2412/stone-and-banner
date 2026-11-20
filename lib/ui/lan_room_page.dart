@@ -305,7 +305,9 @@ class _LanRoomPageState extends State<LanRoomPage> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Everyone connects directly over the same local network. No account or separate server.',
+            'Native LAN rooms only: Android and Linux apps can join. '
+            'For an iPhone, iPad, or web browser, return to Multiplayer '
+            'and host a WebRTC game instead.',
           ),
           if (kIsWeb) ...[
             const SizedBox(height: 8),

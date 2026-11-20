@@ -15,7 +15,6 @@ import 'replay_codes.dart';
 import 'ui/match_screen.dart';
 import 'ui/game_notice.dart';
 import 'ui/resource_icon.dart';
-import 'ui/lan_room_page.dart';
 import 'ui/p2p_room_page.dart';
 import 'network/p2p_transport.dart';
 
@@ -890,16 +889,12 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                       onContinue: savedReplay == null ? null : resume,
                       onRules: () => setState(() => page = Page.rules),
                       onImport: () => importMatch(context),
-                      onP2p: kIsWeb ? null : () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const P2pRoomPage(),
-                        ),
-                      ),
+                      onP2p: null,
+                      // The primary multiplayer button is interoperable
+                      // across browsers, Android, and Linux via WebRTC.
                       onLan: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => kIsWeb
-                              ? const P2pRoomPage()
-                              : const LanRoomPage(),
+                          builder: (_) => const P2pRoomPage(),
                         ),
                       ),
                     ),
@@ -1348,7 +1343,7 @@ class _LandingHall extends StatelessWidget {
                     TextButton.icon(
                       onPressed: onLan,
                       icon: const Icon(Icons.groups_outlined, size: 18),
-                      label: Text(kIsWeb ? 'Host / join multiplayer' : 'LAN multiplayer'),
+                      label: const Text('Host / join multiplayer'),
                     ),
                     TextButton.icon(
                       onPressed: onImport,
