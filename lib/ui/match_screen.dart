@@ -2698,27 +2698,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         12,
   );
 
-  String get _compactInstruction {
-    if (s.phase == MatchPhase.roll) return 'Roll for goods';
-    if (s.phase == MatchPhase.finished) return 'Match complete';
-    if (s.phase == MatchPhase.actions && move == _Move.inspect) {
-      return 'Your realm';
-    }
-    return _instruction;
-  }
-
-  String? get _compactHint => switch (s.phase) {
-    MatchPhase.setupVillage => 'Tap a glowing junction',
-    MatchPhase.setupRoad => 'Tap glowing edge',
-    MatchPhase.bandit => 'Choose another hex',
-    MatchPhase.invasion =>
-      s.invasionAid > 0
-          ? 'Emergency aid +${s.invasionAid}'
-          : 'Review shared defence',
-    MatchPhase.actions when move != _Move.inspect => 'Tap highlighted target',
-    _ => null,
-  };
-
   Offset _eventAnchor(Size size) {
     final g = BoardGeometry(size);
     if (s.events.isEmpty) return g.center;
@@ -2899,84 +2878,54 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           },
         ),
       ),
-      // Keep phase guidance and fleet status in one opaque, bounded HUD.
-      // Separate absolute-positioned labels previously drew through each
-      // other and across the upper-left map tiles.
+      // A minimal raid label leaves more of the mobile map unobscured.
+      // Desktop retains the detailed round and invasion status.
       Positioned(
         top: 8,
         left: 10,
         child: IgnorePointer(
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minWidth: mobileFullscreen
-                  ? math.min(160, MediaQuery.sizeOf(context).width * .30)
-                  : 230,
-              maxWidth: mobileFullscreen
-                  ? math.min(160, MediaQuery.sizeOf(context).width * .30)
-                  : 230,
+              minWidth: mobileFullscreen ? 0 : 230,
+              maxWidth: mobileFullscreen ? 170 : 230,
             ),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              key: mobileFullscreen
+                  ? const ValueKey('mobile-raid-defense-hud')
+                  : null,
+              padding: mobileFullscreen
+                  ? const EdgeInsets.symmetric(horizontal: 9, vertical: 5)
+                  : const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
                 color: const Color(0xf014242b),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xff365159)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'ROUND ${s.round}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xffc4d2cf),
-                      fontSize: 10,
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  InvasionMeter(state: s, compact: mobileFullscreen),
-                  if (mobileFullscreen) ...[
-                    const SizedBox(height: 5),
-                    SizedBox(
-                      height:
-                          MediaQuery.textScalerOf(context).scale(13) * 1.1 * 2,
-                      child: Text(
-                        _compactInstruction,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          height: 1.1,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xffefd6a3),
-                        ),
+              child: mobileFullscreen
+                  ? const Text(
+                      'Raid Defense',
+                      style: TextStyle(
+                        color: Color(0xffefd6a3),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
                       ),
-                    ),
-                    ...[
-                      const SizedBox(height: 3),
-                      SizedBox(
-                        height:
-                            MediaQuery.textScalerOf(context).scale(10) *
-                            1.2 *
-                            2,
-                        child: Text(
-                          _compactHint ?? '',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'ROUND ${s.round}',
                           style: const TextStyle(
+                            color: Color(0xffc4d2cf),
                             fontSize: 10,
-                            height: 1.2,
-                            color: Color(0xffc6d5d5),
                           ),
                         ),
-                      ),
-                    ],
-                  ],
-                ],
-              ),
+                        const SizedBox(height: 6),
+                        InvasionMeter(state: s),
+                      ],
+                    ),
             ),
           ),
         ),
@@ -3139,7 +3088,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   });
                 },
                 child: Container(
-                  constraints: BoxConstraints(minHeight: _compact ? 48 : 54),
+                  constraints: BoxConstraints(
+                    minHeight:
+                        isCompactLandscape(context) &&
+                            MediaQuery.sizeOf(context).width < 900
+                        ? 44
+                        : _compact
+                        ? 48
+                        : 54,
+                  ),
                   decoration: BoxDecoration(
                     color: index == 2
                         ? Color.lerp(
@@ -4459,10 +4416,12 @@ class _TradeComposerState extends State<_TradeComposer> {
               ],
             ),
             const SizedBox(height: 8),
-          ] else ...[
+          ] else if (widget.onKindSelected == null) ...[
             Text(
               bank
                   ? 'Rate $rate:$receipt · Bank stock: $bankAvailable'
+                  : target == -1
+                  ? 'Everyone can accept. Private hands stay hidden.'
                   : 'Only ${s.players[target].id} can accept. Private hands stay hidden.',
               style: const TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
             ),
