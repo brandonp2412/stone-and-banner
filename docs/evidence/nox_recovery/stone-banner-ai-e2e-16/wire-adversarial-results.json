@@ -1,0 +1,15 @@
+{
+  "utc": "2026-11-04T09:56:25.656634+00:00",
+  "invalid_join": {
+    "op": "error",
+    "message": "Room not found."
+  },
+  "room_created": true,
+  "concurrent_attempts": {
+    "owner_ok": true,
+    "guest_ok": false,
+    "owner_version": 1,
+    "guest_error": "Stale view; resynchronise."
+  },
+  "third_observed_version": 1
+}

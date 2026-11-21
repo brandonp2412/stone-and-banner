@@ -1,0 +1,148 @@
+{
+  "firstSeed": 14000,
+  "lastSeed": 14119,
+  "seedCountPerCohort": 120,
+  "roundCap": 90,
+  "totalGames": 480,
+  "failures": 0,
+  "twoSeatSupported": false,
+  "twoSeatError": "Bad state: Choose 3 or 4 players.",
+  "scope": "pure Dart reducer, 3–4 seats; random legal policy simulates input, not actual humans",
+  "cohorts": [
+    {
+      "seats": 3,
+      "mode": "allAi",
+      "games": 120,
+      "finished": 111,
+      "capped": 9,
+      "winsByOpeningSeat": [
+        51,
+        32,
+        28
+      ],
+      "meanScoreByOpeningSeat": [
+        12.075,
+        10.641666666666667,
+        11.133333333333333
+      ],
+      "firstSeatWinsOfFinished": 0.4594594594594595,
+      "simulatedHumanWins": null,
+      "meanSteps": 943.3083333333333,
+      "maxMatchMs": 509,
+      "scoreTiesObserved": 34952,
+      "roadTiesObserved": 197
+    },
+    {
+      "seats": 3,
+      "mode": "simulatedHuman",
+      "games": 120,
+      "finished": 100,
+      "capped": 20,
+      "winsByOpeningSeat": [
+        35,
+        36,
+        29
+      ],
+      "meanScoreByOpeningSeat": [
+        8.733333333333333,
+        9.308333333333334,
+        9.158333333333333
+      ],
+      "firstSeatWinsOfFinished": 0.35,
+      "simulatedHumanWins": 0,
+      "meanSteps": 1072.0333333333333,
+      "maxMatchMs": 515,
+      "scoreTiesObserved": 32719,
+      "roadTiesObserved": 133
+    },
+    {
+      "seats": 4,
+      "mode": "allAi",
+      "games": 120,
+      "finished": 120,
+      "capped": 0,
+      "winsByOpeningSeat": [
+        36,
+        23,
+        30,
+        31
+      ],
+      "meanScoreByOpeningSeat": [
+        10.825,
+        9.691666666666666,
+        9.591666666666667,
+        9.958333333333334
+      ],
+      "firstSeatWinsOfFinished": 0.3,
+      "simulatedHumanWins": null,
+      "meanSteps": 816.5916666666667,
+      "maxMatchMs": 537,
+      "scoreTiesObserved": 30383,
+      "roadTiesObserved": 157
+    },
+    {
+      "seats": 4,
+      "mode": "simulatedHuman",
+      "games": 120,
+      "finished": 118,
+      "capped": 2,
+      "winsByOpeningSeat": [
+        37,
+        20,
+        23,
+        38
+      ],
+      "meanScoreByOpeningSeat": [
+        9.608333333333333,
+        8.416666666666666,
+        8.6,
+        9.7
+      ],
+      "firstSeatWinsOfFinished": 0.3135593220338983,
+      "simulatedHumanWins": 0,
+      "meanSteps": 904.8833333333333,
+      "maxMatchMs": 448,
+      "scoreTiesObserved": 34530,
+      "roadTiesObserved": 172
+    }
+  ],
+  "eventTypes": {
+    "village": 6997,
+    "road": 11259,
+    "roll": 84301,
+    "offer": 74609,
+    "end": 83924,
+    "answer": 55921,
+    "upgrade": 10325,
+    "recruit": 3975,
+    "bandit": 14105,
+    "tactical": 22304,
+    "invasion": 11147,
+    "activate": 4208,
+    "bank": 29016,
+    "promote": 3889,
+    "develop": 8296,
+    "cardPlay": 8513,
+    "knightMove": 2326,
+    "fortify": 1003,
+    "cardDiscard": 2743,
+    "withdraw": 9557
+  },
+  "tacticalResponsesByWindow": {
+    "invasion": 22300,
+    "governance": 4
+  },
+  "decisionUs": {
+    "p50": 125,
+    "p95": 538,
+    "p99": 717,
+    "max": 13153
+  },
+  "applicationUs": {
+    "p50": 19,
+    "p95": 68,
+    "p99": 117,
+    "max": 7067
+  },
+  "wallClockMs": 120150
+}
