@@ -95,6 +95,8 @@ class P2pTransport {
     void report(RTCDataChannelState state) {
       if (state == RTCDataChannelState.RTCDataChannelOpen && !reportedOpen) {
         reportedOpen = true;
+        peer.failureTimer?.cancel();
+        peer.failureTimer = null;
         _signal(id, 'open');
         _signal(
           id,
@@ -145,12 +147,37 @@ class P2pTransport {
     connection.onDataChannel = (channel) => _attach(id, channel);
     connection.onConnectionState = (state) {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-        _signal(
-          id,
-          'error',
-          'WebRTC ICE failed; check local UDP and candidate discovery. '
-              'Copy diagnostics to investigate; this is not necessarily NAT.',
-        );
+        if (host) {
+          if (peer.remoteApplied) {
+            _signal(
+              id,
+              'error',
+              'WebRTC ICE failed after the guest response. '
+                  'Copy diagnostics for local/remote ICE candidates and relay availability.',
+            );
+          }
+        } else {
+          // Guest ICE checks can fail while the host has not yet applied the
+          // answer. Wait before signalling an error; a late host response can
+          // establish the same peer connection without restarting the lobby.
+          peer.failureTimer ??= Timer(const Duration(seconds: 45), () {
+            peer.failureTimer = null;
+            if (_peers[id] != peer ||
+                peer.channel?.state == RTCDataChannelState.RTCDataChannelOpen) {
+              return;
+            }
+            _signal(
+              id,
+              'error',
+              'Still waiting for the host to apply your '
+                  'response link, or the ICE path is blocked. Copy diagnostics.',
+            );
+          });
+        }
+      } else if (state ==
+          RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        peer.failureTimer?.cancel();
+        peer.failureTimer = null;
       } else if (state ==
               RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
@@ -260,6 +287,7 @@ class P2pTransport {
     final peer = _peers[id];
     if (peer == null) throw StateError('Invitation expired or replaced.');
     await peer.connection.setRemoteDescription(_decode(answer, 'answer'));
+    peer.remoteApplied = true;
   }
 
   RTCSessionDescription _decode(String raw, String expected) {
@@ -351,6 +379,7 @@ class P2pTransport {
     final peer = _peers.remove(id);
     if (peer == null) return;
     peer.publicCandidateTimer?.cancel();
+    peer.failureTimer?.cancel();
     if (!peer.gathered.isCompleted) peer.gathered.complete();
     unawaited(peer.channel?.close());
     unawaited(peer.connection.close());
@@ -370,6 +399,8 @@ class _NativePeer {
   final Completer<void> gathered = Completer<void>();
   RTCDataChannel? channel;
   Timer? publicCandidateTimer;
+  Timer? failureTimer;
+  bool remoteApplied = false;
   bool relayConfigured = false;
   String? relayConfigError;
 }

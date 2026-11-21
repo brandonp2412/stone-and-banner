@@ -516,10 +516,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     _copyDiagnosticsButton(),
     const SizedBox(height: 12),
     const Text(
-      'Public STUN only discovers addresses; gameplay never traverses a '
-      'relay. If blocked by CGNAT or restrictive firewalls, direct '
-      'connections cannot be guaranteed. Your public IP may be visible '
-      'to your peers and STUN operators.',
+      'WebRTC tries a direct connection first. Restrictive NATs can use '
+      'the encrypted free TURN relay; if its monthly quota is exhausted, '
+      'only direct connections remain. Your IP may be visible to peers '
+      'and STUN servers.',
     ),
   ]);
 

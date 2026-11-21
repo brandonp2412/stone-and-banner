@@ -142,6 +142,8 @@
     if (!peer) return;
     peer.channel = channel;
     channel.onopen = () => {
+      clearTimeout(peer.failureTimer);
+      peer.failureTimer = null;
       signal(id, "open");
       reportDirectPath(id);
     };
@@ -158,7 +160,7 @@
     if (peers.has(id)) throw Error("Peer already exists.");
     const connection = new RTCPeerConnection({iceServers: directIceServers, iceTransportPolicy: "all"});
     const peer = {connection, callback, channel: null,
-      relayConfigured: false, relayConfigError: null};
+      relayConfigured: false, relayConfigError: null, failureTimer: null};
     peer.configReady = relayConfig().then(servers => {
       if (peers.get(id) !== peer) return;
       connection.setConfiguration({iceServers: servers, iceTransportPolicy: "all"});
@@ -172,11 +174,22 @@
     connection.onconnectionstatechange = () => {
       const state = connection.connectionState;
       if (state === "failed") {
-        const message = isHost && !connection.remoteDescription
-          ? "Host is awaiting the guest response link; no network handshake yet."
-          : "WebRTC ICE failed. Check that the host applied the guest response, " +
-            "and copy diagnostics for local/remote candidates and relay availability.";
-        signal(id, "error", message);
+        if (!isHost) {
+          // The guest can fail preliminary ICE checks before the host has even
+          // applied the answer link. Do not report that as a final NAT failure.
+          peer.failureTimer ??= setTimeout(() => {
+            peer.failureTimer = null;
+            if (peers.get(id) !== peer || peer.channel?.readyState === "open") return;
+            signal(id, "error", "Guest still cannot connect. Confirm the host " +
+              "applied your response link, then copy diagnostics for ICE/relay details.");
+          }, 45000);
+        } else if (connection.remoteDescription) {
+          signal(id, "error", "WebRTC ICE failed after the guest response was applied. " +
+            "Copy diagnostics for local/remote candidates and relay availability.");
+        }
+      } else if (state === "connected") {
+        clearTimeout(peer.failureTimer);
+        peer.failureTimer = null;
       }
       if (state === "disconnected" || state === "closed") signal(id, "close");
     };
@@ -398,6 +411,7 @@
       const peer = peers.get(id);
       if (!peer) return;
       peers.delete(id);
+      clearTimeout(peer.failureTimer);
       peer.channel?.close();
       peer.connection.close();
     },

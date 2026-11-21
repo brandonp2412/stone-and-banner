@@ -150,6 +150,32 @@ test('control-only WireGuard candidates are excluded from shared offers', async 
   browser.stoneP2p.close('cellular-player');
 });
 
+test('guest does not report an ICE failure before host applies the response', async () => {
+  const {browser, connections} = browserHarness(true);
+  const events = [];
+  browser.stoneP2p.create('pending-guest', false, (event, data) => events.push([event, data]));
+  connections[0].connectionState = 'failed';
+  connections[0].onconnectionstatechange();
+  assert.ok(!events.some(([event]) => event === 'error'), 'host has not received reply yet');
+  connections[0].connectionState = 'connected';
+  connections[0].onconnectionstatechange();
+  browser.stoneP2p.close('pending-guest');
+  assert.ok(!events.some(([event]) => event === 'error'));
+});
+
+test('host errors only after applying a guest response and an ICE failure', async () => {
+  const {browser, connections} = browserHarness(true);
+  const events = [];
+  browser.stoneP2p.create('pending-host', true, (event, data) => events.push([event, data]));
+  connections[0].connectionState = 'failed';
+  connections[0].onconnectionstatechange();
+  assert.ok(!events.some(([event]) => event === 'error'));
+  connections[0].remoteDescription = {type: 'answer', sdp: 'v=0\r\n'};
+  connections[0].onconnectionstatechange();
+  assert.ok(events.some(([event, data]) => event === 'error' && data.includes('ICE failed')));
+  browser.stoneP2p.close('pending-host');
+});
+
 test('support diagnostics include candidate types, never raw IPs or SDP', async () => {
   const {browser} = browserHarness(false);
   browser.stoneP2p.create('diagnostic-test', true, () => {});
