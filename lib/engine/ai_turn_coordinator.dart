@@ -59,26 +59,30 @@ class AiTurnCoordinator {
   int _generation = 0;
   Future<void> _work = Future<void>.value();
 
+  /// Only *computer* responders pre-empt the active seat. Human recipients
+  /// must never freeze a bot's turn until the 90-second idle deadline; host
+  /// controllers may provide a short bounded human-response window instead.
   static int actingSeat(MatchState state, bool Function(int) isComputerSeat) {
     if (state.tactical == null && state.phase == MatchPhase.actions) {
       for (final offer in state.offers) {
-        if (offer.proposer == state.active) {
-          if (offer.target == -1) {
-            // Let a human see a computer's broadcast before bots claim it.
-            if (isComputerSeat(offer.proposer)) {
-              for (var seat = 0; seat < state.players.length; seat++) {
-                if (!isComputerSeat(seat) && offer.canRespond(seat)) {
-                  return seat;
-                }
-              }
-            }
-            for (var seat = 0; seat < state.players.length; seat++) {
-              if (isComputerSeat(seat) && offer.canRespond(seat)) return seat;
-            }
-          } else if (isComputerSeat(offer.target) ||
-              isComputerSeat(offer.proposer)) {
-            return offer.target;
+        if (offer.proposer != state.active) continue;
+        if (offer.target == -1) {
+          // Give humans first refusal on a computer's broadcast. The room
+          // scheduler owns the bounded response period, then the bot resumes.
+          // Otherwise a second bot could instantly accept before the human
+          // even receives the trade proposal.
+          if (isComputerSeat(offer.proposer) &&
+              List.generate(state.players.length, (seat) => seat).any(
+                (seat) => !isComputerSeat(seat) && offer.canRespond(seat),
+              )) {
+            return state.active;
           }
+          for (var seat = 0; seat < state.players.length; seat++) {
+            if (isComputerSeat(seat) && offer.canRespond(seat)) return seat;
+          }
+        } else if (isComputerSeat(offer.target) &&
+            offer.canRespond(offer.target)) {
+          return offer.target;
         }
       }
     }
@@ -123,10 +127,15 @@ class AiTurnCoordinator {
 
   Future<void> _drive(int ticket) async {
     var events = 0;
+    int? countedTurn;
     try {
       while (!_paused && ticket == _generation) {
         final before = read();
         if (before == null || before.phase == MatchPhase.finished) return;
+        if (countedTurn != before.turnSerial) {
+          countedTurn = before.turnSerial;
+          events = 0;
+        }
         final seat = actingSeat(before, isComputerSeat);
         final immediateReply = seat != (before.actingSeat);
         if (!isComputerSeat(seat)) {
@@ -134,7 +143,9 @@ class AiTurnCoordinator {
           return;
         }
         if (events >= maxEventsPerRun) {
-          throw StateError('Computer move limit reached. Resume to continue.');
+          throw StateError(
+            'Computer exceeded the safe action limit for this turn.',
+          );
         }
 
         // Everyone evaluates the same broadcast independently. Present the
@@ -173,7 +184,7 @@ class AiTurnCoordinator {
             final ordered = [...declines, ?winner];
             if (events + ordered.length > maxEventsPerRun) {
               throw StateError(
-                'Computer move limit reached. Resume to continue.',
+                'Computer exceeded the safe action limit for this turn.',
               );
             }
             await _presentationDelay();

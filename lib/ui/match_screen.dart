@@ -63,8 +63,7 @@ class MatchView extends StatefulWidget {
     required this.state,
     required this.onEvent,
     this.observing = false,
-    this.automationError,
-    this.onResumeAutomation,
+    this.tradeReplyAllowed = false,
     this.online = false,
     this.onlineView,
     this.viewingSeat,
@@ -84,8 +83,9 @@ class MatchView extends StatefulWidget {
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
   final bool observing;
-  final String? automationError;
-  final VoidCallback? onResumeAutomation;
+
+  /// Off-turn trade recipients can answer offers without acquiring turn control.
+  final bool tradeReplyAllowed;
   final bool online;
   final Map<String, dynamic>? onlineView;
   final int? viewingSeat;
@@ -548,6 +548,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   }
 
   void send(MatchEvent event) {
+    final isTradeResponse =
+        event is RespondTrade ||
+        (event is ProposeTrade && event.counterOf != null);
+    if (widget.observing && !(widget.tradeReplyAllowed && isTradeResponse)) {
+      return;
+    }
+    if (widget.online && s.actingSeat != viewerSeat && !isTradeResponse) {
+      return;
+    }
     widget.onEvent(event);
     setState(() {
       choice = _Move.inspect;
@@ -2242,11 +2251,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               ],
             ),
           ),
-          if (widget.automationError != null)
-            FilledButton(
-              onPressed: widget.onResumeAutomation,
-              child: const Text('Resume computer'),
-            ),
         ],
       );
     }
@@ -3324,20 +3328,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   );
 
   Widget _waitingStatus() {
-    if (!widget.online && widget.automationError == null) {
-      return const SizedBox.shrink();
-    }
+    if (!widget.online) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            widget.automationError != null
-                ? 'Computer paused'
-                : widget.online
-                ? (widget.observing ? 'Waiting for players' : 'Your turn')
-                : 'Computer turn',
+            widget.observing ? 'Waiting for players' : 'Your turn',
             style: const TextStyle(color: Color(0xffe5c183)),
           ),
           Text(
@@ -3351,13 +3349,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 12),
           ),
-          if (widget.automationError != null) ...[
-            Text(widget.automationError!),
-            FilledButton(
-              onPressed: widget.onResumeAutomation,
-              child: const Text('Resume computer'),
-            ),
-          ],
         ],
       ),
     );
@@ -3368,7 +3359,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       widget.observing ? MatchPhase.actions : phase,
       selectedTab: _tab,
     );
-    if (!widget.observing) return contents;
+    // An offer can be answered outside your turn, but this must not expose
+    // building, dice, End turn, bank trades or other turn-owner actions.
+    if (!widget.observing || (_tab == 1 && widget.tradeReplyAllowed)) {
+      return contents;
+    }
     return [
       for (final child in contents)
         ExcludeFocus(
@@ -3536,6 +3531,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           state: s,
           computerSeats: widget.computerSeats,
           allowOffers: !widget.observing,
+          allowCounters: !widget.observing || widget.tradeReplyAllowed,
           privateOpponentHands: widget.online,
           onBank: exchange,
           onOffer: offer,
@@ -3754,18 +3750,24 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         backgroundColor: const Color(0xffe5c183),
         foregroundColor: const Color(0xff28271e),
       ),
-      onPressed: switch (s.phase) {
-        MatchPhase.roll => () {
-          final (a, b) = widget.online ? (0, 0) : MatchEngine.expectedDice(s);
-          send(RollDice(a, b));
-        },
-        MatchPhase.actions => () => send(const EndTurn()),
-        MatchPhase.invasion => () => send(const ResolveInvasion()),
-        MatchPhase.setupVillage ||
-        MatchPhase.setupRoad ||
-        MatchPhase.bandit => availableTargets.isNotEmpty ? chooseTarget : null,
-        _ => null,
-      },
+      onPressed:
+          widget.observing || (widget.online && s.actingSeat != viewerSeat)
+          ? null
+          : switch (s.phase) {
+              MatchPhase.roll => () {
+                final (a, b) = widget.online
+                    ? (0, 0)
+                    : MatchEngine.expectedDice(s);
+                send(RollDice(a, b));
+              },
+              MatchPhase.actions => () => send(const EndTurn()),
+              MatchPhase.invasion => () => send(const ResolveInvasion()),
+              MatchPhase.setupVillage ||
+              MatchPhase.setupRoad ||
+              MatchPhase.bandit =>
+                availableTargets.isNotEmpty ? chooseTarget : null,
+              _ => null,
+            },
       icon: Icon(
         s.phase == MatchPhase.roll
             ? Icons.casino_outlined

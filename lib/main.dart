@@ -80,6 +80,89 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   bool get _canRun => _foreground || !pauseInBackground;
   int aiMoveCount = 0;
   String? aiError;
+  Timer? _aiRecoveryTimer;
+  Timer? _localTradeGraceTimer;
+  int? _localTradeOfferId;
+  int? _localTradeExpiredId;
+  int _localAiFailedVersion = -1;
+  int _localAiFailures = 0;
+
+  bool _waitingOnLocalTrade(MatchState state) {
+    final offer =
+        state.phase == MatchPhase.actions &&
+            state.tactical == null &&
+            aiSeats.contains(state.active)
+        ? state.offers
+              .where(
+                (o) =>
+                    o.proposer == state.active &&
+                    List.generate(state.players.length, (seat) => seat).any(
+                      (seat) => !aiSeats.contains(seat) && o.canRespond(seat),
+                    ),
+              )
+              .firstOrNull
+        : null;
+    if (offer == null) {
+      _localTradeGraceTimer?.cancel();
+      _localTradeGraceTimer = null;
+      _localTradeOfferId = null;
+      return false;
+    }
+    if (_localTradeExpiredId == offer.id) return false;
+    if (_localTradeOfferId != offer.id) {
+      _localTradeGraceTimer?.cancel();
+      _localTradeOfferId = offer.id;
+      _localTradeGraceTimer = Timer(const Duration(seconds: 30), () {
+        if (!mounted) return;
+        _localTradeExpiredId = offer.id;
+        _syncAi();
+      });
+    }
+    return true;
+  }
+
+  void _onLocalAiFailure(Object error) {
+    if (!mounted) return;
+    final state = match;
+    if (state == null) return;
+    if (_localAiFailedVersion != state.events.length) {
+      _localAiFailedVersion = state.events.length;
+      _localAiFailures = 0;
+    }
+    _localAiFailures++;
+    setState(() => aiError = '$error');
+    _aiRecoveryTimer?.cancel();
+    _aiRecoveryTimer = Timer(const Duration(milliseconds: 400), () {
+      _aiRecoveryTimer = null;
+      if (!mounted || match == null || page != Page.board) return;
+      final current = match!;
+      final seat = AiTurnCoordinator.actingSeat(current, aiSeats.contains);
+      if (!aiSeats.contains(seat)) return;
+      if (_localAiFailures < 3) {
+        setState(() => aiError = null);
+        _syncAi();
+        return;
+      }
+      final offer = seat != current.actingSeat
+          ? current.offers
+                .where(
+                  (o) => o.proposer == current.active && o.canRespond(seat),
+                )
+                .firstOrNull
+          : null;
+      final fallback = offer != null
+          ? RespondTrade(seat, false, offerId: offer.id)
+          : MatchEngine.idleEvent(current);
+      if (fallback == null) return;
+      try {
+        final next = MatchEngine.apply(current, fallback);
+        setState(() => aiError = null);
+        if (_commitAi(current, next)) _localAiFailures = 0;
+      } on Object {
+        // Preserve state if even the authoritative idle action is rejected.
+      }
+    });
+  }
 
   bool get aiActing {
     final s = match;
@@ -94,7 +177,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         page == Page.board &&
         !handoff &&
         aiError == null &&
-        aiActing) {
+        aiActing &&
+        !_waitingOnLocalTrade(match!)) {
       ai.resume();
     } else {
       ai.pause();
@@ -121,6 +205,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           !oneHumanMatch;
     });
     _save(next, previous: expected);
+    _syncAi();
     return true;
   }
 
@@ -145,9 +230,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       // Give each committed computer action room for its on-screen animation.
       delay: const Duration(milliseconds: 2400),
       decide: (state) => compute(_chooseComputerEvent, state),
-      onError: (error) {
-        if (mounted) setState(() => aiError = error.toString());
-      },
+      onError: _onLocalAiFailure,
     );
     for (final name in names) {
       name.addListener(_saveSetup);
@@ -359,6 +442,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   @override
   void dispose() {
     ai.pause();
+    _aiRecoveryTimer?.cancel();
+    _localTradeGraceTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     for (final n in names) {
       n.dispose();
@@ -514,41 +599,48 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   }
 
   void dispatch(MatchEvent event) {
-    if (page != Page.board || handoff || aiActing || match == null) return;
+    if (page != Page.board || handoff || match == null) return;
+    final previous = match!;
+    // Replying to an outstanding computer offer is not a turn-owner action.
+    // A human must be able to accept/decline/counter during the bot's turn.
+    bool eligibleTradeRecipient(int seat, int? offerId) =>
+        !aiSeats.contains(seat) &&
+        previous.offers.any(
+          (offer) =>
+              offer.proposer == previous.active &&
+              (offerId == null || offer.id == offerId) &&
+              offer.canRespond(seat),
+        );
+    final humanTradeReply = event is RespondTrade
+        ? eligibleTradeRecipient(event.player, event.offerId)
+        : event is ProposeTrade && event.counterOf != null
+        ? eligibleTradeRecipient(
+            event.counterActor ??
+                (previous.offers
+                        .where((o) => o.id == event.counterOf)
+                        .firstOrNull
+                        ?.target ??
+                    -1),
+            event.counterOf,
+          )
+        : false;
+    if (aiActing && !humanTradeReply) return;
+    if (aiSeats.contains(previous.actingSeat) && !humanTradeReply) return;
     try {
-      final previous = match!;
-      // While a bot awaits a human reply, only that reply may use dispatch.
-      if (aiSeats.contains(previous.actingSeat) &&
-          !(event is ProposeTrade &&
-              event.counterOf != null &&
-              previous.offers.any(
-                (o) =>
-                    o.id == event.counterOf &&
-                    o.target ==
-                        AiTurnCoordinator.actingSeat(
-                          previous,
-                          aiSeats.contains,
-                        ),
-              )) &&
-          (event is! RespondTrade ||
-              event.player !=
-                  AiTurnCoordinator.actingSeat(previous, aiSeats.contains))) {
-        return;
-      }
-      final s = MatchEngine.apply(previous, event);
+      final next = MatchEngine.apply(previous, event);
       final oldOwner = previous.actingSeat;
-      final nextOwner = s.actingSeat;
+      final nextOwner = next.actingSeat;
       setState(() {
         handoff =
             oldOwner != nextOwner &&
             !aiSeats.contains(nextOwner) &&
             !oneHumanMatch;
-        match = s;
+        match = next;
       });
-      _save(s, previous: previous);
+      _save(next, previous: previous);
       _syncAi();
-    } on StateError catch (e) {
-      fail(e.message);
+    } on StateError catch (error) {
+      fail(error.message);
     }
   }
 
@@ -1253,11 +1345,14 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                         ? 0
                                         : current.actingSeat,
                                     observing: aiActing,
-                                    automationError: aiError,
-                                    onResumeAutomation: () {
-                                      setState(() => aiError = null);
-                                      _syncAi();
-                                    },
+                                    tradeReplyAllowed:
+                                        oneHumanMatch &&
+                                        match != null &&
+                                        match!.offers.any(
+                                          (offer) =>
+                                              offer.proposer == match!.active &&
+                                              offer.canRespond(0),
+                                        ),
                                   ),
                           Page.rules =>
                             isCompactLandscape(context)

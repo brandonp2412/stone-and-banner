@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/ai.dart';
 import 'package:stone_and_banner/engine/ai_turn_coordinator.dart';
+import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/match.dart';
 
 void main() {
@@ -223,6 +224,61 @@ void main() {
       expect(s.events.length, greaterThan(50));
     },
   );
+
+  test('trade offered by bot to human never blocks bot turn', () async {
+    var state = MatchEngine.newGame(['Host', 'Bot', 'Other'], 614).copyWith(
+      phase: MatchPhase.actions,
+      active: 1,
+      offers: [TradeProposal(42, 1, 0, Resource.wood, 1, Resource.wool, 1)],
+    );
+    expect(AiTurnCoordinator.actingSeat(state, (seat) => seat == 1), 1);
+    final failures = <Object>[];
+    final ai = AiTurnCoordinator(
+      read: () => state,
+      isComputerSeat: (seat) => seat == 1,
+      delay: Duration.zero,
+      decide: (_) => const EndTurn(),
+      onError: failures.add,
+      commit: (before, next) {
+        expect(identical(state, before), isTrue);
+        state = next;
+        return true;
+      },
+    );
+    ai.resume();
+    await ai.settled.timeout(const Duration(seconds: 5));
+    expect(failures, isEmpty);
+    expect(state.active, 2);
+    expect(state.events.last, isA<EndTurn>());
+  });
+
+  test('AI move quota resets each turn even without a human turn', () async {
+    var state = MatchEngine.newGame([
+      'Host',
+      'Bot A',
+      'Bot B',
+    ], 615).copyWith(phase: MatchPhase.actions, active: 1);
+    final failures = <Object>[];
+    var commits = 0;
+    final ai = AiTurnCoordinator(
+      read: () => state,
+      isComputerSeat: (seat) => seat != 0,
+      delay: Duration.zero,
+      maxEventsPerRun: 1,
+      decide: (_) => const EndTurn(),
+      onError: failures.add,
+      commit: (before, next) {
+        commits++;
+        state = next.copyWith(phase: MatchPhase.actions);
+        return true;
+      },
+    );
+    ai.resume();
+    await ai.settled.timeout(const Duration(seconds: 5));
+    expect(failures, isEmpty);
+    expect(commits, 2);
+    expect(state.active, 0);
+  });
 
   test(
     'stale owner rejects commit without spending any goods or events',

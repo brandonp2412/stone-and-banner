@@ -16,12 +16,14 @@ class TradeMarket extends StatelessWidget {
     required this.viewerSeat,
     this.onReturnToBoard,
     this.allowOffers = true,
+    this.allowCounters = true,
     this.privateOpponentHands = false,
     this.computerSeats = const <int>{},
   });
 
   final MatchState state;
   final bool allowOffers;
+  final bool allowCounters;
 
   /// Rivals are redacted in online views; only the host may check their stock.
   final bool privateOpponentHands;
@@ -123,7 +125,7 @@ class TradeMarket extends StatelessWidget {
               style: TextStyle(color: gold, fontSize: 12),
             ),
           ),
-        if (!ownTurn)
+        if (!ownTurn && incoming.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Row(
@@ -272,7 +274,7 @@ class TradeMarket extends StatelessWidget {
   }) {
     final counterAvailable =
         enabled &&
-        allowOffers &&
+        allowCounters &&
         !state.offers.any((o) => o.proposer == viewerSeat);
     final canAccept =
         enabled &&

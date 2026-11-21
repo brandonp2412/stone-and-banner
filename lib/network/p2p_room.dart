@@ -27,18 +27,20 @@ String _randomId(int bytes) {
 
 /// One authoritative host device, with private views sent over WebRTC.
 class P2pRoom extends ChangeNotifier {
-  P2pRoom({Duration botMoveDelay = const Duration(milliseconds: 2400)}) {
+  P2pRoom({
+    Duration botMoveDelay = const Duration(milliseconds: 2400),
+    this._humanTradeGrace = const Duration(seconds: 12),
+    @visibleForTesting AiDecision? botDecisionForTest,
+  }) {
     _ai = AiTurnCoordinator(
       read: () => _room?.state,
       commit: _commitBotMove,
       isComputerSeat: botSeats.contains,
       delay: botMoveDelay,
-      decide: (state) => compute(_chooseMultiplayerBotEvent, state),
-      onError: (error) {
-        if (_disposed) return;
-        aiError = '$error';
-        notifyListeners();
-      },
+      decide:
+          botDecisionForTest ??
+          (state) => compute(_chooseMultiplayerBotEvent, state),
+      onError: _handleBotFailure,
     );
     _rtc = P2pTransport(_onEvent);
     _rtc.listenAnswers((link, receiptId) async {
@@ -59,12 +61,19 @@ class P2pRoom extends ChangeNotifier {
 
   late final P2pTransport _rtc;
   late final AiTurnCoordinator _ai;
+  final Duration _humanTradeGrace;
 
   /// Bot seats run exclusively on the host with the local-game AI strategy.
   final Set<int> botSeats = {};
   int botCount = 0;
   int aiMoveCount = 0;
   String? aiError;
+  Timer? _botRecoveryTimer;
+  Timer? _botTradeGraceTimer;
+  int? _botTradeGraceOfferId;
+  int? _botTradeGraceExpiredId;
+  int _botFailures = 0;
+  int _botFailedAtVersion = -1;
   Future<void> get aiSettled => _ai.settled;
   HostedRoom? _room;
   final Map<String, int> _peerSeats = {};
@@ -151,6 +160,15 @@ class P2pRoom extends ChangeNotifier {
       'connectionPath': _redact(connectionPath),
       'timeline': _diagnosticEvents,
       'signallingTrace': _signallingTrace,
+      'computer': {
+        'moveCount': aiMoveCount,
+        'seats': botSeats.toList()..sort(),
+        'running': _ai.isRunning,
+        'paused': _ai.isPaused,
+        'recoveryAttempts': _botFailures,
+        'lastError': _redact(aiError),
+        'waitingForTrade': _botTradeGraceTimer?.isActive == true,
+      },
       'peers': peerReports,
     };
     return const JsonEncoder.withIndent('  ').convert(report);
@@ -495,6 +513,23 @@ class P2pRoom extends ChangeNotifier {
       ]);
   }
 
+  @visibleForTesting
+  MatchState? get authoritativeStateForTest => _room?.state;
+
+  /// Controlled authoritative fixture for multiplayer regression tests.
+  /// Never call from a production game: the host remains the only state owner.
+  @visibleForTesting
+  void replaceHostStateForTest(MatchState Function(MatchState) transform) {
+    final room = _room;
+    if (!isHost || room?.state == null) {
+      throw StateError('A started host room is required for this fixture.');
+    }
+    _ai.pause();
+    room!.state = transform(room.state!);
+    _broadcast();
+    _schedule();
+  }
+
   /// Bots are reserved in the lobby and assigned only when the match starts.
   void setBotCount(int requested) {
     if (!isHost || started || _room == null) {
@@ -509,6 +544,107 @@ class P2pRoom extends ChangeNotifier {
     _broadcast();
   }
 
+  /// Give human recipients time to answer a computer's trade without
+  /// suspending the bot until the 90-second turn timeout.
+  bool _waitingOnBotOffer(MatchState state) {
+    final offer =
+        state.phase == MatchPhase.actions &&
+            state.tactical == null &&
+            botSeats.contains(state.active)
+        ? state.offers
+              .where(
+                (o) =>
+                    o.proposer == state.active &&
+                    List.generate(state.players.length, (seat) => seat).any(
+                      (seat) => !botSeats.contains(seat) && o.canRespond(seat),
+                    ),
+              )
+              .firstOrNull
+        : null;
+    if (offer == null) {
+      _botTradeGraceTimer?.cancel();
+      _botTradeGraceTimer = null;
+      _botTradeGraceOfferId = null;
+      return false;
+    }
+    if (_botTradeGraceExpiredId == offer.id) return false;
+    if (_botTradeGraceOfferId != offer.id) {
+      _botTradeGraceTimer?.cancel();
+      _botTradeGraceOfferId = offer.id;
+      _recordDiagnostic('bot offered trade; bounded human response window');
+      _botTradeGraceTimer = Timer(_humanTradeGrace, () {
+        if (_disposed) return;
+        _botTradeGraceExpiredId = offer.id;
+        _recordDiagnostic('bot trade response window elapsed; AI continues');
+        _syncAi();
+      });
+    }
+    return true;
+  }
+
+  void _handleBotFailure(Object error) {
+    if (_disposed || !isHost) return;
+    final currentVersion = _room?.version ?? -1;
+    if (currentVersion != _botFailedAtVersion) {
+      _botFailedAtVersion = currentVersion;
+      _botFailures = 0;
+    }
+    _botFailures++;
+    aiError = '$error';
+    final detail = _redact('$error') ?? '${error.runtimeType}';
+    _recordDiagnostic(
+      'bot decision failed (attempt $_botFailures): '
+      '${detail.substring(0, min(detail.length, 240))}',
+    );
+    _botRecoveryTimer?.cancel();
+    _botRecoveryTimer = Timer(const Duration(milliseconds: 400), () {
+      _botRecoveryTimer = null;
+      if (_disposed || !started || !isHost) return;
+      final room = _room;
+      final state = room?.state;
+      if (room == null || state == null || state.phase == MatchPhase.finished) {
+        return;
+      }
+      final seat = AiTurnCoordinator.actingSeat(state, botSeats.contains);
+      if (!botSeats.contains(seat)) return;
+      if (_botFailures <= 2) {
+        _recordDiagnostic('restarting bot decision automatically');
+        _syncAi();
+        return;
+      }
+      MatchEvent? fallback;
+      if (seat != state.actingSeat) {
+        final offer = state.offers
+            .where((o) => o.proposer == state.active && o.canRespond(seat))
+            .firstOrNull;
+        if (offer != null) {
+          fallback = RespondTrade(seat, false, offerId: offer.id);
+        }
+      } else {
+        fallback = MatchEngine.idleEvent(state);
+      }
+      if (fallback != null) {
+        final result = room.move(
+          seat,
+          _randomId(16),
+          room.version,
+          fallback.toJson(),
+        );
+        if (result['ok'] == true) {
+          _recordDiagnostic('bot recovered with validated idle move');
+          aiError = null;
+          _botFailures = 0;
+          _broadcast();
+          _schedule();
+          return;
+        }
+        _recordDiagnostic('bot fallback rejected: ${result['error']}');
+      }
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
   bool _commitBotMove(MatchState expected, MatchState next) {
     final room = _room;
     if (_disposed ||
@@ -520,8 +656,6 @@ class P2pRoom extends ChangeNotifier {
     }
     final bot = AiTurnCoordinator.actingSeat(expected, botSeats.contains);
     if (!botSeats.contains(bot)) return false;
-    // Use the same AI policy as local games, but apply the selected event
-    // through the authoritative multiplayer reducer and audit log.
     final result = room!.move(
       bot,
       _randomId(16),
@@ -529,10 +663,14 @@ class P2pRoom extends ChangeNotifier {
       next.events.last.toJson(),
     );
     if (result['ok'] != true) {
-      aiError = result['error'] as String? ?? 'Computer move rejected.';
-      notifyListeners();
+      _handleBotFailure(
+        StateError(result['error'] as String? ?? 'Computer move rejected.'),
+      );
       return false;
     }
+    aiError = null;
+    _botFailures = 0;
+    _botRecoveryTimer?.cancel();
     aiMoveCount++;
     _broadcast();
     _schedule();
@@ -543,9 +681,13 @@ class P2pRoom extends ChangeNotifier {
     final state = _room?.state;
     if (_disposed ||
         !isHost ||
-        aiError != null ||
         state == null ||
         state.phase == MatchPhase.finished) {
+      _botTradeGraceTimer?.cancel();
+      _ai.pause();
+      return;
+    }
+    if (_waitingOnBotOffer(state)) {
       _ai.pause();
       return;
     }
@@ -556,13 +698,6 @@ class P2pRoom extends ChangeNotifier {
     } else {
       _ai.pause();
     }
-  }
-
-  void retryBots() {
-    if (!isHost || !started || _disposed) return;
-    aiError = null;
-    _syncAi();
-    notifyListeners();
   }
 
   /// One unique invitation per remote participant. Host device must stay online.
@@ -981,6 +1116,8 @@ class P2pRoom extends ChangeNotifier {
     _disposed = true;
     _ai.pause();
     _clock?.cancel();
+    _botRecoveryTimer?.cancel();
+    _botTradeGraceTimer?.cancel();
     _signallingRetry?.cancel();
     if (isHost) P2pTransport.setHosting(false);
     unawaited(_signalling?.dispose());

@@ -812,18 +812,19 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
     final active = game?.actingSeat;
     // Responding to an active player's trade is legal outside your turn.
     // The response sheet must not become read-only for online recipients.
-    final canRespondToTrade =
+    final canPlayTurn =
+        room.connected && !room.pending && game != null && room.seat == active;
+    // Responding to a trade is a limited permission, not turn ownership.
+    // End turn must remain hidden/disabled until this player's actual turn.
+    final canReplyToTrade =
+        room.connected &&
+        !room.pending &&
         game != null &&
         room.seat != null &&
         game.offers.any(
           (offer) =>
               offer.proposer == game.active && offer.canRespond(room.seat!),
         );
-    final canAct =
-        room.connected &&
-        !room.pending &&
-        game != null &&
-        (room.seat == active || canRespondToTrade);
     return PopScope(
       canPop: _leaveApproved || room.roomId == null,
       onPopInvokedWithResult: (didPop, _) {
@@ -866,13 +867,12 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
                           onlineView: room.view,
                           viewingSeat: room.seat,
                           computerSeats: room.botSeats,
-                          automationError: room.aiError,
-                          onResumeAutomation: room.isHost
-                              ? room.retryBots
-                              : null,
-                          observing: !canAct,
-                          waitingMessage: canAct
+                          observing: !canPlayTurn,
+                          tradeReplyAllowed: canReplyToTrade,
+                          waitingMessage: canPlayTurn
                               ? null
+                              : canReplyToTrade
+                              ? 'Trade offer awaiting your response'
                               : room.connected
                               ? 'Waiting for ${game.players[active!].id}…'
                               : 'Direct connection lost',

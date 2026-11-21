@@ -36,7 +36,7 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
       - name: Test P2P invitations and room authority
-        run: flutter test test/p2p_links_test.dart test/one_link_invites_test.dart test/p2p_signalling_diagnostics_test.dart test/p2p_bot_lobby_test.dart test/stage6_room_test.dart
+        run: flutter test test/p2p_links_test.dart test/one_link_invites_test.dart test/p2p_signalling_diagnostics_test.dart test/p2p_bot_lobby_test.dart test/p2p_bot_long_run_test.dart test/p2p_trade_turn_ui_test.dart test/ai_turn_coordinator_test.dart test/broadcast_trade_test.dart test/multiplayer_playthrough_test.dart test/stage6_room_test.dart
       - name: Verify direct WebRTC ICE and response handshakes
         run: node --test tool/p2p_ice_test.js tool/p2p_answer_test.js
       - name: Test Cloudflare signalling Worker and diagnostics endpoint

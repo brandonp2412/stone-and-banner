@@ -121,13 +121,18 @@ void main() {
     },
   );
 
-  test('AI sends computer broadcasts to a human before other bots', () {
+  test('computer broadcast reserves human reply window before other bots', () {
     var game = fundedGame().copyWith(active: 1);
     game = MatchEngine.apply(
       game,
       const ProposeTrade(-1, Resource.wheat, 1, Resource.wood, 1),
     );
-    expect(AiTurnCoordinator.actingSeat(game, (seat) => seat != 0), 0);
+    expect(
+      AiTurnCoordinator.actingSeat(game, (seat) => seat != 0),
+      game.active,
+      reason:
+          'The host holds a bounded human-response window before bots reply',
+    );
     final view = AiActionAdapter.observe(game.copyWith(active: 2), 2);
     expect(view.legalActions.whereType<RespondTrade>().isNotEmpty, true);
   });
