@@ -25,8 +25,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Trade'));
       await tester.pumpAndSettle();
-      expect(find.byType(Dialog), findsOneWidget);
-      await tester.tap(find.text('Player').first);
+      expect(find.byType(Dialog), findsNothing);
+      await tester.tap(find.text('Player trade'));
       await tester.pumpAndSettle();
       expect(find.text('Quantity'), findsNWidgets(2));
       expect(find.byTooltip('Increase quantity'), findsNWidgets(2));

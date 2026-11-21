@@ -5,6 +5,9 @@ import 'dart:async';
 import 'compact_layout.dart';
 
 import 'package:flutter/material.dart';
+
+import 'dock_label_layout.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../engine/advanced.dart';
@@ -1381,9 +1384,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       _tab = tab;
       _mobilePage = -1;
     });
-    if (tab == 1 && s.phase == MatchPhase.actions && s.active == viewerSeat) {
-      exchange();
-    }
   }
 
   void _openMobileActions() => setState(() {
@@ -3085,13 +3085,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               message: label,
               child: InkWell(
                 onTap: () {
-                  if (index == 1 &&
-                      MediaQuery.sizeOf(context).width < 900 &&
-                      !widget.observing &&
-                      s.phase == MatchPhase.actions &&
-                      s.active == viewerSeat) {
-                    exchange();
-                  }
                   setState(() {
                     _tab = index;
                     if (index == 2) _unseenCard = false;
@@ -4723,9 +4716,11 @@ class BoardGeometry {
   final Size size;
   static const horizontalScale = 1.28;
   static const verticalScale = .72;
+  // Reserve top/bottom gutters for coastal dock labels and leader lines.
+  // The standard board spans 8 lattice units vertically.
   double get radius => math.min(
     size.width / (9.2 * horizontalScale),
-    size.height / (8.6 * verticalScale),
+    math.max(1, size.height - 64) / (8 * verticalScale),
   );
   Offset get center => Offset(size.width / 2, size.height / 2);
   Offset vertex(BoardVertex p) =>
@@ -5264,36 +5259,19 @@ class _Painter extends CustomPainter {
           ..strokeWidth = 5,
       );
     }
+    // The top/bottom docks need to sit *outside* the playable hexes rather
+    // than on top of them, especially when the board is vertically compact.
+    final vertices = state.topology.vertices.map(g.vertex).toList();
+    final boardBounds = Rect.fromLTRB(
+      vertices.map((p) => p.dx).reduce(math.min),
+      vertices.map((p) => p.dy).reduce(math.min),
+      vertices.map((p) => p.dx).reduce(math.max),
+      vertices.map((p) => p.dy).reduce(math.max),
+    );
     for (final dock in state.topology.docks) {
       final a = g.vertex(state.topology.vertices[dock.edge.a]);
       final b = g.vertex(state.topology.vertices[dock.edge.b]);
       final middle = (a + b) / 2;
-      final outward = middle - size.center(Offset.zero);
-      final projected = middle + outward / outward.distance * (g.radius * .38);
-      final label = Offset(
-        projected.dx.clamp(
-          math.min(40.0, size.width / 2),
-          math.max(size.width / 2, size.width - 40),
-        ),
-        projected.dy.clamp(
-          math.min(9.0, size.height / 2),
-          math.max(size.height / 2, size.height - 9),
-        ),
-      );
-      canvas.drawLine(
-        a,
-        label,
-        Paint()
-          ..color = const Color(0xffc7ac78)
-          ..strokeWidth = 2,
-      );
-      canvas.drawLine(
-        b,
-        label,
-        Paint()
-          ..color = const Color(0xffc7ac78)
-          ..strokeWidth = 2,
-      );
       final text = TextPainter(
         text: TextSpan(
           text: dock.label,
@@ -5307,6 +5285,22 @@ class _Painter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
+      final label = dockLabelPosition(
+        size: size,
+        edgeMidpoint: middle,
+        boardBounds: boardBounds,
+        labelSize: text.size,
+        radius: g.radius,
+      );
+      // One fine leader line points to the correct coastal edge.
+      canvas.drawLine(
+        middle,
+        label,
+        Paint()
+          ..color = const Color(0xffc7ac78)
+          ..strokeWidth = 1.6
+          ..strokeCap = StrokeCap.round,
+      );
       text.paint(canvas, label - Offset(text.width / 2, text.height / 2));
     }
   }

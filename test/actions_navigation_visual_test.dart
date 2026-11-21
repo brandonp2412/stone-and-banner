@@ -49,11 +49,19 @@ void main() {
     expect(find.text('Fortify'), findsOneWidget);
     await tester.tap(find.text('Trade'));
     await tester.pumpAndSettle();
-    expect(find.text('Bank exchange'), findsOneWidget);
-    await tester.tap(find.byTooltip('Close trade'));
-    await tester.pumpAndSettle();
+    expect(find.text('Bank exchange'), findsNothing);
+    expect(find.byType(Dialog), findsNothing);
+    await expectLater(
+      find.byType(Scaffold),
+      matchesGoldenFile('goldens/mobile_trade_tab.png'),
+    );
     expect(find.text('Road'), findsNothing);
     expect(find.text('Player trade'), findsOneWidget);
+    await tester.tap(find.text('Bank trade'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsOneWidget);
+    await tester.tap(find.byTooltip('Close trade'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Cards'));
     await tester.pumpAndSettle();
     expect(find.text('Player trade'), findsNothing);

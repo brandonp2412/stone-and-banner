@@ -34,6 +34,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Trade'));
     await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
+    await tester.tap(find.text('Bank trade'));
+    await tester.pumpAndSettle();
 
     final rect = tester.getRect(
       find
