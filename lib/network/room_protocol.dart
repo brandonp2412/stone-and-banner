@@ -8,6 +8,53 @@ import '../engine/match.dart';
 
 /// Wire format is a view, never a canonical reducer state or replay.
 abstract final class RoomProtocol {
+  /// Show public actions without leaking random seeds, concealed card indices,
+  /// opponents' discarded goods, or private strategy-card details.
+  static Map<String, Object?> _visibleEvent(MatchEvent event, int viewer) {
+    return switch (event) {
+      RollDice() ||
+      PlaceVillage() ||
+      PlaceRoad() ||
+      UpgradeSite() ||
+      MoveBandit() ||
+      BankExchange() ||
+      DevelopTown() ||
+      FortifyTown() ||
+      RecruitKnight() ||
+      ActivateKnight() ||
+      PromoteKnight() ||
+      MoveKnight() ||
+      ResolveInvasion() ||
+      EndTurn() ||
+      RespondTrade() ||
+      WithdrawTrade() ||
+      TimeoutTactical() => event.toJson(),
+      // Trade proposals are already present in the shared offers snapshot.
+      // Keep their event details so both proposer and recipient receive cues.
+      ProposeTrade() => event.toJson(),
+      RespondTactical() => {
+        'type': 'tactical',
+        'windowId': event.windowId,
+        'player': event.player,
+        'choice': event.choice.name,
+        'cardIndex': null,
+        'good': null,
+      },
+      PlayStrategyCard() => {
+        'type': 'cardPlay',
+        'hand': -1,
+        'vertex': null,
+        'tile': null,
+        'target': event.target,
+        'give': null,
+        'receive': null,
+      },
+      DiscardStrategyCard() => {'type': 'cardDiscard', 'hand': -1},
+      DiscardResources() when event.player == viewer => event.toJson(),
+      _ => {'type': 'redacted'},
+    };
+  }
+
   static Map<String, dynamic> view(MatchState state, int seat) {
     final data =
         jsonDecode(MatchEngine.snapshot(state)) as Map<String, dynamic>;
@@ -16,7 +63,15 @@ abstract final class RoomProtocol {
       for (final t in state.board.tiles)
         [t.position.q, t.position.r, t.land.name, t.productionNumber],
     ];
-    data['events'] = <Object>[]; // Events can reveal private cards and goods.
+    data['events'] = <Object>[]; // Never transmit the private replay.
+    // A bounded public event tail drives multiplayer animations and feedback.
+    // Keep the original sequence count so UI deltas preserve event ordering.
+    data['publicEvents'] = [
+      for (final event in state.events.skip(
+        state.events.length > 96 ? state.events.length - 96 : 0,
+      ))
+        _visibleEvent(event, seat),
+    ];
     data['drawPiles'] = <String, Object>{};
     data['discardPiles'] = <String, Object>{};
     data['eventCount'] = state.events.length;
@@ -57,6 +112,11 @@ abstract final class RoomProtocol {
           item[3] as int?,
         ),
     ]);
+    final publicTail = (data['publicEvents'] as List? ?? const []);
+    final publicCount = data['eventCount'] as int? ?? 0;
+    final redactedPrefix = publicCount > publicTail.length
+        ? publicCount - publicTail.length
+        : 0;
     final initialPlayers = [
       for (final raw in list('players'))
         PlayerState(
@@ -116,6 +176,14 @@ abstract final class RoomProtocol {
                   ) as PlayStrategyCard,
           );
     return MatchState(
+      events: [
+        for (var i = 0; i < redactedPrefix; i++) const RedactedNetworkEvent(),
+        for (final raw in publicTail)
+          if ((raw as Map)['type'] == 'redacted')
+            const RedactedNetworkEvent()
+          else
+            eventFromJson(Map<String, dynamic>.from(raw)),
+      ],
       pendingDiscards: {
         for (final entry
             in ((data['pendingDiscards'] as Map<String, dynamic>?) ?? {})
@@ -178,6 +246,9 @@ abstract final class RoomProtocol {
             isCounter: o[7] as bool,
             giveBundle: o.length > 8 ? decodeTradeBundle(o[8]) : null,
             wantBundle: o.length > 9 ? decodeTradeBundle(o[9]) : null,
+            declinedBy: o.length > 10
+                ? (o[10] as List).cast<int>().toSet()
+                : const <int>{},
           ),
       ],
       tactical: tactical,
@@ -199,7 +270,11 @@ abstract final class RoomProtocol {
           Resource.values.byName(entry.key): entry.value as int,
       }),
       'bandit' => MoveBandit(intAt('tile'), victim: e['victim'] as int?),
-      'bank' => BankExchange(good('give'), good('receive')),
+      'bank' => BankExchange(
+        good('give'),
+        good('receive'),
+        times: e['times'] as int? ?? 1,
+      ),
       'offer' => ProposeTrade(
         intAt('target'),
         good('give'),
@@ -207,6 +282,7 @@ abstract final class RoomProtocol {
         good('want'),
         intAt('wantCount'),
         counterOf: e['counterOf'] as int?,
+        counterActor: e['counterActor'] as int?,
         giveBundle: decodeTradeBundle(e['giveBundle']),
         wantBundle: decodeTradeBundle(e['wantBundle']),
       ),

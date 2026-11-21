@@ -185,7 +185,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Glossary'),
       160,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.byType(Scrollable).last,
     );
     await tester.ensureVisible(find.text('Glossary'));
     await tester.pumpAndSettle();
@@ -195,7 +195,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Advanced play'),
       -160,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.byType(Scrollable).last,
     );
     await tester.ensureVisible(find.text('Advanced play'));
     await tester.pumpAndSettle();

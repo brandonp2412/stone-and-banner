@@ -73,6 +73,7 @@ class HostedRoom {
       [for (final s in seats) s.name],
       secretSeed,
       boardSeed: boardSeed,
+      cardDeckVersion: 2,
     );
   }
 
@@ -114,7 +115,7 @@ class HostedRoom {
           !current.offers.any(
             (o) =>
                 o.id == event.counterOf &&
-                o.target == seat &&
+                o.canRespond(seat) &&
                 o.proposer == event.target,
           )) {
         throw StateError('Only the recipient can counter an offer.');
@@ -140,13 +141,16 @@ class HostedRoom {
                   current.offers.any(
                     (o) =>
                         o.id == event.counterOf &&
-                        o.target == seat &&
+                        o.canRespond(seat) &&
                         o.proposer == event.target,
                   )) &&
               !(event is RespondTrade &&
                   event.player == seat &&
                   current.offers.any(
-                    (o) => o.target == seat && o.proposer == current.active,
+                    (o) =>
+                        o.canRespond(seat) &&
+                        o.proposer == current.active &&
+                        (event.offerId == null || o.id == event.offerId),
                   ))) ||
           (event is RespondTactical) ||
           (event is RespondTrade && event.player != seat)) {

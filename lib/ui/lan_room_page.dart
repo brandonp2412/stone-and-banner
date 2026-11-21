@@ -1,3 +1,5 @@
+import 'compact_layout.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
@@ -244,7 +246,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
         ? 'Waiting for ${state.players[activeSeat!].id}…'
         : 'Waiting for players…';
     return Scaffold(
-      appBar: state == null
+      appBar: state == null && MediaQuery.sizeOf(context).width >= 900
           ? AppBar(title: const Text('LAN multiplayer'))
           : null,
       body: Column(
@@ -275,15 +277,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
                     observing: !canAct,
                     waitingMessage: canAct ? null : wait,
                     onEvent: client.dispatch,
-                  ),
-                  Positioned(
-                    top: 3 + MediaQuery.paddingOf(context).top,
-                    right: 4 + MediaQuery.paddingOf(context).right,
-                    child: IconButton(
-                      tooltip: 'Leave LAN match',
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, size: 20),
-                    ),
+                    onLeaveRoom: () => Navigator.pop(context),
                   ),
                 ],
               ),
@@ -297,18 +291,38 @@ class _LanRoomPageState extends State<LanRoomPage> {
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 550),
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompactLandscape(context) ? 8 : 20),
         children: [
+          if (MediaQuery.sizeOf(context).width < 900)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: isCompactLandscape(context)
+                  ? SizedBox(
+                      height: 36,
+                      child: IconButton(
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.arrow_back),
+                        padding: EdgeInsets.zero,
+                      ),
+                    )
+                  : TextButton.icon(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back, size: 18),
+                      label: const Text('Back'),
+                    ),
+            ),
           Text(
             'Play together on Wi-Fi',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Native LAN rooms only: Android and Linux apps can join. '
-            'For an iPhone, iPad, or web browser, return to Multiplayer '
-            'and host a WebRTC game instead.',
-          ),
+          if (!isCompactLandscape(context))
+            const Text(
+              'Native LAN rooms only: Android and Linux apps can join. '
+              'For an iPhone, iPad, or web browser, return to Multiplayer '
+              'and host a WebRTC game instead.',
+            ),
           if (kIsWeb) ...[
             const SizedBox(height: 8),
             const Text(
@@ -462,6 +476,15 @@ class _LanRoomPageState extends State<LanRoomPage> {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          if (MediaQuery.sizeOf(context).width < 900)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.arrow_back, size: 18),
+                label: const Text('Back'),
+              ),
+            ),
           Text(
             'Room ${client.room}',
             style: Theme.of(context).textTheme.headlineMedium,

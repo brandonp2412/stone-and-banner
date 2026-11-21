@@ -188,21 +188,19 @@ void main() {
     },
   );
 
-  test('pending standing offer prevents playing a Strategy Card', () {
+  test('standing offer does not prevent playing a Strategy Card', () {
     var s = _holdId(_prepared(), 'forecast');
     s = MatchEngine.apply(
       s,
       const ProposeTrade(1, Resource.wood, 1, Resource.brick, 1),
     );
     expect(s.offers, hasLength(1));
-    expect(MatchEngine.legalCardPlays(s, 0), isEmpty);
-    expect(
-      () => MatchEngine.apply(
-        s,
-        const PlayStrategyCard(0, receive: Resource.wood),
-      ),
-      throwsStateError,
-    );
+    final plays = MatchEngine.legalCardPlays(s, 0);
+    expect(plays, isNotEmpty);
+    final played = MatchEngine.apply(s, plays.first);
+    expect(played.current.cards, isEmpty);
+    expect(played.offers, hasLength(1));
+    _conserved(played);
     final discarded = MatchEngine.apply(s, const DiscardStrategyCard(0));
     _conserved(discarded);
   });

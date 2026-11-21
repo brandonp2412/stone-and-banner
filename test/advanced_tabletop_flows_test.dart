@@ -147,7 +147,7 @@ void main() {
           step < (action.key == 'Move Knight' ? 2 : 1);
           step++
         ) {
-          await tester.tap(find.byTooltip('Choose board target from list'));
+          await tester.tap(find.byTooltip('Choose target'));
           await tester.pumpAndSettle();
           final targets = find.descendant(
             of: find.byType(BottomSheet),

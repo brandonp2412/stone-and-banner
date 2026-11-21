@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stone_and_banner/engine/ai_turn_coordinator.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/cards.dart';
 import 'package:stone_and_banner/engine/game.dart';
@@ -176,6 +177,145 @@ void main() {
     expect(roll['ok'], true);
     expect(room.state!.dice, inInclusiveRange(2, 12));
     expect(room.state!.events.last.toJson()['first'], isNot(0));
+  });
+
+  test('multiplayer broadcasts can be declined, accepted and countered', () {
+    final room = openRoom();
+    final original = room.state!;
+    final players = original.players.toList();
+    players[0] = players[0].copyWith(stores: {Resource.wood: 2});
+    players[1] = players[1].copyWith(stores: {Resource.wheat: 2});
+    players[2] = players[2].copyWith(stores: {Resource.wheat: 2});
+    room.state = original.copyWith(phase: MatchPhase.actions, players: players);
+    const broadcast = ProposeTrade(-1, Resource.wood, 1, Resource.wheat, 1);
+    expect(room.move(0, 'everyone', 0, broadcast.toJson())['ok'], true);
+    final id = room.state!.offers.single.id;
+    expect(
+      room.move(
+        1,
+        'decline',
+        1,
+        RespondTrade(1, false, offerId: id).toJson(),
+      )['ok'],
+      true,
+    );
+    expect(room.state!.offers.single.declinedBy, {1});
+    expect(
+      room.move(
+        2,
+        'accept',
+        2,
+        RespondTrade(2, true, offerId: id).toJson(),
+      )['ok'],
+      true,
+    );
+    expect(room.state!.offers, isEmpty);
+    expect(room.state!.players[0].stores[Resource.wheat], 1);
+    expect(room.state!.players[2].stores[Resource.wood], 1);
+    expect(
+      room.move(
+        2,
+        'duplicate',
+        3,
+        RespondTrade(2, true, offerId: id).toJson(),
+      )['ok'],
+      false,
+    );
+
+    room.state = original.copyWith(phase: MatchPhase.actions, players: players);
+    expect(room.move(0, 'again', 0, broadcast.toJson())['ok'], true);
+    final newId = room.state!.offers.single.id;
+    final counter = ProposeTrade(
+      0,
+      Resource.wheat,
+      1,
+      Resource.wood,
+      1,
+      counterOf: newId,
+      counterActor: 1,
+    );
+    expect(room.move(1, 'counter', 1, counter.toJson())['ok'], true);
+    expect(room.state!.offers.single.proposer, 1);
+    expect(room.state!.offers.single.target, 0);
+  });
+
+  test(
+    'multiplayer host AI answers broadcast trades without pausing',
+    () async {
+      final room = openRoom();
+      final initial = room.state!;
+      final players = initial.players.toList();
+      players[0] = players[0].copyWith(stores: {Resource.wood: 2});
+      players[1] = players[1].copyWith(stores: {Resource.wheat: 2});
+      players[2] = players[2].copyWith(stores: {Resource.wheat: 2});
+      room.state = initial.copyWith(
+        phase: MatchPhase.actions,
+        players: players,
+      );
+      expect(
+        room.move(
+          0,
+          'offer',
+          room.version,
+          const ProposeTrade(-1, Resource.wood, 1, Resource.wheat, 1).toJson(),
+        )['ok'],
+        true,
+      );
+
+      Object? failure;
+      bool isBot(int seat) => seat == 1 || seat == 2;
+      final ai = AiTurnCoordinator(
+        read: () => room.state,
+        delay: Duration.zero,
+        isComputerSeat: isBot,
+        onError: (error) => failure = error,
+        commit: (before, after) {
+          final bot = AiTurnCoordinator.actingSeat(before, isBot);
+          final ack = room.move(
+            bot,
+            'bot-${before.events.length}',
+            room.version,
+            after.events.last.toJson(),
+          );
+          return ack['ok'] == true;
+        },
+      );
+      ai.resume();
+      await ai.settled.timeout(const Duration(seconds: 8));
+      expect(failure, isNull);
+      expect(room.state!.events.whereType<RespondTrade>(), isNotEmpty);
+      expect(room.state!.offers, isEmpty);
+    },
+  );
+
+  test('network snapshots animate public events but hide private history', () {
+    final room = openRoom();
+    final original = room.state!;
+    room.state = original.copyWith(
+      events: [
+        const RollDice(2, 5),
+        DiscardResources(1, {Resource.wood: 3, Resource.wheat: 1}),
+        const PlayStrategyCard(4, target: 0, give: Resource.ore),
+        const PlaceRoad(12),
+      ],
+    );
+    final view = RoomProtocol.view(room.state!, 0);
+    expect(view['events'], isEmpty);
+    final exposed = view['publicEvents'] as List;
+    expect(exposed, hasLength(4));
+    expect(exposed[0], containsPair('type', 'roll'));
+    expect(exposed[1], containsPair('type', 'redacted'));
+    expect(exposed[2], containsPair('hand', -1));
+    expect(exposed[2].toString(), isNot(contains('ore')));
+    expect(exposed[3], containsPair('type', 'road'));
+    final received = RoomProtocol.readView(view);
+    expect(received.events, hasLength(4));
+    expect(received.events[0], isA<RollDice>());
+    expect(received.events[1], isA<RedactedNetworkEvent>());
+    expect(received.events[2], isA<PlayStrategyCard>());
+    expect(received.events.last, isA<PlaceRoad>());
+    expect(received.seed, 0);
+    expect(received.players[1].stores.values.every((n) => n == 0), true);
   });
 
   test('event decoder covers every Stage 5 response', () {

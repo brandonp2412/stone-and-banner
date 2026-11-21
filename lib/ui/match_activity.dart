@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../engine/match.dart';
+import '../engine/cards.dart';
 import '../engine/trade_sentiment.dart';
 import 'trade_feedback.dart';
 
@@ -17,7 +18,6 @@ class MatchActivity extends StatefulWidget {
     this.computerSeats = const <int>{},
     this.emote,
     this.emoteSerial = 0,
-    this.emoteTarget,
   });
 
   final MatchState state;
@@ -25,7 +25,6 @@ class MatchActivity extends StatefulWidget {
   final Set<int> computerSeats;
   final String? emote;
   final int emoteSerial;
-  final int? emoteTarget;
 
   @override
   State<MatchActivity> createState() => _MatchActivityState();
@@ -59,8 +58,7 @@ class _MatchActivityState extends State<MatchActivity> {
       () => _cue = _ActivityCue(
         index: -DateTime.now().microsecondsSinceEpoch,
         emoji: emoji,
-        title:
-            '${widget.state.players[seat].id}${seat == widget.viewerSeat && widget.emoteTarget != null ? ' → ${widget.state.players[widget.emoteTarget!].id}' : ''}',
+        title: widget.state.players[seat].id,
         detail: '',
         color: const Color(0xff67dbbf),
       ),
@@ -78,16 +76,14 @@ class _MatchActivityState extends State<MatchActivity> {
       _showEmote(widget.emote!, widget.viewerSeat);
       final replies = widget.computerSeats
           .where(
-            (seat) =>
-                (widget.emoteTarget == null || seat == widget.emoteTarget) &&
-                _random.nextDouble() < .35,
+            (seat) => seat != widget.viewerSeat && _random.nextDouble() < .35,
           )
           .toList();
       if (replies.isNotEmpty) {
         final seat = replies[_random.nextInt(replies.length)];
         _reply = Timer(const Duration(milliseconds: 1400), () {
           if (mounted) {
-            _showEmote(widget.emote == '😡' ? '😈' : widget.emote!, seat);
+            _showEmote(widget.emote == '😤' ? '😏' : widget.emote!, seat);
           }
         });
       }
@@ -99,17 +95,21 @@ class _MatchActivityState extends State<MatchActivity> {
         ? event.player
         : event is RespondTrade
         ? event.player
+        : event is ProposeTrade && event.counterActor != null
+        ? event.counterActor!
         : oldWidget.state.active;
     final cue =
         _tradeDeclineReaction(oldWidget.state, state, event) ??
         _cutOffReaction(oldWidget.state, state, event, actor) ??
-        _describe(state, event, actor);
+        _describe(state, event, actor, oldWidget.state);
     if (cue == null) return;
     _dismiss?.cancel();
     setState(() => _cue = cue);
     _dismiss = Timer(
       Duration(
-        milliseconds: event is ProposeTrade || event is RespondTrade
+        milliseconds: event is RespondTrade && event.accept
+            ? 8000
+            : event is ProposeTrade || event is RespondTrade
             ? 5000
             : 2200,
       ),
@@ -134,7 +134,7 @@ class _MatchActivityState extends State<MatchActivity> {
     final offer = before.offers
         .where(
           (offer) =>
-              offer.target == event.player &&
+              offer.canRespond(event.player) &&
               (event.offerId == null || event.offerId == offer.id),
         )
         .firstOrNull;
@@ -143,7 +143,7 @@ class _MatchActivityState extends State<MatchActivity> {
     }
     return _ActivityCue(
       index: after.events.length,
-      emoji: '😡',
+      emoji: '😤',
       title: '${after.players[offer.proposer].id}: Fine, keep your goods!',
       detail: 'They’ll offer you fewer trades from now on.',
       color: const Color(0xffffa28e),
@@ -187,10 +187,10 @@ class _MatchActivityState extends State<MatchActivity> {
     if (widget.computerSeats.contains(actor)) {
       return _ActivityCue(
         index: after.events.length,
-        emoji: '😈',
+        emoji: '😏',
         title: '${after.players[actor].id}: Beat you to it!',
         detail: 'That route is mine.',
-        color: const Color(0xffd1b2f5),
+        color: const Color(0xffffd449),
         cheeky: true,
       );
     }
@@ -199,7 +199,7 @@ class _MatchActivityState extends State<MatchActivity> {
     final names = cutOff.map((seat) => after.players[seat].id).join(' & ');
     return _ActivityCue(
       index: after.events.length,
-      emoji: '😡',
+      emoji: '😤',
       title: '$names: Hey! You cut me off!',
       detail:
           'Your move blocks ${cutOff.length == 1 ? "their route" : "their routes"}',
@@ -207,7 +207,12 @@ class _MatchActivityState extends State<MatchActivity> {
     );
   }
 
-  _ActivityCue? _describe(MatchState state, MatchEvent event, int actor) {
+  _ActivityCue? _describe(
+    MatchState state,
+    MatchEvent event,
+    int actor,
+    MatchState previous,
+  ) {
     final index = state.events.length;
     final isAi = widget.computerSeats.contains(actor);
     final player = state.players[actor].id;
@@ -226,7 +231,7 @@ class _MatchActivityState extends State<MatchActivity> {
       bool cheeky = false,
     }) => _ActivityCue(
       index: index,
-      emoji: cheeky ? '😈' : emoji,
+      emoji: cheeky ? '😏' : emoji,
       title: title,
       detail: detail,
       color: color,
@@ -241,71 +246,18 @@ class _MatchActivityState extends State<MatchActivity> {
           '${event.goods.values.fold<int>(0, (a, b) => a + b)} goods returned to the bank',
           color: blue,
         );
+      // Ordinary moves already animate on the board; no duplicate pop-up.
       case RollDice():
-        return cue('🎲', '$prefix rolls the dice', '', color: blue);
       case PlaceVillage():
-        return cue(
-          '🏘️',
-          '$prefix settles new land',
-          'A village rises',
-          color: teal,
-        );
       case PlaceRoad():
-        return cue(
-          '🛤️',
-          '$prefix lays a road',
-          'The realm grows',
-          color: teal,
-        );
       case UpgradeSite():
-        return cue(
-          '🏰',
-          '$prefix upgrades a settlement',
-          'Stone upon stone',
-          color: teal,
-        );
       case DevelopTown():
-        return cue(
-          '📜',
-          '$prefix develops a town',
-          'A little more power',
-          color: violet,
-        );
       case FortifyTown():
-        return cue(
-          '🛡️',
-          '$prefix fortifies a town',
-          'Walls stand ready',
-          color: teal,
-        );
       case RecruitKnight():
-        return cue(
-          '⚔️',
-          '$prefix recruits a knight',
-          'A new sword joins the realm',
-          color: blue,
-        );
       case ActivateKnight():
-        return cue(
-          '✨',
-          '$prefix activates a knight',
-          'Ready for trouble',
-          color: blue,
-        );
       case PromoteKnight():
-        return cue(
-          '🌟',
-          '$prefix promotes a knight',
-          'A mighty warrior emerges',
-          color: gold,
-        );
       case MoveKnight():
-        return cue(
-          '🐎',
-          '$prefix moves a knight',
-          'Hooves on the march',
-          color: blue,
-        );
+        return null;
       case MoveBandit():
         final victim = event.victim;
         final targeted = isAi && victim == widget.viewerSeat;
@@ -371,7 +323,9 @@ class _MatchActivityState extends State<MatchActivity> {
           color: gold,
         );
       case ProposeTrade():
-        if (actor != widget.viewerSeat && event.target != widget.viewerSeat) {
+        if (actor != widget.viewerSeat &&
+            event.target != -1 &&
+            event.target != widget.viewerSeat) {
           return null;
         }
         return cue(
@@ -392,9 +346,18 @@ class _MatchActivityState extends State<MatchActivity> {
             !event.accept &&
             tradeProposerForEvent(state, event.offerId ?? -1) ==
                 widget.viewerSeat;
+        final offer = proposalForResponse(state, event);
+        final offeredByViewer =
+            offer != null &&
+            tradeProposerForEvent(state, state.events.indexOf(offer)) ==
+                widget.viewerSeat;
         return cue(
           event.accept ? '🎉' : '📨',
-          event.accept ? 'Deal sealed!' : 'Offer declined',
+          event.accept
+              ? offeredByViewer
+                    ? 'YOUR TRADE WAS ACCEPTED!'
+                    : 'TRADE ACCEPTED!'
+              : 'Offer declined',
           message,
           color: event.accept ? teal : coral,
           cheeky: cheeky,
@@ -407,6 +370,42 @@ class _MatchActivityState extends State<MatchActivity> {
           color: violet,
         );
       case PlayStrategyCard():
+        final hand = previous.players[actor].cards;
+        final card = event.handIndex >= 0 && event.handIndex < hand.length
+            ? hand[event.handIndex].definition
+            : null;
+        if (card?.power == CardPower.massRaid) {
+          return cue(
+            '👑',
+            '$prefix unleashes the Royal Audit!',
+            'Every rival pays a random good. The taxman takes no prisoners.',
+            color: coral,
+          );
+        }
+        if (card?.power == CardPower.massExhaust) {
+          return cue(
+            '😤',
+            '$prefix suspends a whole squad!',
+            'Rival Knights on this hex are on involuntary holiday.',
+            color: violet,
+          );
+        }
+        if (card?.id == 'sheep-napping') {
+          return cue(
+            '🐑',
+            '$prefix launches a sheep conspiracy!',
+            'One rival is about to lose a good to the woolly underworld.',
+            color: gold,
+          );
+        }
+        if (card?.id == 'castle-of-spite') {
+          return cue(
+            '🏰',
+            '$prefix builds the Spite Castle!',
+            'An expensive-looking monument to petty rivalry.',
+            color: gold,
+          );
+        }
         final target = event.target;
         final cheeky = isAi && target == widget.viewerSeat;
         return cue(
@@ -424,7 +423,8 @@ class _MatchActivityState extends State<MatchActivity> {
           color: blue,
         );
       case EndTurn():
-        return cue('👋', '$prefix ends their turn', '', color: blue);
+      case RedactedNetworkEvent():
+        return null;
     }
   }
 
@@ -565,8 +565,8 @@ class _CheekyDevilPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.scale(size.width / 38, size.height / 38);
-    const purple = Color(0xffb075ed);
-    const deep = Color(0xff7845b7);
+    const yellow = Color(0xffffd449);
+    const deep = Color(0xffc58a20);
     final hornPaint = Paint()..color = deep;
     final leftHorn = Path()
       ..moveTo(5, 14)
@@ -580,7 +580,7 @@ class _CheekyDevilPainter extends CustomPainter {
       ..close();
     canvas.drawPath(leftHorn, hornPaint);
     canvas.drawPath(rightHorn, hornPaint);
-    canvas.drawCircle(const Offset(19, 21), 16, Paint()..color = purple);
+    canvas.drawCircle(const Offset(19, 21), 16, Paint()..color = yellow);
     canvas.drawCircle(
       const Offset(13.2, 18),
       3.5,
@@ -590,15 +590,15 @@ class _CheekyDevilPainter extends CustomPainter {
     canvas.drawCircle(
       const Offset(14.4, 17.6),
       1.7,
-      Paint()..color = const Color(0xff251833),
+      Paint()..color = const Color(0xff302217),
     );
     canvas.drawCircle(
       const Offset(26.2, 17.6),
       1.7,
-      Paint()..color = const Color(0xff251833),
+      Paint()..color = const Color(0xff302217),
     );
     final brow = Paint()
-      ..color = const Color(0xff512876)
+      ..color = const Color(0xff92501b)
       ..strokeWidth = 2.6
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
@@ -610,7 +610,7 @@ class _CheekyDevilPainter extends CustomPainter {
     canvas.drawPath(
       smirk,
       Paint()
-        ..color = const Color(0xff43205b)
+        ..color = const Color(0xff82501b)
         ..strokeWidth = 2.8
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round,
@@ -618,7 +618,7 @@ class _CheekyDevilPainter extends CustomPainter {
     canvas.drawCircle(
       const Offset(30.2, 22.7),
       2,
-      Paint()..color = const Color(0xffd9aaff),
+      Paint()..color = const Color(0xffffeb9a),
     );
     canvas.restore();
   }

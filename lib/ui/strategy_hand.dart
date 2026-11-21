@@ -3,6 +3,8 @@ import 'labels.dart';
 
 import 'dart:math' as math;
 
+import 'compact_layout.dart';
+
 import 'package:flutter/material.dart';
 
 import '../engine/cards.dart';
@@ -78,6 +80,7 @@ class StrategyHand extends StatelessWidget {
     this.onlineOptions,
     this.allowActions = true,
     this.onOpenRealm,
+    this.onChooseOnMap,
   });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
@@ -89,6 +92,19 @@ class StrategyHand extends StatelessWidget {
       state.phase == MatchPhase.actions &&
       state.tactical == null;
   final VoidCallback? onOpenRealm;
+  final void Function(StrategyCard card, List<PlayStrategyCard> legalOptions)?
+  onChooseOnMap;
+
+  static bool usesMap(CardPower power) => {
+    CardPower.freeRoad,
+    CardPower.freeFort,
+    CardPower.activate,
+    CardPower.promote,
+    CardPower.exhaust,
+    CardPower.moveBandit,
+    CardPower.seizeGood,
+    CardPower.massExhaust,
+  }.contains(power);
 
   String _optionLabel(StrategyCard card, PlayStrategyCard option) {
     switch (card.power) {
@@ -96,7 +112,7 @@ class StrategyHand extends StatelessWidget {
         return 'Collect listed supplies';
       case CardPower.chooseBasic:
       case CardPower.chooseCommodity:
-        return 'Collect ${card.amount} ${option.receive!.name}';
+        return 'Collect ${card.amount} ${option.receive!.displayName}';
       case CardPower.freeRoad:
         return 'Build road on edge ${option.vertex! + 1}';
       case CardPower.freeFort:
@@ -106,7 +122,7 @@ class StrategyHand extends StatelessWidget {
       case CardPower.leverageSwap:
         final give = card.power == CardPower.leverageSwap ? 2 : 1;
         final receive = card.power == CardPower.portSwap ? 2 : 1;
-        return 'Give $give ${option.give!.name} · receive $receive ${option.receive!.name}';
+        return 'Give $give ${option.give!.displayName} · receive $receive ${option.receive!.displayName}';
       case CardPower.activate:
         return 'Activate Knight at junction ${option.vertex! + 1}';
       case CardPower.promote:
@@ -116,13 +132,21 @@ class StrategyHand extends StatelessWidget {
       case CardPower.moveBandit:
         return 'Move Bandit to hex ${option.tile! + 1} '
             '(${terrainLabel(state.board.tiles[option.tile!].land)})';
+      case CardPower.massRaid:
+        return 'Collect one stolen resource from each rival';
+      case CardPower.massExhaust:
+        return 'Dismiss Knights around hex ${option.tile! + 1}';
       case CardPower.seizeGood:
-        return 'Take ${option.receive!.name} from '
+        return 'Take ${option.receive!.displayName} from '
             '${state.players[option.target!].id}';
     }
   }
 
-  Future<void> _showCard(BuildContext context, int handIndex) async {
+  Future<void> _showCard(
+    BuildContext context,
+    int handIndex, {
+    bool forceDetails = false,
+  }) async {
     final card = state.current.cards[handIndex].definition;
     final options = !_canAct
         ? <PlayStrategyCard>[]
@@ -134,6 +158,11 @@ class StrategyHand extends StatelessWidget {
                   as PlayStrategyCard,
           ];
 
+    final boardTargeted = usesMap(card.power) && onChooseOnMap != null;
+    if (boardTargeted && !forceDetails && options.isNotEmpty) {
+      onChooseOnMap!(card, options);
+      return;
+    }
     // Large trade/raid choice sets are split into one decision per screen.
     // Only a confirmed option is sent to the deterministic reducer.
     final groups = <String, List<PlayStrategyCard>>{};
@@ -147,7 +176,7 @@ class StrategyHand extends StatelessWidget {
       for (final option in options) {
         final title = card.power == CardPower.seizeGood
             ? 'Player ${state.players[option.target!].id}'
-            : 'Give ${card.power == CardPower.leverageSwap ? 2 : 1} ${option.give!.name}';
+            : 'Give ${card.power == CardPower.leverageSwap ? 2 : 1} ${option.give!.displayName}';
         groups.putIfAbsent(title, () => []).add(option);
       }
     }
@@ -173,13 +202,13 @@ class StrategyHand extends StatelessWidget {
               ? 'Effect'
               : 'Choose a legal target or exchange';
           final detail = SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(isCompactLandscape(sheetContext) ? 8 : 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  height: 92,
-                  width: 72,
+                  height: isCompactLandscape(sheetContext) ? 56 : 92,
+                  width: isCompactLandscape(sheetContext) ? 46 : 72,
                   child: CustomPaint(
                     painter: _CardMotif(
                       card.track,
@@ -190,7 +219,7 @@ class StrategyHand extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: isCompactLandscape(sheetContext) ? 4 : 12),
                 Text(
                   card.track.name.toUpperCase(),
                   style: TextStyle(
@@ -199,7 +228,7 @@ class StrategyHand extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: isCompactLandscape(sheetContext) ? 2 : 8),
                 Text(card.description, style: const TextStyle(fontSize: 13)),
               ],
             ),
@@ -224,7 +253,33 @@ class StrategyHand extends StatelessWidget {
                   label: Text(selectedGroup!),
                 ),
               Expanded(
-                child: options.isEmpty
+                child: boardTargeted && options.isNotEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.map_outlined, size: 48),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Choose the highlighted location on the realm map.',
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              FilledButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(sheetContext);
+                                  onChooseOnMap!(card, options);
+                                },
+                                icon: const Icon(Icons.place_outlined),
+                                label: const Text('Choose on map'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : options.isEmpty
                     ? const Center(
                         child: Padding(
                           padding: EdgeInsets.all(12),
@@ -277,7 +332,7 @@ class StrategyHand extends StatelessWidget {
                           : () async {
                               final confirmed = await showDialog<bool>(
                                 context: sheetContext,
-                                builder: (dialogContext) => AlertDialog(
+                                builder: (dialogContext) => CompactAlertDialog(
                                   title: const Text('Discard this card?'),
                                   content: Text(
                                     '${card.name} will leave your hand without using its effect.',
@@ -304,7 +359,7 @@ class StrategyHand extends StatelessWidget {
                       icon: const Icon(Icons.delete_outline),
                       label: const Text('Discard this card'),
                     ),
-                    if (options.isNotEmpty)
+                    if (options.isNotEmpty && !boardTargeted)
                       FilledButton.icon(
                         onPressed: selectedOption == null
                             ? null
@@ -322,21 +377,34 @@ class StrategyHand extends StatelessWidget {
             ],
           );
           return Dialog(
-            insetPadding: const EdgeInsets.all(12),
+            insetPadding: EdgeInsets.all(
+              isCompactLandscape(sheetContext) ? 4 : 12,
+            ),
             clipBehavior: Clip.antiAlias,
             child: SizedBox(
-              width: 760,
-              height: MediaQuery.sizeOf(sheetContext).height * .94,
+              width: isCompactLandscape(sheetContext)
+                  ? MediaQuery.sizeOf(sheetContext).width - 8
+                  : 760,
+              height: isCompactLandscape(sheetContext)
+                  ? MediaQuery.sizeOf(sheetContext).height - 8
+                  : MediaQuery.sizeOf(sheetContext).height * .94,
               child: Column(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+                    padding: EdgeInsets.fromLTRB(
+                      isCompactLandscape(sheetContext) ? 10 : 16,
+                      0,
+                      4,
+                      0,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
                           child: Text(
                             card.name,
-                            style: Theme.of(sheetContext).textTheme.titleLarge,
+                            style: isCompactLandscape(sheetContext)
+                                ? Theme.of(sheetContext).textTheme.titleMedium
+                                : Theme.of(sheetContext).textTheme.titleLarge,
                           ),
                         ),
                         IconButton(
@@ -499,7 +567,12 @@ class StrategyHand extends StatelessWidget {
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right),
+                        IconButton(
+                          tooltip: 'Card details and discard',
+                          onPressed: () =>
+                              _showCard(context, i, forceDetails: true),
+                          icon: const Icon(Icons.more_vert),
+                        ),
                       ],
                     ),
                   ),

@@ -62,9 +62,23 @@ class AiTurnCoordinator {
   static int actingSeat(MatchState state, bool Function(int) isComputerSeat) {
     if (state.tactical == null && state.phase == MatchPhase.actions) {
       for (final offer in state.offers) {
-        if (offer.proposer == state.active &&
-            (isComputerSeat(offer.target) || isComputerSeat(offer.proposer))) {
-          return offer.target;
+        if (offer.proposer == state.active) {
+          if (offer.target == -1) {
+            // Let a human see a computer's broadcast before bots claim it.
+            if (isComputerSeat(offer.proposer)) {
+              for (var seat = 0; seat < state.players.length; seat++) {
+                if (!isComputerSeat(seat) && offer.canRespond(seat)) {
+                  return seat;
+                }
+              }
+            }
+            for (var seat = 0; seat < state.players.length; seat++) {
+              if (isComputerSeat(seat) && offer.canRespond(seat)) return seat;
+            }
+          } else if (isComputerSeat(offer.target) ||
+              isComputerSeat(offer.proposer)) {
+            return offer.target;
+          }
         }
       }
     }
@@ -92,6 +106,21 @@ class AiTurnCoordinator {
     _generation++;
   }
 
+  static RespondTrade _answerOffer(
+    MatchState state,
+    int seat,
+    TradeProposal offer,
+  ) {
+    final view = AiActionAdapter.observe(
+      state.copyWith(active: seat, offers: [offer]),
+      seat,
+    );
+    final answer = AiCardStrategy.incomingOffer(view);
+    return answer is RespondTrade
+        ? answer
+        : RespondTrade(seat, false, offerId: offer.id);
+  }
+
   Future<void> _drive(int ticket) async {
     var events = 0;
     try {
@@ -108,6 +137,73 @@ class AiTurnCoordinator {
           throw StateError('Computer move limit reached. Resume to continue.');
         }
 
+        // Everyone evaluates the same broadcast independently. Present the
+        // replies together instead of making each bot wait for another turn's
+        // animation. Apply declines first, then at most one acceptance: a
+        // successful trade closes the offer for all other recipients.
+        TradeProposal? broadcast;
+        if (immediateReply) {
+          for (final offer in before.offers) {
+            if (offer.proposer == before.active &&
+                offer.target == -1 &&
+                offer.canRespond(seat)) {
+              broadcast = offer;
+              break;
+            }
+          }
+        }
+        if (broadcast != null) {
+          final recipients = [
+            for (
+              var candidate = 0;
+              candidate < before.players.length;
+              candidate++
+            )
+              if (isComputerSeat(candidate) && broadcast.canRespond(candidate))
+                candidate,
+          ];
+          if (recipients.length > 1) {
+            final replies = [
+              for (final recipient in recipients)
+                _answerOffer(before, recipient, broadcast),
+            ];
+            final declines = replies.where((reply) => !reply.accept).toList();
+            final acceptances = replies.where((reply) => reply.accept);
+            final winner = acceptances.isEmpty ? null : acceptances.first;
+            final ordered = [...declines, ?winner];
+            if (events + ordered.length > maxEventsPerRun) {
+              throw StateError(
+                'Computer move limit reached. Resume to continue.',
+              );
+            }
+            await _presentationDelay();
+            if (_paused || ticket != _generation) return;
+            if (!identical(before, read())) continue;
+            var expected = before;
+            for (final reply in ordered) {
+              if (_paused ||
+                  ticket != _generation ||
+                  !identical(expected, read())) {
+                return;
+              }
+              final next = MatchEngine.apply(expected, reply);
+              if (!commit(expected, next)) return;
+              onProgress?.call(++events);
+              // Network hosts re-run the reducer when recording a move, so
+              // their stored state is equivalent to `next` but not identical.
+              // Use the authoritative read-back for the next response.
+              final committed = read();
+              if (committed == null ||
+                  committed.events.length != next.events.length ||
+                  committed.events.last is! RespondTrade) {
+                return;
+              }
+              expected = committed;
+            }
+            continue;
+          }
+        }
+
         // Yield even in tests with a zero delay. No wall clock enters the
         // reducer, seed, policy or replay; this only schedules presentation.
         // Think during the presentation interval, so decision time is not
@@ -117,16 +213,9 @@ class AiTurnCoordinator {
           Future<MatchEvent?>.sync(() {
             if (!immediateReply) return _decide(before);
             final offer = before.offers.firstWhere(
-              (o) => o.proposer == before.active && o.target == seat,
+              (o) => o.proposer == before.active && o.canRespond(seat),
             );
-            final view = AiActionAdapter.observe(
-              before.copyWith(active: seat, offers: [offer]),
-              seat,
-            );
-            final answer = AiCardStrategy.incomingOffer(view);
-            return answer is RespondTrade
-                ? answer
-                : RespondTrade(seat, false, offerId: offer.id);
+            return _answerOffer(before, seat, offer);
           }).onError<StateError>((error, stack) => null),
           // Every visible computer action receives the same presentation
           // interval, regardless of whether the previous event was a trade,
@@ -161,7 +250,8 @@ class AiTurnCoordinator {
                   false,
                   offerId: current.offers
                       .firstWhere(
-                        (o) => o.target == seat && o.proposer == current.active,
+                        (o) =>
+                            o.canRespond(seat) && o.proposer == current.active,
                       )
                       .id,
                 )

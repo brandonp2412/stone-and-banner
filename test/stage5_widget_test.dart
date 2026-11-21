@@ -87,7 +87,7 @@ void main() {
     ); // Negotiation overlays the tabletop.
     await tester.tap(find.byType(DropdownButton<Resource>).last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('wool (${s.bank[Resource.wool]})').last);
+    await tester.tap(find.text('sheep (${s.bank[Resource.wool]})').last);
     await tester.pumpAndSettle();
     expect(find.text('Exchange'), findsOneWidget);
     await tester.tap(find.text('Exchange'));
@@ -126,7 +126,7 @@ void main() {
     await tester.tap(find.text('Player trade'));
     await tester.pumpAndSettle();
     expect(find.text('Standing offer'), findsOneWidget);
-    expect(find.text('To Ben'), findsOneWidget);
+    expect(find.text('To everyone'), findsOneWidget);
     await tester.tap(find.byType(DropdownButton<Resource>).first);
     await tester.pumpAndSettle();
     await tester.tap(
@@ -141,6 +141,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(updated.offers, hasLength(1));
     expect(updated.offers.single.give, Resource.wood);
+    expect(updated.offers.single.target, -1);
     expect(updated.players[0].stores[Resource.wood], before);
     expect(find.text('Standing offer'), findsNothing);
   });
@@ -161,8 +162,11 @@ void main() {
       final tile = s.topology.vertices[site].tiles.firstWhere(
         (v) => v != s.banditTile,
       );
+      final nearby = s.topology.tileVertices[tile].firstWhere(
+          (vertex) => !s.sites.containsKey(vertex));
       s = s.copyWith(
-        knights: {0: const KnightPiece(1, KnightRank.sentinel, true, -1)},
+        builders: {...s.builders, 1},
+        knights: {nearby: const KnightPiece(1, KnightRank.sentinel, true, -1)},
       );
       s = MatchEngine.apply(s, MoveBandit(tile, victim: 1));
       var updated = s;
@@ -176,7 +180,7 @@ void main() {
       await tester.tap(find.text('Intercept with Knight'));
       await tester.pumpAndSettle();
       expect(updated.tactical, isNull);
-      expect(updated.knights[0]!.active, isFalse);
+      expect(updated.knights[nearby]!.active, isFalse);
       expect(find.text('Bandit interception'), findsNothing);
     },
   );
@@ -198,6 +202,14 @@ void main() {
     expect(s.tactical, isNotNull);
     var updated = s;
     await showMatch(tester, s, (v) => updated = v);
+    expect(find.text('Response for Ada'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Pass'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Pass'));
+    await tester.pumpAndSettle();
     expect(find.text('Response for Ben'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Pledge 1 ore'),

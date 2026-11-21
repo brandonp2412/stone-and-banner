@@ -32,7 +32,6 @@ class _MatchEndModalState extends State<MatchEndModal>
   late final AnimationController _celebration;
 
   static const gold = Color(0xfff4ce80);
-  static const cyan = Color(0xff80ead5);
   static const dusk = Color(0xffcba4f6);
 
   @override
@@ -74,7 +73,7 @@ class _MatchEndModalState extends State<MatchEndModal>
     final points = MatchEngine.score(widget.state, widget.winner);
     final available = MediaQuery.sizeOf(context);
     final compact = available.height < 355;
-    final height = math.min(compact ? 276.0 : 310.0, available.height - 22);
+    final height = math.min(compact ? 283.0 : 310.0, available.height - 22);
     return Stack(
       children: [
         const ModalBarrier(
@@ -290,8 +289,9 @@ class _MatchEndModalState extends State<MatchEndModal>
                                   Text(
                                     '$winnerName claims the realm',
                                     key: const ValueKey('match-finale-winner'),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                    softWrap: true,
+                                    overflow: TextOverflow.visible,
                                     style: TextStyle(
                                       fontSize: compact ? 13 : 16,
                                       fontWeight: FontWeight.w700,
@@ -308,70 +308,114 @@ class _MatchEndModalState extends State<MatchEndModal>
                                   ),
                                   const SizedBox(height: 10),
                                   SizedBox(
-                                    height: compact ? 30 : 37,
-                                    child: ListView.separated(
-                                      scrollDirection: Axis.horizontal,
-                                      itemCount: widget.state.players.length,
-                                      separatorBuilder: (_, _) =>
-                                          const SizedBox(width: 6),
-                                      itemBuilder: (context, index) {
-                                        final score = MatchEngine.score(
-                                          widget.state,
-                                          index,
-                                        );
-                                        final leading = index == widget.winner;
-                                        return Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 9,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: leading
-                                                ? accent.withValues(alpha: .16)
-                                                : const Color(0x9920313a),
-                                            border: Border.all(
-                                              color: leading
-                                                  ? accent
-                                                  : const Color(0xff45616a),
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              9,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              if (leading) ...[
-                                                Icon(
-                                                  Icons
-                                                      .workspace_premium_rounded,
-                                                  size: 14,
-                                                  color: accent,
-                                                ),
-                                                const SizedBox(width: 3),
-                                              ],
-                                              Text(
-                                                widget.state.players[index].id,
-                                                style: const TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.white,
-                                                ),
+                                    height: compact ? 64 : 80,
+                                    child: LayoutBuilder(
+                                      builder: (context, box) => SingleChildScrollView(
+                                        child: Wrap(
+                                          spacing: 6,
+                                          runSpacing: 5,
+                                          children: [
+                                            for (
+                                              var index = 0;
+                                              index <
+                                                  widget.state.players.length;
+                                              index++
+                                            )
+                                              Builder(
+                                                builder: (context) {
+                                                  final score =
+                                                      MatchEngine.score(
+                                                        widget.state,
+                                                        index,
+                                                      );
+                                                  final leading =
+                                                      index == widget.winner;
+                                                  return Container(
+                                                    width:
+                                                        (box.maxWidth - 6) / 2,
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 9,
+                                                          vertical: 4,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: leading
+                                                          ? accent.withValues(
+                                                              alpha: .16,
+                                                            )
+                                                          : const Color(
+                                                              0x9920313a,
+                                                            ),
+                                                      border: Border.all(
+                                                        color: leading
+                                                            ? accent
+                                                            : const Color(
+                                                                0xff45616a,
+                                                              ),
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            9,
+                                                          ),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        if (leading) ...[
+                                                          Icon(
+                                                            Icons
+                                                                .workspace_premium_rounded,
+                                                            size: 14,
+                                                            color: accent,
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 3,
+                                                          ),
+                                                        ],
+                                                        Expanded(
+                                                          child: Text(
+                                                            widget
+                                                                .state
+                                                                .players[index]
+                                                                .id,
+                                                            maxLines: 2,
+                                                            softWrap: true,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 10,
+                                                                  color: Colors
+                                                                      .white,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 5,
+                                                        ),
+                                                        Text(
+                                                          '$score',
+                                                          style: TextStyle(
+                                                            fontSize: 13,
+                                                            fontWeight:
+                                                                FontWeight.w900,
+                                                            color: leading
+                                                                ? accent
+                                                                : const Color(
+                                                                    0xffafc6c8,
+                                                                  ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
                                               ),
-                                              const SizedBox(width: 5),
-                                              Text(
-                                                '$score',
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w900,
-                                                  color: leading
-                                                      ? accent
-                                                      : const Color(0xffafc6c8),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
                                   const Spacer(),
@@ -404,20 +448,32 @@ class _MatchEndModalState extends State<MatchEndModal>
                                       ),
                                       if (widget.onHome != null) ...[
                                         const SizedBox(width: 8),
-                                        OutlinedButton.icon(
+                                        FilledButton.tonalIcon(
                                           key: const ValueKey(
                                             'match-finale-home',
                                           ),
                                           onPressed: widget.onHome,
                                           icon: const Icon(
-                                            Icons.home_outlined,
-                                            size: 17,
+                                            Icons.home_rounded,
+                                            size: 18,
                                           ),
                                           label: const Text('Home'),
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: cyan,
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: const Color(
+                                              0xff243b43,
+                                            ),
+                                            foregroundColor: const Color(
+                                              0xffe4eff0,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              side: const BorderSide(
+                                                color: Color(0xff6b939a),
+                                              ),
+                                            ),
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
+                                              horizontal: 16,
                                             ),
                                             minimumSize: Size(
                                               0,

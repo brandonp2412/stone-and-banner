@@ -264,7 +264,7 @@ void main() {
     );
     expect(find.byType(InteractiveViewer), findsNothing);
     expect(find.byTooltip('Reset map zoom'), findsNothing);
-    await tester.tap(find.byTooltip('Choose board target from list'));
+    await tester.tap(find.byTooltip('Choose target'));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(ListTile).first);
     await tester.pumpAndSettle();
@@ -297,7 +297,7 @@ void main() {
       expect(find.text('Watch the realm grow.'), findsNothing);
       expect(find.text('Private hands are concealed'), findsNothing);
       expect(find.text('Build'), findsNothing);
-      expect(find.byTooltip('Choose board target from list'), findsNothing);
+      expect(find.byTooltip('Choose target'), findsNothing);
       final map = find.byKey(const ValueKey('realm-map'));
       final point = BoardGeometry(
         tester.getSize(map),
@@ -348,8 +348,8 @@ void main() {
     );
     expect(find.textContaining('Strategy hand'), findsNothing);
     expect(find.text('Roll dice'), findsNothing);
-    expect(find.text('Return to board'), findsOneWidget);
-    await tester.tap(find.text('Return to board'));
+    expect(find.byTooltip('Back to map'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to map'));
     await tester.pumpAndSettle();
     expect(find.text('Roll dice'), findsOneWidget);
     expect(tester.takeException(), isNull);

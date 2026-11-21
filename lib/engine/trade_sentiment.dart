@@ -30,17 +30,28 @@ abstract final class TradeSentiment {
       if (event is EndTurn) {
         active = (active + 1) % state.players.length;
       } else if (event is ProposeTrade) {
+        final original = event.counterOf == null
+            ? null
+            : offers[event.counterOf];
         offers.remove(event.counterOf);
-        offers[i] = (active, event.target);
+        offers[i] = (
+          event.counterActor ??
+              (original != null && original.$2 >= 0 ? original.$2 : active),
+          event.target,
+        );
       } else if (event is WithdrawTrade) {
         offers.remove(event.offerId);
       } else if (event is RespondTrade) {
         final id =
             event.offerId ??
             offers.keys
-                .where((id) => offers[id]!.$2 == event.player)
+                .where(
+                  (id) =>
+                      offers[id]!.$2 == event.player || offers[id]!.$2 == -1,
+                )
                 .firstOrNull;
-        final offer = offers.remove(id);
+        final offer = offers[id];
+        if (event.accept || offer?.$2 != -1) offers.remove(id);
         if (offer != null && offer.$1 == proposer && angryAtDecline(state, i)) {
           result.update(event.player, (count) => count + 1, ifAbsent: () => 1);
         }

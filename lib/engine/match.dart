@@ -54,11 +54,19 @@ class TradeProposal {
     this.isCounter = false,
     this.giveBundle,
     this.wantBundle,
+    this.declinedBy = const <int>{},
   });
+
+  /// A target of -1 means the first willing opponent can accept the offer.
   final int id, proposer, target, giveCount, wantCount;
   final Resource give, want;
   final bool isCounter;
   final Map<Resource, int>? giveBundle, wantBundle;
+  final Set<int> declinedBy;
+  bool canRespond(int seat) =>
+      seat != proposer &&
+      (target == -1 || target == seat) &&
+      !declinedBy.contains(seat);
   Map<Resource, int> get gives => giveBundle ?? {give: giveCount};
   Map<Resource, int> get wants => wantBundle ?? {want: wantCount};
 }
@@ -150,13 +158,15 @@ class MoveBandit extends MatchEvent {
 }
 
 class BankExchange extends MatchEvent {
-  const BankExchange(this.give, this.receive);
+  const BankExchange(this.give, this.receive, {this.times = 1});
   final Resource give, receive;
+  final int times;
   @override
   Map<String, Object?> toJson() => {
     'type': 'bank',
     'give': give.name,
     'receive': receive.name,
+    if (times != 1) 'times': times,
   };
 }
 
@@ -168,11 +178,12 @@ class ProposeTrade extends MatchEvent {
     this.want,
     this.wantCount, {
     this.counterOf,
+    this.counterActor,
     this.giveBundle,
     this.wantBundle,
   });
   final int target, giveCount, wantCount;
-  final int? counterOf;
+  final int? counterOf, counterActor;
   final Resource give, want;
   final Map<Resource, int>? giveBundle, wantBundle;
   Map<Resource, int> get gives => giveBundle ?? {give: giveCount};
@@ -186,6 +197,7 @@ class ProposeTrade extends MatchEvent {
     'want': want.name,
     'wantCount': wantCount,
     'counterOf': counterOf,
+    if (counterActor != null) 'counterActor': counterActor,
     if (giveBundle != null) 'giveBundle': encodeTradeBundle(gives),
     if (wantBundle != null) 'wantBundle': encodeTradeBundle(wants),
   };
@@ -335,9 +347,17 @@ class EndTurn extends MatchEvent {
   Map<String, Object?> toJson() => {'type': 'end'};
 }
 
+/// Private-history placeholder in a network view. Never replay or dispatch.
+class RedactedNetworkEvent extends MatchEvent {
+  const RedactedNetworkEvent();
+  @override
+  Map<String, Object?> toJson() => {'type': 'redacted'};
+}
+
 class MatchState {
   MatchState({
     required this.seed,
+    this.cardDeckVersion = 1,
     this.balance = MatchBalance.baseline,
     required this.board,
     required this.topology,
@@ -373,6 +393,7 @@ class MatchState {
     this.tactical,
     Set<int> reactionsUsed = const {},
     this.invasionAid = 0,
+    this.invasionInvitesFromEvent = 0,
     Map<int, int> pendingDiscards = const {},
     List<MatchEvent> events = const [],
   }) : pendingDiscards = Map.unmodifiable(pendingDiscards),
@@ -402,6 +423,7 @@ class MatchState {
        events = List.unmodifiable(events);
 
   final int seed, active, setupStep, rollCount, banditTile, round;
+  final int cardDeckVersion;
   final MatchBalance balance;
   final Board board;
   final BoardTopology topology;
@@ -412,6 +434,9 @@ class MatchState {
   final Set<int> fortified, reaverScars, reliefUsed;
   final Map<int, int> dryRolls;
   final int reaverPressure, invasions, turnSerial;
+
+  /// Earlier replays retain their original invasion response order.
+  final int invasionInvitesFromEvent;
   final int? firstCapitalOwner;
   final String lastInvasion;
   final Map<Resource, int> bank;
@@ -437,6 +462,7 @@ class MatchState {
 
   MatchState copyWith({
     List<PlayerState>? players,
+    int? cardDeckVersion,
     Map<int, Site>? sites,
     Map<int, int>? roads,
     Map<int, KnightPiece>? knights,
@@ -472,10 +498,12 @@ class MatchState {
     bool clearTactical = false,
     Set<int>? reactionsUsed,
     int? invasionAid,
+    int? invasionInvitesFromEvent,
     Map<int, int>? pendingDiscards,
     List<MatchEvent>? events,
   }) => MatchState(
     seed: seed,
+    cardDeckVersion: cardDeckVersion ?? this.cardDeckVersion,
     balance: balance,
     board: board,
     topology: topology,
@@ -515,6 +543,8 @@ class MatchState {
     tactical: clearTactical ? null : tactical ?? this.tactical,
     reactionsUsed: reactionsUsed ?? this.reactionsUsed,
     invasionAid: invasionAid ?? this.invasionAid,
+    invasionInvitesFromEvent:
+        invasionInvitesFromEvent ?? this.invasionInvitesFromEvent,
     pendingDiscards: pendingDiscards ?? this.pendingDiscards,
     events: events ?? this.events,
   );
@@ -558,6 +588,8 @@ class MatchEngine {
     int seed, {
     int? boardSeed,
     MatchBalance balance = MatchBalance.baseline,
+    int invasionInvitesFromEvent = 0,
+    int cardDeckVersion = 1,
   }) {
     _require(names.length >= 3 && names.length <= 4, 'Choose 3 or 4 players.');
     _require(
@@ -568,7 +600,9 @@ class MatchEngine {
     final board = BoardGenerator.generate(boardSeed ?? seed);
     return MatchState(
       seed: seed,
+      cardDeckVersion: cardDeckVersion,
       balance: balance,
+      invasionInvitesFromEvent: invasionInvitesFromEvent,
       board: board,
       topology: BoardTopology(board),
       players: [for (final n in names) PlayerState(id: n)],
@@ -576,7 +610,10 @@ class MatchEngine {
       drawPiles: {
         for (final track in StrategyDeck.values)
           track: _shuffle(
-            List.generate(StrategyCards.deck(track).length, (i) => i),
+            List.generate(
+              StrategyCards.deckForVersion(track, cardDeckVersion).length,
+              (i) => i,
+            ),
             seed ^ ((track.index + 1) * 0x9e3779b9),
           ),
       },
@@ -591,8 +628,17 @@ class MatchEngine {
     Iterable<MatchEvent> events, {
     int? boardSeed,
     MatchBalance balance = MatchBalance.baseline,
+    int invasionInvitesFromEvent = 0,
+    int cardDeckVersion = 1,
   }) {
-    var state = newGame(names, seed, boardSeed: boardSeed, balance: balance);
+    var state = newGame(
+      names,
+      seed,
+      boardSeed: boardSeed,
+      balance: balance,
+      invasionInvitesFromEvent: invasionInvitesFromEvent,
+      cardDeckVersion: cardDeckVersion,
+    );
     for (final event in events) {
       state = _apply(state, event, replaying: true);
     }
@@ -601,6 +647,8 @@ class MatchEngine {
 
   static String exportReplay(MatchState s) => jsonEncode({
     'format': 'stone-and-banner-replay-v1',
+    'invasionInvitesFromEvent': s.invasionInvitesFromEvent,
+    'cardDeckVersion': s.cardDeckVersion,
     'seed': s.seed,
     'boardSeed': s.board.seed,
     'balance': s.balance.toJson(),
@@ -651,7 +699,11 @@ class MatchEngine {
             Resource.values.byName(entry.key): entry.value as int,
         }),
         'bandit' => MoveBandit(e['tile'] as int, victim: e['victim'] as int?),
-        'bank' => BankExchange(resource('give'), resource('receive')),
+        'bank' => BankExchange(
+          resource('give'),
+          resource('receive'),
+          times: e['times'] as int? ?? 1,
+        ),
         'offer' => ProposeTrade(
           e['target'] as int,
           resource('give'),
@@ -659,6 +711,7 @@ class MatchEngine {
           resource('want'),
           e['wantCount'] as int,
           counterOf: e['counterOf'] as int?,
+          counterActor: e['counterActor'] as int?,
           giveBundle: decodeTradeBundle(e['giveBundle']),
           wantBundle: decodeTradeBundle(e['wantBundle']),
         ),
@@ -689,6 +742,9 @@ class MatchEngine {
       events,
       boardSeed: value['boardSeed'] as int?,
       balance: MatchBalance.fromJson(value['balance'] as Map<String, dynamic>?),
+      invasionInvitesFromEvent:
+          value['invasionInvitesFromEvent'] as int? ?? events.length,
+      cardDeckVersion: value['cardDeckVersion'] as int? ?? 1,
     );
   }
 
@@ -771,10 +827,13 @@ class MatchEngine {
           o.want.name,
           o.wantCount,
           o.isCounter,
-          if (o.giveBundle != null || o.wantBundle != null) ...[
+          if (o.giveBundle != null ||
+              o.wantBundle != null ||
+              o.declinedBy.isNotEmpty) ...[
             encodeTradeBundle(o.gives),
             encodeTradeBundle(o.wants),
           ],
+          if (o.declinedBy.isNotEmpty) o.declinedBy.toList()..sort(),
         ],
     ],
     'tactical': s.tactical == null
@@ -869,6 +928,11 @@ class MatchEngine {
       return false;
     }
     bool linked(int vertex) {
+      if (s.events.length >= s.invasionInvitesFromEvent) {
+        if (s.knights[vertex] case final KnightPiece knight) {
+          if (knight.owner != s.active) return false;
+        }
+      }
       if (s.sites[vertex] case final Site site) return site.owner == s.active;
       return s.topology.vertices[vertex].edges.any(
         (other) => s.roads[other] == s.active,
@@ -1119,6 +1183,11 @@ class MatchEngine {
     }
     final edge = s.topology.edges[id];
     bool linked(int vertex) {
+      if (s.events.length >= s.invasionInvitesFromEvent) {
+        if (s.knights[vertex] case final KnightPiece knight) {
+          if (knight.owner != s.active) return false;
+        }
+      }
       if (s.sites[vertex] case final Site site) return site.owner == s.active;
       return s.topology.vertices[vertex].edges.any(
         (e) => s.roads[e] == s.active,
@@ -1221,6 +1290,25 @@ class MatchEngine {
         for (var tile = 0; tile < s.board.tiles.length; tile++) {
           if (tile != s.banditTile) add(tile: tile);
         }
+      case CardPower.massRaid:
+        if (s.players.asMap().entries.any(
+          (entry) =>
+              entry.key != s.active &&
+              entry.value.stores.values.any((amount) => amount > 0),
+        )) {
+          add();
+        }
+      case CardPower.massExhaust:
+        for (var tile = 0; tile < s.board.tiles.length; tile++) {
+          if (s.topology.tileVertices[tile].any(
+            (vertex) =>
+                s.knights[vertex] != null &&
+                s.knights[vertex]!.owner != s.active &&
+                s.knights[vertex]!.active,
+          )) {
+            add(tile: tile);
+          }
+        }
       case CardPower.seizeGood:
         for (var target = 0; target < s.players.length; target++) {
           if (target == s.active) continue;
@@ -1313,6 +1401,34 @@ class MatchEngine {
         );
       case CardPower.moveBandit:
         s = s.copyWith(banditTile: event.tile!);
+      case CardPower.massRaid:
+        for (var victimSeat = 0; victimSeat < players.length; victimSeat++) {
+          if (victimSeat == s.active) continue;
+          final victim = players[victimSeat];
+          final available = [
+            for (final resource in Resource.values)
+              for (var i = 0; i < (victim.stores[resource] ?? 0); i++) resource,
+          ];
+          if (available.isEmpty) continue;
+          final stolen =
+              available[_random(
+                    s.seed ^ (s.events.length * 31) ^ (victimSeat * 131),
+                  ) %
+                  available.length];
+          final remaining = Map<Resource, int>.of(victim.stores);
+          remaining[stolen] = remaining[stolen]! - 1;
+          players[victimSeat] = victim.copyWith(stores: remaining);
+          stores[stolen] = (stores[stolen] ?? 0) + 1;
+        }
+      case CardPower.massExhaust:
+        final knights = Map<int, KnightPiece>.of(s.knights);
+        for (final vertex in s.topology.tileVertices[event.tile!]) {
+          final knight = knights[vertex];
+          if (knight != null && knight.owner != s.active && knight.active) {
+            knights[vertex] = knight.copyWith(active: false);
+          }
+        }
+        s = s.copyWith(knights: knights);
       case CardPower.seizeGood:
         final victim = players[event.target!];
         final lost = Map<Resource, int>.of(victim.stores);
@@ -1416,6 +1532,12 @@ class MatchEngine {
       if (length > 0 &&
           s.sites[vertex] != null &&
           s.sites[vertex]!.owner != player) {
+        return;
+      }
+      if (length > 0 &&
+          s.events.length >= s.invasionInvitesFromEvent &&
+          s.knights[vertex] != null &&
+          s.knights[vertex]!.owner != player) {
         return;
       }
       for (final edge in s.topology.vertices[vertex].edges) {
@@ -1581,18 +1703,30 @@ class MatchEngine {
     );
   }
 
+  /// Number of resource cards safe to hold before a seven forces a discard.
+  /// This is separate from the four-card Strategy hand limit.
+  static int handCapacity(MatchState s, int seat) {
+    final p = s.players[seat];
+    final forts = s.fortified.where((v) => s.sites[v]?.owner == seat).length;
+    return 7 +
+        forts * 2 +
+        (p.level(StrategyDeck.governance) >= 3 ? 2 : 0) +
+        (p.level(StrategyDeck.commerce) >= 3 ? 2 : 0);
+  }
+
+  static int resourceHandSize(MatchState s, int seat) =>
+      s.players[seat].stores.values.fold<int>(0, (a, b) => a + b);
+
+  static int discardCountOnSeven(MatchState s, int seat) {
+    final total = resourceHandSize(s, seat);
+    return total > handCapacity(s, seat) ? total ~/ 2 : 0;
+  }
+
   static Map<int, int> discardsOnSeven(MatchState s) {
     final result = <int, int>{};
     for (var i = 0; i < s.players.length; i++) {
-      final p = s.players[i];
-      final total = p.stores.values.fold<int>(0, (a, b) => a + b);
-      final forts = s.fortified.where((v) => s.sites[v]?.owner == i).length;
-      final capacity =
-          7 +
-          forts * 2 +
-          (p.level(StrategyDeck.governance) >= 3 ? 2 : 0) +
-          (p.level(StrategyDeck.commerce) >= 3 ? 2 : 0);
-      if (total > capacity) result[i] = total ~/ 2;
+      final discard = discardCountOnSeven(s, i);
+      if (discard > 0) result[i] = discard;
     }
     return result;
   }
@@ -1737,9 +1871,22 @@ class MatchEngine {
     );
   }
 
-  static bool canIntercept(MatchState s, int player) =>
-      !s.reactionsUsed.contains(player) &&
-      s.knights.values.any((k) => k.owner == player && k.active);
+  static bool canIntercept(MatchState s, int player, {int? tile}) {
+    final attackedTile = tile ?? s.tactical?.bandit?.tile;
+    if (attackedTile == null ||
+        attackedTile < 0 ||
+        attackedTile >= s.board.tiles.length ||
+        s.reactionsUsed.contains(player)) {
+      return false;
+    }
+    final nearby = s.topology.tileVertices[attackedTile];
+    return s.knights.entries.any(
+      (entry) =>
+          entry.value.owner == player &&
+          entry.value.active &&
+          nearby.contains(entry.key),
+    );
+  }
 
   static List<int> counterCards(
     MatchState s,
@@ -1809,7 +1956,11 @@ class MatchEngine {
     );
   }
 
-  static MatchState _react(MatchState s, MatchEvent event) {
+  static MatchState _react(
+    MatchState s,
+    MatchEvent event, {
+    bool replaying = false,
+  }) {
     final window = s.tactical;
     _require(window != null, 'No tactical window.');
     final w = window!;
@@ -1829,14 +1980,24 @@ class MatchEngine {
     var blocked = false;
     if (choice == TacticalChoice.intercept) {
       _require(
-        w.kind == TacticalKind.bandit && canIntercept(s, player),
+        w.kind == TacticalKind.bandit &&
+            (replaying && s.events.length < s.invasionInvitesFromEvent
+                ? !s.reactionsUsed.contains(player) &&
+                      s.knights.values.any((k) => k.owner == player && k.active)
+                : canIntercept(s, player)),
         'No active Knight or response allowance.',
       );
       final vertex =
           (s.knights.keys
                   .where(
                     (v) =>
-                        s.knights[v]!.owner == player && s.knights[v]!.active,
+                        s.knights[v]!.owner == player &&
+                        s.knights[v]!.active &&
+                        (replaying &&
+                                s.events.length < s.invasionInvitesFromEvent ||
+                            s.topology.tileVertices[w.bandit!.tile].contains(
+                              v,
+                            )),
                   )
                   .toList()
                 ..sort())
@@ -1893,7 +2054,7 @@ class MatchEngine {
     if (w.kind == TacticalKind.governance) {
       return blocked ? s : _playStrategyCard(s, w.card!);
     }
-    final remaining = w.responders.skip(1).where((p) => canAid(s, p)).toList();
+    final remaining = w.responders.skip(1).toList();
     return remaining.isEmpty
         ? s
         : s.copyWith(
@@ -1971,7 +2132,7 @@ class MatchEngine {
         pendingDiscards: {...s.pendingDiscards}..remove(event.player),
       );
     } else if (event is RespondTactical || event is TimeoutTactical) {
-      s = _react(s, event);
+      s = _react(s, event, replaying: replaying);
     } else if (event is PlaceVillage) {
       _require(
         legalVillage(s, event.vertex),
@@ -2071,16 +2232,18 @@ class MatchEngine {
             ? {Resource.wool: 1}
             : recruitCost,
       );
-      s = s.copyWith(
-        knights: {
-          ...s.knights,
-          event.vertex: KnightPiece(
-            s.active,
-            KnightRank.sentinel,
-            false,
-            s.turnSerial,
-          ),
-        },
+      s = _recalculateRoads(
+        s.copyWith(
+          knights: {
+            ...s.knights,
+            event.vertex: KnightPiece(
+              s.active,
+              KnightRank.sentinel,
+              false,
+              s.turnSerial,
+            ),
+          },
+        ),
       );
     } else if (event is ActivateKnight) {
       _require(legalActivate(s, event.vertex), 'Cannot activate that Knight.');
@@ -2133,7 +2296,7 @@ class MatchEngine {
         }
       }
       knights[event.to] = moving.copyWith(actedTurn: s.turnSerial);
-      s = s.copyWith(knights: knights);
+      s = _recalculateRoads(s.copyWith(knights: knights));
     } else if (event is ResolveInvasion) {
       _require(s.phase == MatchPhase.invasion, 'No Invasion to resolve.');
       s = _resolveInvasion(s);
@@ -2182,7 +2345,14 @@ class MatchEngine {
         event.victim == null || eligible.contains(event.victim),
         'Victim must have built after setup, have goods, and border the selected tile.',
       );
-      s = event.victim != null && canIntercept(s, event.victim!)
+      s =
+          event.victim != null &&
+              (replaying && s.events.length < s.invasionInvitesFromEvent
+                  ? !s.reactionsUsed.contains(event.victim!) &&
+                        s.knights.values.any(
+                          (k) => k.owner == event.victim && k.active,
+                        )
+                  : canIntercept(s, event.victim!, tile: event.tile))
           ? s.copyWith(
               tactical: TacticalWindow(
                 s.events.length,
@@ -2201,7 +2371,9 @@ class MatchEngine {
             event.give.index < Resource.values.length,
         'Unknown goods.',
       );
-      final rate = tradeRate(s, s.active, event.give);
+      _require(event.times >= 1 && event.times <= 99, 'Invalid bundle count.');
+      final unitRate = tradeRate(s, s.active, event.give);
+      final rate = unitRate * event.times;
       _require(
         (s.current.stores[event.give] ?? 0) >= rate,
         'Not enough goods.',
@@ -2212,13 +2384,17 @@ class MatchEngine {
           : commerce >= 3 && event.receive == Resource.cloth
           ? 2
           : 1;
-      _require((s.bank[event.receive] ?? 0) >= count, 'Bank stock exhausted.');
+      final received = count * event.times;
+      _require(
+        (s.bank[event.receive] ?? 0) >= received,
+        'Bank stock exhausted.',
+      );
       final stores = Map<Resource, int>.of(s.current.stores);
       final bank = Map<Resource, int>.of(s.bank);
       stores[event.give] = stores[event.give]! - rate;
-      stores[event.receive] = (stores[event.receive] ?? 0) + count;
+      stores[event.receive] = (stores[event.receive] ?? 0) + received;
       bank[event.give] = bank[event.give]! + rate;
-      bank[event.receive] = bank[event.receive]! - count;
+      bank[event.receive] = bank[event.receive]! - received;
       final players = List<PlayerState>.of(s.players);
       players[s.active] = s.current.copyWith(stores: stores);
       s = s.copyWith(
@@ -2226,25 +2402,32 @@ class MatchEngine {
         bank: bank,
         catchupUsed: {
           ...s.catchupUsed,
-          if (rate < 4 && s.current.level(StrategyDeck.commerce) < 2) s.active,
+          if (unitRate < 4 && s.current.level(StrategyDeck.commerce) < 2)
+            s.active,
         },
       );
     } else if (event is ProposeTrade) {
       final original = event.counterOf == null
           ? null
           : s.offers.where((o) => o.id == event.counterOf).firstOrNull;
-      final proposer = original?.target ?? s.active;
+      final proposer = original == null
+          ? s.active
+          : original.target == -1
+          ? (event.counterActor ?? -2)
+          : original.target;
       _require(
         original == null ||
-            original.proposer == s.active ||
-            original.target == s.active,
+            (original.proposer == s.active || original.target == s.active),
         'Cannot counter an unrelated turn.',
       );
       _require(s.phase == MatchPhase.actions, 'Offer during your actions.');
       _require(
-        event.target >= 0 &&
-            event.target < s.players.length &&
-            event.target != proposer,
+        proposer >= 0 &&
+            proposer < s.players.length &&
+            ((event.target == -1 && original == null) ||
+                (event.target >= 0 &&
+                    event.target < s.players.length &&
+                    event.target != proposer)),
         'Choose another player.',
       );
       _require(
@@ -2267,9 +2450,8 @@ class MatchEngine {
             .where(
               (o) =>
                   o.id == id &&
-                  o.target == proposer &&
-                  o.proposer == event.target &&
-                  o.proposer != proposer,
+                  o.canRespond(proposer) &&
+                  o.proposer == event.target,
             )
             .toList();
         _require(originals.length == 1, 'Cannot counter this offer.');
@@ -2308,7 +2490,7 @@ class MatchEngine {
             (s.active == event.player ||
                 s.offers.any(
                   (o) =>
-                      o.target == event.player &&
+                      o.canRespond(event.player) &&
                       o.proposer == s.active &&
                       (event.offerId == null || o.id == event.offerId),
                 )),
@@ -2317,7 +2499,7 @@ class MatchEngine {
       final choices = s.offers
           .where(
             (o) =>
-                o.target == event.player &&
+                o.canRespond(event.player) &&
                 (event.offerId == null || o.id == event.offerId),
           )
           .toList();
@@ -2349,7 +2531,35 @@ class MatchEngine {
         buyers[offer.proposer] = proposer.copyWith(stores: to);
         s = s.copyWith(players: buyers);
       }
-      s = s.copyWith(offers: s.offers.where((o) => o.id != offer.id).toList());
+      if (!event.accept &&
+          offer.target == -1 &&
+          offer.declinedBy.length + 2 < s.players.length) {
+        s = s.copyWith(
+          offers: [
+            for (final existing in s.offers)
+              if (existing.id == offer.id)
+                TradeProposal(
+                  existing.id,
+                  existing.proposer,
+                  existing.target,
+                  existing.give,
+                  existing.giveCount,
+                  existing.want,
+                  existing.wantCount,
+                  isCounter: existing.isCounter,
+                  giveBundle: existing.giveBundle,
+                  wantBundle: existing.wantBundle,
+                  declinedBy: {...existing.declinedBy, event.player},
+                )
+              else
+                existing,
+          ],
+        );
+      } else {
+        s = s.copyWith(
+          offers: s.offers.where((o) => o.id != offer.id).toList(),
+        );
+      }
     } else if (event is WithdrawTrade) {
       _require(s.phase == MatchPhase.actions, 'Withdraw on your turn.');
       final matches = s.offers
@@ -2409,9 +2619,16 @@ class MatchEngine {
         reliefUsed: next == 0 && (newRound - 1) % 3 == 0 ? {} : s.reliefUsed,
       );
       if (s.phase == MatchPhase.invasion) {
+        // Include the current/human seat. No resources? They may pass.
+        // Preserve the original response order for imported replay events.
+        final inclusive = s.events.length >= s.invasionInvitesFromEvent;
         final responders = [
-          for (var offset = 1; offset < s.players.length; offset++)
-            if (canAid(s, (s.active + offset) % s.players.length))
+          for (
+            var offset = inclusive ? 0 : 1;
+            offset < s.players.length;
+            offset++
+          )
+            if (inclusive || canAid(s, (s.active + offset) % s.players.length))
               (s.active + offset) % s.players.length,
         ];
         if (responders.isNotEmpty) {

@@ -172,12 +172,15 @@ abstract final class AiActionAdapter {
     for (final action in actions) {
       if (action is ProposeTrade &&
           action.counterOf == null &&
-          !TradeSentiment.willingToOffer(
-            state,
-            seat,
-            action.target,
-            grievances[action.target] ?? 0,
-          )) {
+          (!TradeSentiment.willingToOffer(
+                state,
+                seat,
+                action.target,
+                grievances[action.target] ?? 0,
+              ) ||
+              !action.wants.keys.every(
+                (good) => recipientCanProduce(state, action.target, good),
+              ))) {
         continue;
       }
       distinct.putIfAbsent(jsonEncode(action.toJson()), () => action);
@@ -201,6 +204,39 @@ abstract final class AiActionAdapter {
       actionsSinceRoll: _actionsSinceRoll(state),
       strategy: _strategySignals(state, seat),
     );
+  }
+
+  /// Use only public settlements, surrounding tiles and visible developments.
+  /// Never ask a rival for a resource they have no normal way of producing.
+  static bool recipientCanProduce(MatchState s, int recipient, Resource good) {
+    if (recipient < 0 || recipient >= s.players.length) return false;
+    for (final entry in s.sites.entries) {
+      if (entry.value.owner != recipient) continue;
+      for (final tileId in s.topology.vertices[entry.key].tiles) {
+        final land = s.board.tiles[tileId].land;
+        final commodity = StrategyDeck.values
+            .where(
+              (track) =>
+                  track.sourceLand == land &&
+                  s.players[recipient].level(track) > 0,
+            )
+            .firstOrNull;
+        final converted =
+            entry.value.structure == Structure.village || commodity == null
+            ? 0
+            : s.players[recipient].level(commodity) == 5
+            ? 2
+            : 1;
+        final total = switch (entry.value.structure) {
+          Structure.village => 1,
+          Structure.town => 2,
+          Structure.capital => 3,
+        };
+        if (land.produces == good && total > converted) return true;
+        if (commodity?.commodity == good) return true;
+      }
+    }
+    return false;
   }
 
   static AiStrategySignals _strategySignals(MatchState state, int seat) {
@@ -508,7 +544,7 @@ abstract final class AiActionAdapter {
         !proposedThisTurn && !s.offers.any((o) => o.proposer == s.active);
 
     for (final offer in s.offers) {
-      if (offer.target == s.active) {
+      if (offer.canRespond(s.active)) {
         actions.add(RespondTrade(s.active, false, offerId: offer.id));
         if (canPayTrade(s.current.stores, offer.wants)) {
           actions.add(RespondTrade(s.active, true, offerId: offer.id));
@@ -528,6 +564,7 @@ abstract final class AiActionAdapter {
                 offer.give,
                 1,
                 counterOf: offer.id,
+                counterActor: offer.target == -1 ? s.active : null,
               ),
             );
           }

@@ -30,9 +30,9 @@ void main() {
   Future<void> humanSetup(WidgetTester tester) async {
     for (var i = 0; i < 2; i++) {
       await tester.ensureVisible(
-        find.byTooltip('Choose board target from list'),
+        find.byTooltip('Choose target'),
       );
-      await tester.tap(find.byTooltip('Choose board target from list'));
+      await tester.tap(find.byTooltip('Choose target'));
       await tester.pumpAndSettle();
       await tester.tap(find.byType(ListTile).first);
       await tester.pump();
@@ -85,7 +85,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Computer turn'), findsNothing);
     expect(find.text('Pass the device'), findsNothing);
-    expect(find.byTooltip('Choose board target from list'), findsOneWidget);
+    expect(find.byTooltip('Choose target'), findsOneWidget);
   });
 
   testWidgets('leaving board cancels an in-flight bot event', (tester) async {

@@ -1,3 +1,5 @@
+import 'compact_layout.dart';
+
 import 'package:flutter/material.dart';
 
 import '../engine/match.dart';
@@ -22,7 +24,7 @@ class _InvasionFeedbackState extends State<InvasionFeedback> {
       if (!mounted) return;
       showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => CompactAlertDialog(
           title: const Text('Invasion resolved'),
           content: Text(report),
           actions: [

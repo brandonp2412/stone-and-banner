@@ -4,9 +4,10 @@ import '../engine/match.dart';
 
 /// Fleet approach and shared defence, including pledged emergency aid.
 class InvasionMeter extends StatelessWidget {
-  const InvasionMeter({super.key, required this.state});
+  const InvasionMeter({super.key, required this.state, this.compact = false});
 
   final MatchState state;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -32,43 +33,63 @@ class InvasionMeter extends StatelessWidget {
       label:
           '$arrival. Fleet advances at the end of each round. Shared invasion defence: $have points available, $need required. $status.',
       excludeSemantics: true,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Reserve the tallest countdown at the available width and scale.
-          Stack(
-            children: [
-              for (final label in {
-                arrival,
-                'Invasion in 3 rounds',
-                'Invasion in 1 round',
-                'Invasion now',
-              })
-                Visibility(
-                  visible: label == arrival,
-                  maintainSize: true,
-                  maintainAnimation: true,
-                  maintainState: true,
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: fleetColor,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      height: 1.2,
-                    ),
+      child: compact
+          ? Wrap(
+              spacing: 5,
+              runSpacing: 0,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  arriving ? 'Raid now' : 'Raid ${remaining}r',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: fleetColor,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Text(
-            'Defence $have / $need',
-            style: TextStyle(fontSize: 11, color: color),
-          ),
-        ],
-      ),
+                Text(
+                  'Defence $have / $need',
+                  style: TextStyle(fontSize: 11, color: color),
+                ),
+              ],
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Reserve the tallest countdown at the available width and scale.
+                Stack(
+                  children: [
+                    for (final label in {
+                      arrival,
+                      'Invasion in 3 rounds',
+                      'Invasion in 1 round',
+                      'Invasion now',
+                    })
+                      Visibility(
+                        visible: label == arrival,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            color: fleetColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Defence $have / $need',
+                  style: TextStyle(fontSize: 11, color: color),
+                ),
+              ],
+            ),
     );
   }
 }

@@ -18,7 +18,7 @@ Future<void> scrollToAction(WidgetTester tester, String label) async {
       await tester.pumpAndSettle();
     }
   }
-  if (label == 'Cards') return;
+  if (label == 'Cards' || label == 'Your realm') return;
   final controller = tester.widget<ListView>(list).controller!;
   controller.jumpTo(0);
   await tester.pump();

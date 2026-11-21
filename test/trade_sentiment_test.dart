@@ -89,7 +89,7 @@ void main() {
     await tester.pumpWidget(app(before));
     await tester.pumpWidget(app(after));
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text('😡'), findsOneWidget);
+    expect(find.text('😤'), findsOneWidget);
     expect(
       find.text('They’ll offer you fewer trades from now on.'),
       findsOneWidget,

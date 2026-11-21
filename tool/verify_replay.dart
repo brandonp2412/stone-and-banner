@@ -23,6 +23,8 @@ void main(List<String> args) {
       saved.seed,
       boardSeed: saved.board.seed,
       balance: saved.balance,
+      cardDeckVersion: saved.cardDeckVersion,
+      invasionInvitesFromEvent: saved.invasionInvitesFromEvent,
     );
     final eventTypes = <String, int>{};
     _verifySupply(state);
@@ -100,7 +102,10 @@ void _verifySupply(MatchState state) {
         for (final card in player.cards)
           if (card.track == track) card.index,
     ]..sort();
-    final expected = List.generate(StrategyCards.deck(track).length, (i) => i);
+    final expected = List.generate(
+      StrategyCards.deckForVersion(track, state.cardDeckVersion).length,
+      (i) => i,
+    );
     if (jsonEncode(copies) != jsonEncode(expected)) {
       throw StateError(
         'Card accounting failed at event ${state.events.length}.',

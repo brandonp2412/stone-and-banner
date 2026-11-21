@@ -152,7 +152,21 @@ class P2pTransport {
     connection.onDataChannel = (channel) => _attach(id, channel);
     connection.onConnectionState = (state) {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-        if (host) {
+        peer.disconnectTimer?.cancel();
+        peer.disconnectTimer = null;
+        if (peer.everConnected) {
+          // A previously working game has lost transport, not failed to
+          // negotiate its initial invitation. Close it even if the channel
+          // still incorrectly reports Open, so the room stops sending to it.
+          _signal(id, 'close');
+          _signal(
+            id,
+            'error',
+            'WebRTC connection dropped during gameplay. Battery Saver, '
+                'background suspension or a network change can interrupt ICE. '
+                'Keep both apps in the foreground and copy diagnostics.',
+          );
+        } else if (host) {
           if (peer.remoteApplied) {
             _signal(
               id,
@@ -199,14 +213,10 @@ class P2pTransport {
             _signal(id, 'close');
           }
         });
-      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         peer.disconnectTimer?.cancel();
         peer.disconnectTimer = null;
-        if (peer.everConnected ||
-            state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-          _signal(id, 'close');
-        }
+        _signal(id, 'close');
       }
     };
     connection.onIceConnectionState = (state) {

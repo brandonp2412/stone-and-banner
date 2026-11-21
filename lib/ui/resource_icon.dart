@@ -1,5 +1,7 @@
 import 'dart:ui' as ui;
 
+import 'compact_layout.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -126,7 +128,7 @@ void paintResourceIcon(
 
 Future<void> showResourceIconPicker(BuildContext context) => showDialog<void>(
   context: context,
-  builder: (context) => AlertDialog(
+  builder: (context) => CompactAlertDialog(
     title: const Text('Resource icons'),
     content: SizedBox(
       width: 520,
@@ -195,7 +197,7 @@ Future<void> showResourceIconPicker(BuildContext context) => showDialog<void>(
                   ),
                 ),
               const Text(
-                'Wood · Brick · Wheat · Wool · Ore · Paper · Cloth · Coin',
+                'Wood · Brick · Wheat · Sheep · Ore · Paper · Cloth · Coin',
                 style: TextStyle(fontSize: 11),
               ),
               const SizedBox(height: 8),

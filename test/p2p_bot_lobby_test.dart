@@ -32,10 +32,11 @@ void main() {
         reason: 'Local HeuristicAi must be reusable in P2P',
       );
       expect(room.aiMoveCount, greaterThanOrEqualTo(4));
+      expect(room.game!.events.length, greaterThanOrEqualTo(4));
       expect(
-        room.game!.events.length,
-        0,
-        reason: 'Private multiplayer views exclude replay events',
+        room.game!.events.every((event) => event is! DiscardResources),
+        true,
+        reason: 'Public network events must not disclose hidden discards',
       );
       expect(
         room.game!.actingSeat,

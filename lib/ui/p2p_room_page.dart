@@ -1,4 +1,7 @@
 import 'package:flutter/foundation.dart';
+
+import 'compact_layout.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -105,7 +108,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     _leavePromptOpen = true;
     final leave = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => CompactAlertDialog(
         title: const Text('Leave multiplayer?'),
         content: const Text(
           'Leaving closes this peer-to-peer connection. If you are hosting, '
@@ -204,18 +207,31 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
 
   Widget _pane(List<Widget> children) => Center(
     child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 590),
+      constraints: BoxConstraints(
+        maxWidth: isCompactLandscape(context) ? 730 : 590,
+      ),
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompactLandscape(context) ? 8 : 20),
         children: [
           if (MediaQuery.sizeOf(context).width < 900)
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _requestLeave,
-                icon: const Icon(Icons.arrow_back, size: 18),
-                label: const Text('Back'),
-              ),
+              child: isCompactLandscape(context)
+                  ? SizedBox(
+                      height: 36,
+                      child: IconButton(
+                        key: const ValueKey('multiplayer-back'),
+                        tooltip: 'Back',
+                        onPressed: _requestLeave,
+                        icon: const Icon(Icons.arrow_back),
+                        padding: EdgeInsets.zero,
+                      ),
+                    )
+                  : TextButton.icon(
+                      onPressed: _requestLeave,
+                      icon: const Icon(Icons.arrow_back, size: 18),
+                      label: const Text('Back'),
+                    ),
             ),
           ...children,
         ],
@@ -223,18 +239,130 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     ),
   );
 
+  /// Host and join are independent flows, so lay them out side-by-side on
+  /// a phone in landscape rather than pushing Host below the first screen.
+  Widget _compactSetup() => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Column(
+        children: [
+          CompactPageHeader(title: 'Multiplayer', onBack: _requestLeave),
+          const Divider(height: 1),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 12, 4),
+                    children: [
+                      Text(
+                        'Join a friend',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: inviteField,
+                        maxLines: 1,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'Invitation link',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _useInviteLink,
+                        icon: const Icon(Icons.link),
+                        label: const Text('Join invitation'),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Open the invite and return a response link to your host.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+                    children: [
+                      Text(
+                        'Host a game',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: name,
+                        maxLength: 32,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          counterText: '',
+                          labelText: 'Your player name',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<int>(
+                        selected: {seats},
+                        segments: const [
+                          ButtonSegment(value: 3, label: Text('3 players')),
+                          ButtonSegment(value: 4, label: Text('4 players')),
+                        ],
+                        onSelectionChanged: (v) =>
+                            setState(() => seats = v.first),
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        onPressed: () {
+                          try {
+                            room.host(name.text, seats, randomWorldSeed());
+                          } on Object catch (e) {
+                            setState(() => parseError = '$e');
+                          }
+                        },
+                        icon: const Icon(Icons.groups),
+                        label: const Text('Host game'),
+                      ),
+                      if (!kIsWeb)
+                        TextButton.icon(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const LanRoomPage(),
+                            ),
+                          ),
+                          icon: const Icon(Icons.settings_ethernet),
+                          label: const Text('Advanced LAN mode'),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
   Widget _setup() => incoming?['type'] == 'answer'
       ? _answerPage()
+      : isCompactLandscape(context) && incoming == null
+      ? _compactSetup()
       : _pane([
           Text(
             kIsWeb ? 'Host or join a game' : 'Direct P2P multiplayer',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Host directly from this device. No game server or account required. '
-            'To connect, your friend opens your invite and sends the response '
-            'back to you. Apply their response in this host lobby to finish pairing.',
+          Text(
+            isCompactLandscape(context)
+                ? 'Send an invite, then apply your friend’s response link.'
+                : 'Host directly from this device. No game server or account required. '
+                      'To connect, your friend opens your invite and sends the response '
+                      'back to you. Apply their response in this host lobby to finish pairing.',
           ),
           if (kIsWeb) ...[
             const SizedBox(height: 8),
@@ -548,6 +676,9 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     for (var i = 0; i < room.capacity; i++)
       ListTile(
         dense: true,
+        visualDensity: isCompactLandscape(context)
+            ? VisualDensity.compact
+            : VisualDensity.standard,
         leading: Icon(
           room.botSeats.contains(i)
               ? Icons.smart_toy_outlined
@@ -599,8 +730,20 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   Widget build(BuildContext context) {
     final game = room.game;
     final active = game?.actingSeat;
+    // Responding to an active player's trade is legal outside your turn.
+    // The response sheet must not become read-only for online recipients.
+    final canRespondToTrade =
+        game != null &&
+        room.seat != null &&
+        game.offers.any(
+          (offer) =>
+              offer.proposer == game.active && offer.canRespond(room.seat!),
+        );
     final canAct =
-        room.connected && !room.pending && game != null && room.seat == active;
+        room.connected &&
+        !room.pending &&
+        game != null &&
+        (room.seat == active || canRespondToTrade);
     return PopScope(
       canPop: _leaveApproved || room.roomId == null,
       onPopInvokedWithResult: (didPop, _) {
@@ -654,15 +797,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
                               ? 'Waiting for ${game.players[active!].id}…'
                               : 'Direct connection lost',
                           onEvent: room.dispatch,
-                        ),
-                        Positioned(
-                          top: MediaQuery.paddingOf(context).top + 3,
-                          right: MediaQuery.paddingOf(context).right + 4,
-                          child: IconButton(
-                            tooltip: 'Leave P2P match',
-                            onPressed: _requestLeave,
-                            icon: const Icon(Icons.close, size: 20),
-                          ),
+                          onLeaveRoom: _requestLeave,
                         ),
                       ],
                     ),

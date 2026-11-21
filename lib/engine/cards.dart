@@ -15,6 +15,8 @@ enum CardPower {
   exhaust,
   moveBandit,
   seizeGood,
+  massRaid,
+  massExhaust,
 }
 
 class StrategyCard {
@@ -41,7 +43,7 @@ class HeldCard {
   final StrategyDeck track;
   final int index;
 
-  StrategyCard get definition => StrategyCards.deck(track)[index];
+  StrategyCard get definition => StrategyCards.expandedDeck(track)[index];
 }
 
 abstract final class StrategyCards {
@@ -74,7 +76,7 @@ abstract final class StrategyCards {
       'Public Health',
       StrategyDeck.innovation,
       CardPower.fixedGoods,
-      'Distribute one wheat and one wool from shared stock.',
+      'Distribute one wheat and one sheep from shared stock.',
       goods: {Resource.wheat: 1, Resource.wool: 1},
     ),
     StrategyCard(
@@ -174,7 +176,7 @@ abstract final class StrategyCards {
       'Market Festival',
       StrategyDeck.commerce,
       CardPower.fixedGoods,
-      'Receive one wheat and one wool.',
+      'Receive one wheat and one sheep.',
       goods: {Resource.wheat: 1, Resource.wool: 1},
     ),
     StrategyCard(
@@ -261,6 +263,60 @@ abstract final class StrategyCards {
     ),
   ];
 
+  // Additions are appended AFTER every legacy card per track, preserving
+  // historical hand indexes and the deterministic shuffle in v1 replays.
+  // New local/LAN games opt in through cardDeckVersion=2.
+  static const extraDefinitions = <StrategyCard>[
+    StrategyCard(
+      'road-to-nowhere',
+      'Road to Nowhere',
+      StrategyDeck.innovation,
+      CardPower.freeRoad,
+      'A bafflingly expensive government project. Your road is free.',
+      copies: 1,
+    ),
+    StrategyCard(
+      'castle-of-spite',
+      'Spite Castle',
+      StrategyDeck.innovation,
+      CardPower.freeFort,
+      'Fortify a town purely because your rivals hate the view.',
+      copies: 1,
+    ),
+    StrategyCard(
+      'hostile-takeover',
+      'Hostile Takeover',
+      StrategyDeck.commerce,
+      CardPower.seizeGood,
+      'Announce a merger. Take one chosen good from an unfortunate rival.',
+      copies: 1,
+    ),
+    StrategyCard(
+      'royal-audit',
+      'The Royal Audit',
+      StrategyDeck.governance,
+      CardPower.massRaid,
+      'The tax office is furious: seize one random good from EVERY rival.',
+      copies: 1,
+    ),
+    StrategyCard(
+      'mass-suspension',
+      'Mass Suspension',
+      StrategyDeck.governance,
+      CardPower.massExhaust,
+      'Pick a hex. Every rival Knight on its corners is sent home in disgrace.',
+      copies: 1,
+    ),
+    StrategyCard(
+      'sheep-napping',
+      'The Great Sheep-Napping',
+      StrategyDeck.governance,
+      CardPower.seizeGood,
+      'Stage a woolly conspiracy and swipe a good from a rival.',
+      copies: 1,
+    ),
+  ];
+
   static final Map<StrategyDeck, List<StrategyCard>> _decks = {
     for (final track in StrategyDeck.values)
       track: List.unmodifiable([
@@ -270,5 +326,19 @@ abstract final class StrategyCards {
       ]),
   };
 
+  static final Map<StrategyDeck, List<StrategyCard>> _expandedDecks = {
+    for (final track in StrategyDeck.values)
+      track: List.unmodifiable([
+        ..._decks[track]!,
+        for (final definition in extraDefinitions)
+          if (definition.track == track)
+            for (var i = 0; i < definition.copies; i++) definition,
+      ]),
+  };
+
   static List<StrategyCard> deck(StrategyDeck track) => _decks[track]!;
+  static List<StrategyCard> expandedDeck(StrategyDeck track) =>
+      _expandedDecks[track]!;
+  static List<StrategyCard> deckForVersion(StrategyDeck track, int version) =>
+      version >= 2 ? expandedDeck(track) : deck(track);
 }

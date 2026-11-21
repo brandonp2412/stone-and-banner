@@ -189,8 +189,12 @@
       if (state === "failed") {
         clearTimeout(peer.disconnectTimer);
         peer.disconnectTimer = null;
-        if (peer.everConnected) signal(id, "close");
-        if (!isHost) {
+        if (peer.everConnected) {
+          signal(id, "close");
+          signal(id, "error", "WebRTC connection dropped during gameplay. Battery Saver, " +
+            "background suspension or a network change can interrupt ICE. " +
+            "Keep both apps in the foreground and copy diagnostics.");
+        } else if (!isHost) {
           // The guest can fail preliminary ICE checks before the host has even
           // applied the answer link. Do not report that as a final NAT failure.
           peer.failureTimer ??= setTimeout(() => {

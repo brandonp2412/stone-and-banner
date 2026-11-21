@@ -27,9 +27,9 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(
-        find.byTooltip('Choose board target from list'),
+        find.byTooltip('Choose target'),
       );
-      await tester.tap(find.byTooltip('Choose board target from list'));
+      await tester.tap(find.byTooltip('Choose target'));
       await tester.pumpAndSettle();
       expect(find.text('Choose legal board target'), findsOneWidget);
       expect(find.textContaining('Junction 1:'), findsWidgets);
@@ -57,9 +57,9 @@ void main() {
       expect(find.textContaining('glowing edge'), findsOneWidget);
 
       await tester.ensureVisible(
-        find.byTooltip('Choose board target from list'),
+        find.byTooltip('Choose target'),
       );
-      await tester.tap(find.byTooltip('Choose board target from list'));
+      await tester.tap(find.byTooltip('Choose target'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Road '), findsWidgets);
       await tester.tap(find.byType(ListTile).first);

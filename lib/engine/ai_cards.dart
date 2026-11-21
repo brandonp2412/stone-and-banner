@@ -103,15 +103,20 @@ abstract final class AiCardStrategy {
   static MatchEvent? incomingOffer(AiTurnView view) {
     if (view.phase != MatchPhase.actions) return null;
     final offers =
-        view.publicOffers.where((o) => o.target == view.seat).toList()
+        view.publicOffers.where((o) => o.canRespond(view.seat)).toList()
           ..sort((a, b) => a.id.compareTo(b.id));
     if (offers.isEmpty) return null;
     final offer = offers.first;
     final accepts = view.legalActions.whereType<RespondTrade>().where(
       (e) => e.offerId == offer.id && e.accept,
     );
+    // A clear surplus of goods is a windfall even when today's build goal
+    // values the outgoing single good more highly than the incoming bundle.
+    final surplus =
+        offer.gives.values.fold<int>(0, (a, b) => a + b) -
+        offer.wants.values.fold<int>(0, (a, b) => a + b);
     if (accepts.isNotEmpty &&
-        _bundleGain(view, offer.wants, offer.gives) > 0.5) {
+        (_bundleGain(view, offer.wants, offer.gives) > 0.5 || surplus >= 2)) {
       return accepts.first;
     }
     if (!offer.isCounter) {
@@ -187,6 +192,10 @@ abstract final class AiCardStrategy {
             : -100;
       case CardPower.moveBandit:
         return 1; // Cannot infer a hidden victim's inventory.
+      case CardPower.massRaid:
+        return 18; // One stolen resource from each rival.
+      case CardPower.massExhaust:
+        return danger ? 14 : 10;
       case CardPower.seizeGood:
         return -100; // Never peek into an opponent's hand to find a target.
     }

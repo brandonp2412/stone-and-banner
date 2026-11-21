@@ -7,7 +7,7 @@ import 'package:stone_and_banner/ui/match_screen.dart';
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
 
 void main() {
-  testWidgets('own player card opens settings and emote targets a rival', (
+  testWidgets('own player card opens settings and emotes reach the table', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({'gameplay_hints_enabled': false});
@@ -29,25 +29,22 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Settings and match options'));
+    await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     expect(settings, 1);
-    Navigator.of(tester.element(find.text('Settings'))).pop();
+    // Navigating from profile options now dismisses the bottom sheet.
+    expect(find.byType(BottomSheet), findsNothing);
+    await tester.tap(find.byTooltip('React'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Emote at the table'));
+    await tester.tap(find.text('👋'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('👋  ${state.players[1].id}'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('${state.players[0].id} → ${state.players[1].id}'),
-      findsOneWidget,
-    );
+    expect(find.text(state.players[0].id), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Fortify explains its effects on long press', (tester) async {
+  testWidgets('Fortify has a concise tooltip on long press', (tester) async {
     SharedPreferences.setMockInitialValues({'gameplay_hints_enabled': false});
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1440, 1000);
@@ -63,10 +60,7 @@ void main() {
     await tester.ensureVisible(fortify);
     await tester.longPress(fortify);
     await tester.pump();
-    expect(
-      find.textContaining('adds 1 shared invasion defence'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Fortify ·'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -77,7 +71,6 @@ void main() {
         state: state,
         viewerSeat: 0,
         emote: '👏',
-        emoteTarget: 1,
         emoteSerial: serial,
       ),
     );
@@ -85,10 +78,7 @@ void main() {
     await tester.pumpWidget(app(1));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('👏'), findsOneWidget);
-    expect(
-      find.text('${state.players[0].id} → ${state.players[1].id}'),
-      findsOneWidget,
-    );
+    expect(find.text(state.players[0].id), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

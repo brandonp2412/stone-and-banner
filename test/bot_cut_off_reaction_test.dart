@@ -65,7 +65,7 @@ void main() {
         await tester.pumpWidget(app(before));
         await tester.pumpWidget(app(after));
         await tester.pump(const Duration(milliseconds: 600));
-        expect(find.text('😡'), findsOneWidget);
+        expect(find.text('😤'), findsOneWidget);
         {
           expect(
             find.text('${base.players[1].id}: Hey! You cut me off!'),
@@ -74,7 +74,7 @@ void main() {
           // Other players' later turns do not retrigger this reaction.
           await tester.pump(const Duration(seconds: 3));
           await tester.pump(const Duration(milliseconds: 400));
-          expect(find.text('😡'), findsNothing);
+          expect(find.text('😤'), findsNothing);
         }
         await tester.pumpWidget(const SizedBox.shrink());
       },

@@ -102,10 +102,7 @@ void main() {
     expect(state.fortified, contains(play.vertex));
     expect(state.current.cards, isEmpty);
     expect(state.offers.single.id, offer.id);
-    state = MatchEngine.apply(
-      state,
-      RespondTrade(1, true, offerId: offer.id),
-    );
+    state = MatchEngine.apply(state, RespondTrade(1, true, offerId: offer.id));
     expect(state.offers, isEmpty);
     checkConservation(state);
     checkCards(state);
@@ -288,11 +285,20 @@ void main() {
           s = MatchEngine.apply(s, const ResolveInvasion());
         }
         if (s.phase == MatchPhase.roll) s = MatchEngine.roll(s);
+        while (s.pendingDiscards.isNotEmpty) {
+          s = MatchEngine.apply(s, MatchEngine.idleEvent(s)!);
+        }
         if (s.phase == MatchPhase.bandit) {
+          final hex = (s.banditTile + 1) % s.board.tiles.length;
+          final victims = MatchEngine.banditVictims(s, hex);
           s = MatchEngine.apply(
             s,
-            MoveBandit((s.banditTile + 1) % s.board.tiles.length),
+            MoveBandit(hex, victim: victims.isEmpty ? null : victims.first),
           );
+          while (s.tactical != null) {
+            final w = s.tactical!;
+            s = MatchEngine.apply(s, TimeoutTactical(w.id, w.responder));
+          }
         }
         if (s.phase != MatchPhase.actions) break;
         if (s.active == 0) {

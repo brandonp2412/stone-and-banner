@@ -40,11 +40,22 @@ class TradeMarket extends StatelessWidget {
         state.phase == MatchPhase.actions &&
         state.active == viewerSeat;
     final hasOutgoing = state.offers.any((o) => o.proposer == viewerSeat);
-    final incoming = state.offers.where((o) => o.target == viewerSeat).toList();
+    final incoming = state.offers
+        .where((o) => o.canRespond(viewerSeat))
+        .toList();
     final outgoing = state.offers
         .where((o) => o.proposer == viewerSeat)
         .toList();
     final feedback = latestTradeFeedback(state, viewer: viewerSeat);
+    final lastVisibleResponse = state.events.reversed
+        .whereType<RespondTrade>()
+        .where(
+          (reply) =>
+              tradeFeedbackForResponse(state, reply, viewer: viewerSeat) !=
+              null,
+        )
+        .firstOrNull;
+    final acceptedTrade = lastVisibleResponse?.accept == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -97,7 +108,12 @@ class TradeMarket extends StatelessWidget {
           Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-              outgoing.any((o) => computerSeats.contains(o.target))
+              outgoing.any(
+                    (o) =>
+                        (o.target == -1 ||
+                        computerSeats.isNotEmpty ||
+                        computerSeats.contains(o.target)),
+                  )
                   ? 'Thinking about your offer…'
                   : 'Your offer is awaiting a reply.',
               style: TextStyle(color: gold, fontSize: 12),
@@ -145,7 +161,12 @@ class TradeMarket extends StatelessWidget {
         if (outgoing.isNotEmpty) ...[
           const SizedBox(height: 9),
           _heading(
-            outgoing.any((o) => computerSeats.contains(o.target))
+            outgoing.any(
+                  (o) =>
+                      (o.target == -1 ||
+                      computerSeats.isNotEmpty ||
+                      computerSeats.contains(o.target)),
+                )
                 ? 'CONSIDERING YOUR OFFER'
                 : 'YOUR PENDING OFFER',
             Icons.schedule_outlined,
@@ -159,13 +180,22 @@ class TradeMarket extends StatelessWidget {
             key: const ValueKey('trade-result'),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: ink,
+              color: acceptedTrade ? const Color(0xff153e36) : ink,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: border),
+              border: Border.all(
+                color: acceptedTrade ? const Color(0xff6de0ae) : border,
+                width: acceptedTrade ? 2 : 1,
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.receipt_long_outlined, color: gold, size: 19),
+                Icon(
+                  acceptedTrade
+                      ? Icons.celebration_rounded
+                      : Icons.receipt_long_outlined,
+                  color: acceptedTrade ? const Color(0xff6de0ae) : gold,
+                  size: 23,
+                ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -271,6 +301,8 @@ class TradeMarket extends StatelessWidget {
                   child: Text(
                     incoming
                         ? 'From ${state.players[offer.proposer].id}'
+                        : offer.target == -1
+                        ? 'To everyone · first acceptance wins'
                         : 'To ${state.players[offer.target].id}',
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,

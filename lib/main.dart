@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+
+import 'ui/compact_layout.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +14,8 @@ import 'engine/ai_turn_coordinator.dart';
 import 'engine/match.dart';
 import 'engine/heuristic_ai.dart';
 import 'engine/world_seed.dart';
+import 'match_archive.dart';
+import 'ui/match_history.dart';
 import 'replay_codes.dart';
 import 'ui/match_screen.dart';
 import 'ui/game_notice.dart';
@@ -115,7 +120,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           !aiSeats.contains(nextOwner) &&
           !oneHumanMatch;
     });
-    _save(next);
+    _save(next, previous: expected);
     return true;
   }
 
@@ -257,7 +262,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     });
   }
 
-  void _save(MatchState state) {
+  void _save(MatchState state, {MatchState? previous}) {
     final replay = MatchEngine.exportReplay(state);
     savedReplay = replay;
     savedAiSeats = {...aiSeats};
@@ -274,12 +279,49 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             !await prefs.setString(_savedMatchKey, replay)) {
           throw StateError('Storage rejected the replay.');
         }
+        if (kDebugMode && previous != null) {
+          await DebugMatchLog.append(prefs, previous, state);
+        }
+        if (state.phase == MatchPhase.finished) {
+          await MatchArchive.save(prefs, state, replay: replay);
+        }
       } on Object {
         if (mounted) {
           fail('Autosave failed. Copy the replay to preserve this match.');
         }
       }
     });
+  }
+
+  // Preserve replaced matches before their autosaves are overwritten.
+  void _archiveReplacedMatch() {
+    final prior = match;
+    final replay = savedReplay;
+    if (prior == null && replay == null) return;
+    _saveTail = _saveTail.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (prior != null) {
+          await MatchArchive.save(prefs, prior);
+        } else if (replay != null) {
+          await MatchArchive.save(
+            prefs,
+            MatchEngine.importReplay(replay),
+            replay: replay,
+          );
+        }
+      } on Object {
+        if (mounted) fail('Could not archive the previous match.');
+      }
+    });
+  }
+
+  Future<void> _showMatchHistory(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => MatchHistoryPage(prefs: prefs)),
+    );
   }
 
   void resume() {
@@ -347,7 +389,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         MatchEngine.importReplay(savedReplay!).phase != MatchPhase.finished) {
       final replace = await showDialog<bool>(
         context: dialogContext,
-        builder: (context) => AlertDialog(
+        builder: (context) => CompactAlertDialog(
           title: const Text('Replace saved match?'),
           content: const Text(
             'Starting a new match replaces the match stored on this device. '
@@ -372,6 +414,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
 
   void start() {
     try {
+      _archiveReplacedMatch();
       final firstComputer = humanSeats;
       final botNames = [
         "Rowan the Mason",
@@ -382,13 +425,23 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         "Tamsin Oakbanner",
         "Alden of Greyford",
         "Briar the Merchant",
+        "Bob",
+        "Alice",
+        "Dave",
+        "Sue",
+        "Sam",
+        "Pat",
       ]..shuffle(math.Random());
-      final s = MatchEngine.newGame([
-        for (var i = 0; i < seats; i++)
-          i >= firstComputer
-              ? botNames[i - firstComputer]
-              : names[i].text.trim(),
-      ], widget.worldSeedFactory());
+      final s = MatchEngine.newGame(
+        [
+          for (var i = 0; i < seats; i++)
+            i >= firstComputer
+                ? botNames[i - firstComputer]
+                : names[i].text.trim(),
+        ],
+        widget.worldSeedFactory(),
+        cardDeckVersion: 2,
+      );
       ai.pause();
       setState(() {
         match = s;
@@ -411,28 +464,48 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     ai.pause();
     await showDialog<void>(
       context: parentContext,
-      builder: (dialogContext) => Dialog.fullscreen(
-        child: SafeArea(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.arrow_back),
-                title: const Text('Actions'),
-                onTap: () => Navigator.pop(dialogContext),
-              ),
-              for (final entry in [
-                ('Rules', Page.rules, Icons.menu_book),
-                ('Home', Page.home, Icons.home_outlined),
-              ])
-                ListTile(
-                  leading: Icon(entry.$3),
-                  title: Text(entry.$1),
-                  onTap: () {
-                    Navigator.pop(dialogContext);
-                    setState(() => page = entry.$2);
-                  },
+      builder: (dialogContext) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Return to board',
+                      onPressed: () => Navigator.pop(dialogContext),
+                      icon: const Icon(Icons.arrow_back),
+                    ),
+                    Text(
+                      'Actions',
+                      style: Theme.of(dialogContext).textTheme.titleMedium,
+                    ),
+                  ],
                 ),
-            ],
+                Row(
+                  children: [
+                    for (final entry in [
+                      ('Rules', Page.rules, Icons.menu_book),
+                      ('Home', Page.home, Icons.home_outlined),
+                    ])
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            Navigator.pop(dialogContext);
+                            setState(() => page = entry.$2);
+                          },
+                          icon: Icon(entry.$3),
+                          label: Text(entry.$1),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -472,7 +545,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             !oneHumanMatch;
         match = s;
       });
-      _save(s);
+      _save(s, previous: previous);
       _syncAi();
     } on StateError catch (e) {
       fail(e.message);
@@ -491,7 +564,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           MatchEngine.importReplay(savedReplay!).phase != MatchPhase.finished) {
         final replace = await showDialog<bool>(
           context: dialogContext,
-          builder: (context) => AlertDialog(
+          builder: (context) => CompactAlertDialog(
             title: const Text('Replace saved match?'),
             content: const Text(
               'Importing replaces the match saved on this device. '
@@ -513,6 +586,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         if (!mounted || replace != true) return;
       }
       ai.pause();
+      _archiveReplacedMatch();
       setState(() {
         match = loaded;
         aiSeats = <int>{};
@@ -530,10 +604,14 @@ class _StoneBannerAppState extends State<StoneBannerApp>
 
   Widget _setupContent(BuildContext context) => LayoutBuilder(
     builder: (context, bounds) {
-      final options = ListView(
-        padding: const EdgeInsets.all(20),
+      final optionList = ListView(
+        padding: EdgeInsets.all(isCompactLandscape(context) ? 8 : 20),
         children: [
-          Text('Match setup', style: Theme.of(context).textTheme.headlineSmall),
+          if (!isCompactLandscape(context))
+            Text(
+              'Match setup',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
           const SizedBox(height: 8),
           const Text(
             'Choose who plays. All opponents run locally.',
@@ -583,16 +661,50 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           ),
         ],
       );
+      final options = isCompactLandscape(context)
+          ? Column(
+              children: [
+                CompactPageHeader(
+                  title: 'Match setup',
+                  onBack: () => setState(() => page = Page.home),
+                  backTooltip: 'Back to Home',
+                ),
+                Expanded(child: optionList),
+              ],
+            )
+          : optionList;
       final players = Column(
         children: [
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              padding: isCompactLandscape(context)
+                  ? const EdgeInsets.fromLTRB(10, 8, 10, 4)
+                  : const EdgeInsets.fromLTRB(20, 16, 20, 8),
               children: [
-                Text(
-                  computerOpponents ? 'Computer opponents' : 'Your table',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
+                if (isCompactLandscape(context)) ...[
+                  Text(
+                    'Player names',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (computerOpponents) ...[
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Computer opponents',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    Text(
+                      '$humanSeats ${humanSeats == 1 ? 'human' : 'humans'} · $aiOpponentCount ${aiOpponentCount == 1 ? 'computer' : 'computers'}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xffabbfc2),
+                      ),
+                    ),
+                  ],
+                ] else
+                  Text(
+                    computerOpponents ? 'Computer opponents' : 'Your table',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                 if (computerOpponents) ...[
                   const SizedBox(height: 8),
                   Wrap(
@@ -609,32 +721,44 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     ],
                   ),
                 ],
-                const SizedBox(height: 8),
-                Text(
-                  computerOpponents
-                      ? '$humanSeats ${humanSeats == 1 ? 'human' : 'humans'} · $aiOpponentCount ${aiOpponentCount == 1 ? 'computer' : 'computers'}'
-                      : '$seats humans · pass the device between turns',
-                  style: const TextStyle(
-                    color: Color(0xffabbfc2),
-                    fontSize: 12,
+                if (!isCompactLandscape(context)) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    computerOpponents
+                        ? '$humanSeats ${humanSeats == 1 ? 'human' : 'humans'} · $aiOpponentCount ${aiOpponentCount == 1 ? 'computer' : 'computers'}'
+                        : '$seats humans · pass the device between turns',
+                    style: const TextStyle(
+                      color: Color(0xffabbfc2),
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Player names',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                const Text('Choose names for human players'),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Player names',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('Choose names for human players'),
+                  const SizedBox(height: 16),
+                ] else
+                  const SizedBox(height: 6),
                 for (var i = 0; i < humanSeats; i++)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
+                    padding: EdgeInsets.only(
+                      bottom: isCompactLandscape(context) ? 4 : 10,
+                    ),
                     child: TextField(
                       controller: names[i],
                       textCapitalization: TextCapitalization.words,
                       decoration: InputDecoration(
                         labelText: 'Player ${i + 1}',
+                        isDense: isCompactLandscape(context),
+                        contentPadding: isCompactLandscape(context)
+                            ? const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 9,
+                              )
+                            : null,
                         border: const OutlineInputBorder(),
                       ),
                     ),
@@ -692,86 +816,208 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     },
   );
 
+  Widget _compactRules(BuildContext context) => SafeArea(
+    child: Column(
+      children: [
+        CompactPageHeader(
+          title: 'The founding rules',
+          onBack: () => setState(() => page = Page.home),
+          backTooltip: 'Back to Home',
+        ),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: const [
+                    Text(
+                      'The essentials',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    _Rule(
+                      '1 · Claim',
+                      'Place two free Village–Road pairs in snake order. Leave a gap between settlements.',
+                    ),
+                    _Rule(
+                      '2 · Roll',
+                      'Dice earn goods from nearby terrain. A seven moves the Bandit.',
+                    ),
+                    _Rule(
+                      '3 · Build and trade',
+                      'Spend goods on roads, Villages, Towns and Capitals, or exchange with other players.',
+                    ),
+                    _Rule(
+                      '4 · Win',
+                      'First to 15 VP wins. Villages = 1, Towns = 2, Capitals = 4, longest road = 2.',
+                    ),
+                  ],
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: const [
+                    Text(
+                      'Advanced play',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    _Rule(
+                      'Town Developments',
+                      'Innovation, Commerce and Governance have five tiers, producing commodities.',
+                    ),
+                    _Rule(
+                      'Reaver Fleet and Knights',
+                      'Knights defend; fortifications protect Towns during invasions.',
+                    ),
+                    _Rule(
+                      'Reactions',
+                      'Intercept theft, counter cards and pledge invasion aid when eligible.',
+                    ),
+                    _Rule(
+                      'Catch-up',
+                      'Players three points behind can make a limited 3:1 bank exchange.',
+                    ),
+                    Divider(height: 16),
+                    Text(
+                      'Glossary',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    _Rule(
+                      'Basic goods',
+                      'Wood, brick, wheat, sheep and ore pay for roads, structures and Knights.',
+                    ),
+                    _Rule(
+                      'Commodities',
+                      'Paper, cloth and coin come from developed Towns and help build Capitals.',
+                    ),
+                    _Rule(
+                      'Victory Points (VP)',
+                      'Reach 15 to win. Charter Points and Guardian’s Honour also count.',
+                    ),
+                    _Rule(
+                      'Bandit',
+                      'A seven relocates the Bandit and may cause discards or theft.',
+                    ),
+                    _Rule(
+                      'Seed and replay',
+                      'Saved events and the world seed recreate a match.',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
   Future<void> _showSettings(BuildContext context) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => StatefulBuilder(
-          builder: (context, refresh) => Scaffold(
-            appBar: AppBar(title: const Text('Settings')),
-            body: ListView(
+          builder: (context, refresh) {
+            final compact = isCompactLandscape(context);
+            final tilePadding = compact
+                ? const EdgeInsets.symmetric(horizontal: 10)
+                : null;
+            final hints = FutureBuilder<SharedPreferences>(
+              future: SharedPreferences.getInstance(),
+              builder: (context, snapshot) {
+                final prefs = snapshot.data;
+                return SwitchListTile(
+                  dense: compact,
+                  contentPadding: tilePadding,
+                  title: const Text('Gameplay hints'),
+                  value: prefs?.getBool('gameplay_hints_enabled') ?? true,
+                  onChanged: prefs == null
+                      ? null
+                      : (value) async {
+                          await prefs.setBool('gameplay_hints_enabled', value);
+                          refresh(() {});
+                        },
+                );
+              },
+            );
+            final icons = ValueListenableBuilder<ResourceIconStyle>(
+              valueListenable: resourceIconStyle,
+              builder: (context, style, _) => ListTile(
+                dense: compact,
+                contentPadding: tilePadding,
+                title: const Text('Resource icons'),
+                trailing: DropdownButton<ResourceIconStyle>(
+                  value: style,
+                  isDense: compact,
+                  items: [
+                    for (final option in ResourceIconStyle.values)
+                      DropdownMenuItem(
+                        value: option,
+                        child: Text(option.label),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) selectResourceIconStyle(value);
+                  },
+                ),
+              ),
+            );
+            final appearance = ListTile(
+              dense: compact,
+              contentPadding: tilePadding,
+              title: const Text('Appearance'),
+              trailing: DropdownButton<ThemeMode>(
+                value: themeMode,
+                isDense: compact,
+                items: [
+                  for (final mode in ThemeMode.values)
+                    DropdownMenuItem(value: mode, child: Text(mode.name)),
+                ],
+                onChanged: (value) async {
+                  if (value == null) return;
+                  setState(() => themeMode = value);
+                  refresh(() {});
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setString('themeMode', value.name);
+                },
+              ),
+            );
+            final background = SwitchListTile(
+              dense: compact,
+              contentPadding: tilePadding,
+              title: const Text('Pause offline games in background'),
+              subtitle: compact
+                  ? null
+                  : const Text('Online games always continue.'),
+              value: pauseInBackground,
+              onChanged: (value) async {
+                setState(() => pauseInBackground = value);
+                refresh(() {});
+                _syncAi();
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('pauseInBackground', value);
+              },
+            );
+            final delay = Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                FutureBuilder<SharedPreferences>(
-                  future: SharedPreferences.getInstance(),
-                  builder: (context, snapshot) {
-                    final prefs = snapshot.data;
-                    return SwitchListTile(
-                      title: const Text('Gameplay hints'),
-                      value: prefs?.getBool('gameplay_hints_enabled') ?? true,
-                      onChanged: prefs == null
-                          ? null
-                          : (value) async {
-                              await prefs.setBool(
-                                'gameplay_hints_enabled',
-                                value,
-                              );
-                              refresh(() {});
-                            },
-                    );
-                  },
-                ),
-                ValueListenableBuilder<ResourceIconStyle>(
-                  valueListenable: resourceIconStyle,
-                  builder: (context, style, _) => ListTile(
-                    title: const Text('Resource icons'),
-                    trailing: DropdownButton<ResourceIconStyle>(
-                      value: style,
-                      items: [
-                        for (final option in ResourceIconStyle.values)
-                          DropdownMenuItem(
-                            value: option,
-                            child: Text(option.label),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) selectResourceIconStyle(value);
-                      },
-                    ),
-                  ),
-                ),
                 ListTile(
-                  title: const Text('Appearance'),
-                  trailing: DropdownButton<ThemeMode>(
-                    value: themeMode,
-                    items: [
-                      for (final mode in ThemeMode.values)
-                        DropdownMenuItem(value: mode, child: Text(mode.name)),
-                    ],
-                    onChanged: (value) async {
-                      if (value == null) return;
-                      setState(() => themeMode = value);
-                      refresh(() {});
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setString('themeMode', value.name);
-                    },
-                  ),
-                ),
-                SwitchListTile(
-                  title: const Text('Pause offline games in background'),
-                  subtitle: const Text('Online games always continue.'),
-                  value: pauseInBackground,
-                  onChanged: (value) async {
-                    setState(() => pauseInBackground = value);
-                    refresh(() {});
-                    _syncAi();
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setBool('pauseInBackground', value);
-                  },
-                ),
-                ListTile(
+                  dense: compact,
+                  contentPadding: tilePadding,
                   title: const Text('Computer action delay'),
-                  subtitle: Text(
-                    '${aiDelaySeconds.toStringAsFixed(1)} seconds · press Space to finish computer turns immediately',
-                  ),
+                  trailing: compact
+                      ? Text('${aiDelaySeconds.toStringAsFixed(1)}s')
+                      : null,
+                  subtitle: compact
+                      ? null
+                      : Text(
+                          '${aiDelaySeconds.toStringAsFixed(1)} seconds · press Space to finish computer turns immediately',
+                        ),
                 ),
                 Slider(
                   value: aiDelaySeconds,
@@ -787,8 +1033,60 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                   },
                 ),
               ],
-            ),
-          ),
+            );
+            return Scaffold(
+              appBar: compact || MediaQuery.sizeOf(context).width < 900
+                  ? null
+                  : AppBar(title: const Text('Settings')),
+              body: compact
+                  ? SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Column(
+                          children: [
+                            CompactPageHeader(
+                              title: 'Settings',
+                              onBack: () => Navigator.of(context).pop(),
+                            ),
+                            const Divider(height: 1),
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: ListView(
+                                      children: [hints, icons, appearance],
+                                    ),
+                                  ),
+                                  const VerticalDivider(width: 1),
+                                  Expanded(
+                                    child: ListView(
+                                      children: [background, delay],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView(
+                      children: [
+                        if (MediaQuery.sizeOf(context).width < 900)
+                          CompactPageHeader(
+                            title: 'Settings',
+                            onBack: () => Navigator.of(context).pop(),
+                          ),
+                        hints,
+                        icons,
+                        appearance,
+                        background,
+                        delay,
+                      ],
+                    ),
+            );
+          },
         ),
       ),
     );
@@ -816,344 +1114,386 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         ),
       ),
       themeMode: themeMode,
-      home: kIsWeb &&
+      home:
+          kIsWeb &&
               !_dismissedInitialP2pLink &&
               P2pTransport.initialLink() != null
           ? P2pRoomPage(
-              onExitToHome: () => setState(() => _dismissedInitialP2pLink = true),
+              onExitToHome: () =>
+                  setState(() => _dismissedInitialP2pLink = true),
             )
           : Builder(
-        builder: (context) => PopScope(
-          canPop: page == Page.home,
-          onPopInvokedWithResult: (didPop, result) {
-            if (!didPop) {
-              ai.pause();
-              setState(() => page = Page.home);
-            }
-          },
-          child: Focus(
-            autofocus: true,
-            skipTraversal: true,
-            onKeyEvent: (_, event) {
-              if (event is KeyDownEvent &&
-                  event.logicalKey == LogicalKeyboardKey.space &&
-                  aiActing &&
-                  page == Page.board &&
-                  Navigator.of(context).canPop() == false &&
-                  FocusManager.instance.primaryFocus?.context?.widget
-                      is! EditableText) {
-                ai.fastForward();
-                return KeyEventResult.handled;
-              }
-              if (event is KeyDownEvent &&
-                  event.logicalKey == LogicalKeyboardKey.escape &&
-                  (page != Page.home || Navigator.of(context).canPop())) {
-                Navigator.of(context).maybePop();
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
-            },
-            child: Scaffold(
-              appBar: page == Page.board
-                  ? null
-                  : AppBar(
-                      actions: [
-                        IconButton(
-                          tooltip: 'Settings',
-                          icon: const Icon(Icons.settings),
-                          onPressed: () => _showSettings(context),
-                        ),
-                      ],
-                      toolbarHeight: 48,
-                      centerTitle: false,
-                      leading: page == Page.home
-                          ? const Icon(Icons.flag_outlined)
-                          : IconButton(
-                              tooltip: 'Back to Home',
-                              onPressed: () {
-                                ai.pause();
-                                setState(() => page = Page.home);
-                              },
-                              icon: const Icon(Icons.arrow_back),
-                            ),
-                      title: const Text(
-                        'STONE & BANNER',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2.5,
-                        ),
-                      ),
-                    ),
-              body: Stack(
-                fit: StackFit.expand,
-                children: [
-                  switch (page) {
-                    Page.home => _LandingHall(
-                      onNew: () => setState(() => page = Page.setup),
-                      onContinue: savedReplay == null ? null : resume,
-                      onRules: () => setState(() => page = Page.rules),
-                      onImport: () => importMatch(context),
-                      onP2p: null,
-                      // The primary multiplayer button is interoperable
-                      // across browsers, Android, and Linux via WebRTC.
-                      onLan: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const P2pRoomPage(),
-                        ),
-                      ),
-                    ),
-                    Page.setup => LayoutBuilder(
-                      builder: (context, bounds) => bounds.maxWidth >= 1200
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(48),
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 1100,
-                                    maxHeight: 640,
-                                  ),
-                                  child: _setupContent(context),
-                                ),
-                              ),
-                            )
-                          : _setupContent(context),
-                    ),
-                    Page.board =>
-                      current == null
-                          ? Center(
-                              child: FilledButton(
-                                onPressed: () =>
-                                    setState(() => page = Page.setup),
-                                child: const Text('Create a match'),
-                              ),
-                            )
-                          : handoff
-                          ? const SizedBox.expand()
-                          : MatchView(
-                              state: current,
-                              onEvent: dispatch,
-                              onHome: () {
-                                ai.pause();
-                                setState(() => page = Page.home);
-                              },
-                              onRules: () {
-                                ai.pause();
-                                setState(() => page = Page.rules);
-                              },
-                              onSettings: () => _showSettings(context),
-                              pauseInBackground: pauseInBackground,
-                              computerSeats: aiSeats,
-                              visibleSeat: oneHumanMatch
-                                  ? 0
-                                  : current.actingSeat,
-                              observing: aiActing,
-                              automationError: aiError,
-                              onResumeAutomation: () {
-                                setState(() => aiError = null);
-                                _syncAi();
-                              },
-                            ),
-                    Page.rules => Center(
-                      key: const ValueKey('stone-rules-page'),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 680),
-                        child: ListView(
-                          padding: const EdgeInsets.all(20),
-                          children: [
-                            Text(
-                              'The founding rules',
-                              style: Theme.of(context).textTheme.headlineMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'The essentials',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            const SizedBox(height: 12),
-                            const _Rule(
-                              '1 · Claim',
-                              'Each seat places two free Village and Road pairs in a snake draft. Leave a gap between settlements.',
-                            ),
-                            const _Rule(
-                              '2 · Roll',
-                              'Roll numbered dice to earn goods from neighbouring terrain. A seven moves the Bandit.',
-                            ),
-                            const _Rule(
-                              '3 · Build and trade',
-                              'Spend goods to extend roads, found Villages and upgrade to Towns or Capitals. Exchange with the bank or offer a rival trade.',
-                            ),
-                            const _Rule(
-                              '4 · Win',
-                              'First to 15 Victory Points wins. Village = 1, Town = 2, Capital = 4; the longest road of at least five sides earns 2.',
-                            ),
-                            const Divider(height: 24),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: const [
-                                Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 12),
-                                  child: Text(
-                                    'Advanced play',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                _Rule(
-                                  'Town Developments',
-                                  'Innovation, Commerce and Governance have five tiers each. Developed Towns can produce paper, cloth and coin.',
-                                ),
-                                _Rule(
-                                  'Reaver Fleet and Knights',
-                                  'Activate and promote Knights to defend the realm. Fortifications shelter Towns when an Invasion succeeds.',
-                                ),
-                                _Rule(
-                                  'Reactions',
-                                  'Eligible seats can intercept theft, counter Governance cards or pledge Invasion aid. Pass is always available.',
-                                ),
-                                _Rule(
-                                  'Catch-up',
-                                  'Seats behind by three points may exchange 3:1 with the bank once a round; drought relief is bounded.',
-                                ),
-                              ],
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: const [
-                                Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 12),
-                                  child: Text(
-                                    'Glossary',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                _Rule(
-                                  'Basic goods',
-                                  'Wood, brick, wheat, wool and ore pay for roads, structures and Knights.',
-                                ),
-                                _Rule(
-                                  'Commodities',
-                                  'Paper, cloth and coin come from developed Towns and help build Capitals.',
-                                ),
-                                _Rule(
-                                  'Victory Points (VP)',
-                                  'A seat’s score. Reach 15 points to win; Charter Points and Guardian’s Honour also count.',
-                                ),
-                                _Rule(
-                                  'Bandit',
-                                  'A seven relocates the Bandit and may cause discards or theft.',
-                                ),
-                                _Rule(
-                                  'Seed and replay',
-                                  'The saved world seed and all accepted events reproduce a match exactly.',
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Every move is engine-validated and logged for deterministic replay.',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+              builder: (context) => PopScope(
+                canPop: page == Page.home,
+                onPopInvokedWithResult: (didPop, result) {
+                  if (!didPop) {
+                    ai.pause();
+                    setState(() => page = Page.home);
+                  }
+                },
+                child: Focus(
+                  autofocus: true,
+                  skipTraversal: true,
+                  onKeyEvent: (_, event) {
+                    if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.space &&
+                        aiActing &&
+                        page == Page.board &&
+                        Navigator.of(context).canPop() == false &&
+                        FocusManager.instance.primaryFocus?.context?.widget
+                            is! EditableText) {
+                      ai.fastForward();
+                      return KeyEventResult.handled;
+                    }
+                    if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.escape &&
+                        (page != Page.home || Navigator.of(context).canPop())) {
+                      Navigator.of(context).maybePop();
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
                   },
-                  if (page == Page.board && handoff && current != null)
-                    Positioned.fill(
-                      child: Material(
-                        color: const Color(0xff101e25),
-                        child: Center(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(20),
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 560),
-                              child: Card(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Row(
+                  child: Scaffold(
+                    appBar:
+                        page == Page.board ||
+                            MediaQuery.sizeOf(context).width < 900
+                        ? null
+                        : AppBar(
+                            actions: [
+                              IconButton(
+                                tooltip: 'Settings',
+                                icon: const Icon(Icons.settings),
+                                onPressed: () => _showSettings(context),
+                              ),
+                            ],
+                            toolbarHeight: 48,
+                            centerTitle: false,
+                            leading: page == Page.home
+                                ? const Icon(Icons.flag_outlined)
+                                : IconButton(
+                                    tooltip: 'Back to Home',
+                                    onPressed: () {
+                                      ai.pause();
+                                      setState(() => page = Page.home);
+                                    },
+                                    icon: const Icon(Icons.arrow_back),
+                                  ),
+                            title: const Text(
+                              'STONE & BANNER',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 2.5,
+                              ),
+                            ),
+                          ),
+                    body: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        switch (page) {
+                          Page.home => _LandingHall(
+                            onSettings: () => _showSettings(context),
+                            onNew: () => setState(() => page = Page.setup),
+                            onContinue: savedReplay == null ? null : resume,
+                            onRules: () => setState(() => page = Page.rules),
+                            onImport: () => importMatch(context),
+                            onHistory: () => _showMatchHistory(context),
+                            // Use one interoperable transport at the primary
+                            // entry point on Android, Linux and web.
+                            onP2p: null,
+                            onLan: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const P2pRoomPage(),
+                              ),
+                            ),
+                          ),
+                          Page.setup => LayoutBuilder(
+                            builder: (context, bounds) =>
+                                bounds.maxWidth >= 1200
+                                ? Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(48),
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 1100,
+                                          maxHeight: 640,
+                                        ),
+                                        child: _setupContent(context),
+                                      ),
+                                    ),
+                                  )
+                                : _setupContent(context),
+                          ),
+                          Page.board =>
+                            current == null
+                                ? Center(
+                                    child: FilledButton(
+                                      onPressed: () =>
+                                          setState(() => page = Page.setup),
+                                      child: const Text('Create a match'),
+                                    ),
+                                  )
+                                : handoff
+                                ? const SizedBox.expand()
+                                : MatchView(
+                                    state: current,
+                                    onEvent: dispatch,
+                                    onHome: () {
+                                      ai.pause();
+                                      setState(() => page = Page.home);
+                                    },
+                                    onRules: () {
+                                      ai.pause();
+                                      setState(() => page = Page.rules);
+                                    },
+                                    onSettings: () => _showSettings(context),
+                                    pauseInBackground: pauseInBackground,
+                                    computerSeats: aiSeats,
+                                    visibleSeat: oneHumanMatch
+                                        ? 0
+                                        : current.actingSeat,
+                                    observing: aiActing,
+                                    automationError: aiError,
+                                    onResumeAutomation: () {
+                                      setState(() => aiError = null);
+                                      _syncAi();
+                                    },
+                                  ),
+                          Page.rules =>
+                            isCompactLandscape(context)
+                                ? _compactRules(context)
+                                : Center(
+                                    key: const ValueKey('stone-rules-page'),
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 680,
+                                      ),
+                                      child: ListView(
+                                        padding: const EdgeInsets.all(20),
                                         children: [
-                                          const Icon(
-                                            Icons.lock_outline,
-                                            size: 44,
-                                            color: Color(0xffe5c183),
+                                          Text(
+                                            'The founding rules',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .headlineMedium,
                                           ),
-                                          const SizedBox(width: 20),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  'Pass the device',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .headlineSmall,
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'The essentials',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleLarge,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          const _Rule(
+                                            '1 · Claim',
+                                            'Each seat places two free Village and Road pairs in a snake draft. Leave a gap between settlements.',
+                                          ),
+                                          const _Rule(
+                                            '2 · Roll',
+                                            'Roll numbered dice to earn goods from neighbouring terrain. A seven moves the Bandit.',
+                                          ),
+                                          const _Rule(
+                                            '3 · Build and trade',
+                                            'Spend goods to extend roads, found Villages and upgrade to Towns or Capitals. Exchange with the bank or offer a rival trade.',
+                                          ),
+                                          const _Rule(
+                                            '4 · Win',
+                                            'First to 15 Victory Points wins. Village = 1, Town = 2, Capital = 4; the longest road of at least five sides earns 2.',
+                                          ),
+                                          const Divider(height: 24),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: const [
+                                              Padding(
+                                                padding: EdgeInsets.symmetric(
+                                                  vertical: 12,
                                                 ),
-                                                Text(
-                                                  current
-                                                      .players[current
-                                                              .tactical
-                                                              ?.responder ??
-                                                          current.active]
-                                                      .id,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .titleLarge,
+                                                child: Text(
+                                                  'Advanced play',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
                                                 ),
-                                                Text(
-                                                  current.tactical == null
-                                                      ? 'Your turn'
-                                                      : 'Private tactical response',
+                                              ),
+                                              _Rule(
+                                                'Town Developments',
+                                                'Innovation, Commerce and Governance have five tiers each. Developed Towns can produce paper, cloth and coin.',
+                                              ),
+                                              _Rule(
+                                                'Reaver Fleet and Knights',
+                                                'Activate and promote Knights to defend the realm. Fortifications shelter Towns when an Invasion succeeds.',
+                                              ),
+                                              _Rule(
+                                                'Reactions',
+                                                'Eligible seats can intercept theft, counter Governance cards or pledge Invasion aid. Pass is always available.',
+                                              ),
+                                              _Rule(
+                                                'Catch-up',
+                                                'Seats behind by three points may exchange 3:1 with the bank once a round; drought relief is bounded.',
+                                              ),
+                                            ],
+                                          ),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: const [
+                                              Padding(
+                                                padding: EdgeInsets.symmetric(
+                                                  vertical: 12,
                                                 ),
-                                              ],
-                                            ),
+                                                child: Text(
+                                                  'Glossary',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ),
+                                              _Rule(
+                                                'Basic goods',
+                                                'Wood, brick, wheat, sheep and ore pay for roads, structures and Knights.',
+                                              ),
+                                              _Rule(
+                                                'Commodities',
+                                                'Paper, cloth and coin come from developed Towns and help build Capitals.',
+                                              ),
+                                              _Rule(
+                                                'Victory Points (VP)',
+                                                'A seat’s score. Reach 15 points to win; Charter Points and Guardian’s Honour also count.',
+                                              ),
+                                              _Rule(
+                                                'Bandit',
+                                                'A seven relocates the Bandit and may cause discards or theft.',
+                                              ),
+                                              _Rule(
+                                                'Seed and replay',
+                                                'The saved world seed and all accepted events reproduce a match exactly.',
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 16),
+                                          const Text(
+                                            'Every move is engine-validated and logged for deterministic replay.',
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 20),
-                                      FilledButton.icon(
-                                        onPressed: () {
-                                          setState(() => handoff = false);
-                                          _syncAi();
-                                        },
-                                        icon: const Icon(
-                                          Icons.visibility_outlined,
+                                    ),
+                                  ),
+                        },
+                        if (MediaQuery.sizeOf(context).width < 900 &&
+                            !isCompactLandscape(context) &&
+                            (page == Page.setup || page == Page.rules))
+                          Positioned(
+                            top: MediaQuery.paddingOf(context).top + 4,
+                            right: MediaQuery.paddingOf(context).right + 8,
+                            child: IconButton.filledTonal(
+                              tooltip: 'Back to Home',
+                              onPressed: () => setState(() => page = Page.home),
+                              icon: const Icon(Icons.arrow_back),
+                            ),
+                          ),
+                        if (page == Page.board && handoff && current != null)
+                          Positioned.fill(
+                            child: Material(
+                              color: const Color(0xff101e25),
+                              child: Center(
+                                child: SingleChildScrollView(
+                                  padding: const EdgeInsets.all(20),
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 560,
+                                    ),
+                                    child: Card(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(24),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.lock_outline,
+                                                  size: 44,
+                                                  color: Color(0xffe5c183),
+                                                ),
+                                                const SizedBox(width: 20),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        'Pass the device',
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .headlineSmall,
+                                                      ),
+                                                      Text(
+                                                        current
+                                                            .players[current
+                                                                    .tactical
+                                                                    ?.responder ??
+                                                                current.active]
+                                                            .id,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .titleLarge,
+                                                      ),
+                                                      Text(
+                                                        current.tactical == null
+                                                            ? 'Your turn'
+                                                            : 'Private tactical response',
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 20),
+                                            FilledButton.icon(
+                                              onPressed: () {
+                                                setState(() => handoff = false);
+                                                _syncAi();
+                                              },
+                                              icon: const Icon(
+                                                Icons.visibility_outlined,
+                                              ),
+                                              label: const Text("I'm ready"),
+                                            ),
+                                            Builder(
+                                              builder: (context) =>
+                                                  TextButton.icon(
+                                                    onPressed: () =>
+                                                        _showMatchActions(
+                                                          context,
+                                                        ),
+                                                    icon: const Icon(
+                                                      Icons.layers_outlined,
+                                                    ),
+                                                    label: const Text(
+                                                      'Actions',
+                                                    ),
+                                                  ),
+                                            ),
+                                          ],
                                         ),
-                                        label: const Text("I'm ready"),
                                       ),
-                                      Builder(
-                                        builder: (context) => TextButton.icon(
-                                          onPressed: () =>
-                                              _showMatchActions(context),
-                                          icon: const Icon(
-                                            Icons.layers_outlined,
-                                          ),
-                                          label: const Text('Actions'),
-                                        ),
-                                      ),
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
+                      ],
                     ),
-                ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1176,7 +1516,7 @@ class _ReplayImportDialogState extends State<_ReplayImportDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => CompactAlertDialog(
     title: const Text('Import replay'),
     scrollable: true,
     insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1213,29 +1553,42 @@ class _Rule extends StatelessWidget {
   const _Rule(this.name, this.description);
   final String name, description;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 18),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(name, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 4),
-        Text(description),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final compact = isCompactLandscape(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: compact ? 8 : 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name,
+            style: compact
+                ? Theme.of(context).textTheme.titleSmall
+                : Theme.of(context).textTheme.titleLarge,
+          ),
+          SizedBox(height: compact ? 2 : 4),
+          Text(
+            description,
+            style: compact ? const TextStyle(fontSize: 12) : null,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _LandingHall extends StatelessWidget {
   const _LandingHall({
     required this.onNew,
+    required this.onSettings,
     required this.onContinue,
     required this.onRules,
     required this.onImport,
+    required this.onHistory,
     required this.onLan,
     required this.onP2p,
   });
-  final VoidCallback onNew, onRules, onImport, onLan;
+  final VoidCallback onNew, onRules, onImport, onHistory, onLan, onSettings;
   final VoidCallback? onP2p;
   final VoidCallback? onContinue;
 
@@ -1354,6 +1707,19 @@ class _LandingHall extends StatelessWidget {
                       onPressed: onImport,
                       icon: const Icon(Icons.history, size: 18),
                       label: const Text('Import replay'),
+                    ),
+                    TextButton.icon(
+                      onPressed: onHistory,
+                      icon: const Icon(Icons.history_toggle_off, size: 18),
+                      label: const Text('Match history'),
+                    ),
+                    Tooltip(
+                      message: 'Settings',
+                      child: TextButton.icon(
+                        onPressed: onSettings,
+                        icon: const Icon(Icons.settings_outlined, size: 18),
+                        label: const Text('Settings'),
+                      ),
                     ),
                   ],
                 ),

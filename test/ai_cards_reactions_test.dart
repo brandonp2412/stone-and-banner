@@ -38,6 +38,26 @@ HeldCard held(StrategyDeck deck, String id) {
   return HeldCard(deck, index);
 }
 
+/// The policy uses only a rival's publicly visible productive sites.
+MatchState showProduction(
+  MatchState state,
+  int seat,
+  Iterable<Resource> goods,
+) {
+  final sites = Map<int, Site>.of(state.sites);
+  for (final good in goods) {
+    final vertex = state.topology.vertices.firstWhere(
+      (vertex) =>
+          !sites.containsKey(vertex.id) &&
+          vertex.tiles.any(
+            (tile) => state.board.tiles[tile].land.produces == good,
+          ),
+    );
+    sites[vertex.id] = Site(seat, Structure.village);
+  }
+  return state.copyWith(sites: sites);
+}
+
 void conserve(MatchState state) {
   for (final resource in Resource.values) {
     final total =
@@ -302,6 +322,7 @@ void main() {
     test('bot asks only once after a trade $resolution within the turn', () {
       var state = stock(fixture(), 0, {Resource.wood: 3});
       state = stock(state, 1, {Resource.ore: 2});
+      state = showProduction(state, 1, [Resource.ore]);
       const proposal = ProposeTrade(1, Resource.wood, 1, Resource.ore, 1);
       state = MatchEngine.apply(state, proposal);
       final id = state.offers.single.id;
@@ -337,6 +358,7 @@ void main() {
       sites: {0: const Site(0, Structure.village)},
     );
     proposing = stock(proposing, 0, {Resource.wood: 2});
+    proposing = showProduction(proposing, 1, [Resource.wheat, Resource.ore]);
     final view = AiActionAdapter.observe(proposing, 0);
     final offer = AiCardStrategy.propose(view);
     expect(offer, isA<ProposeTrade>());

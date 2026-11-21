@@ -1,3 +1,5 @@
+import 'labels.dart';
+
 import 'package:flutter/material.dart';
 
 import '../engine/board.dart';
@@ -66,8 +68,8 @@ class TradeLeg extends StatelessWidget {
                       value: good,
                       child: Text(
                         holdings == null
-                            ? good.name
-                            : '${good.name} (${holdings![good] ?? 0})',
+                            ? good.displayName
+                            : '${good.displayName} (${holdings![good] ?? 0})',
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13),
                       ),
@@ -153,15 +155,15 @@ class TradeLeg extends StatelessWidget {
               for (final good in Resource.values)
                 ChoiceChip(
                   key: ValueKey(
-                    'trade-good-${title.toLowerCase()}-${good.name}',
+                    'trade-good-${title.toLowerCase()}-${good.displayName}',
                   ),
                   showCheckmark: false,
                   avatar: ResourceIcon(good, size: 24),
                   selected: good == resource,
                   label: Text(
                     holdings == null
-                        ? good.name
-                        : '${good.name} (${holdings![good] ?? 0})',
+                        ? good.displayName
+                        : '${good.displayName} (${holdings![good] ?? 0})',
                   ),
                   labelStyle: TextStyle(
                     fontSize: 11,

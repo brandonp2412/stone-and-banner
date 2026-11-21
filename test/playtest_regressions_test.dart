@@ -13,7 +13,7 @@ void main() {
     await display(tester, const Size(844, 390), state);
     await tester.tap(find.byKey(const ValueKey('mobile-open-actions')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Village unavailable:'), findsOneWidget);
+    expect(find.byTooltip('Extend a road first'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -40,7 +40,7 @@ void main() {
   ) async {
     final state = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 20261118);
     await display(tester, const Size(844, 390), state);
-    await tester.tap(find.byTooltip('Choose board target from list'));
+    await tester.tap(find.byTooltip('Choose target'));
     await tester.pumpAndSettle();
     final sheet = find.byType(BottomSheet);
     expect(sheet, findsOneWidget);

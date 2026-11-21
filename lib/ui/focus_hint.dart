@@ -46,11 +46,11 @@ class _FocusHintState extends State<FocusHint> {
     return LayoutBuilder(
       builder: (context, bounds) {
         final padding = MediaQuery.paddingOf(context);
-        final width = math.min(340.0, bounds.maxWidth - 32);
         final target = _target;
         final landscape =
             bounds.maxHeight < 500 ||
             (target != null && target.height > bounds.maxHeight / 2);
+        final width = math.min(landscape ? 288.0 : 340.0, bounds.maxWidth - 32);
         final above = target != null && target.center.dy > bounds.maxHeight / 2;
         return TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: target == null ? 0 : 1),

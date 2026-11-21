@@ -67,10 +67,16 @@ MatchState rollOrResolve(MatchState s) {
     final pair = MatchEngine.expectedDice(s);
     s = MatchEngine.apply(s, RollDice(pair.$1, pair.$2));
   }
+  // A seven can demand player discards before its bandit movement.
+  while (s.pendingDiscards.isNotEmpty) {
+    s = MatchEngine.apply(s, MatchEngine.idleEvent(s)!);
+  }
   if (s.phase == MatchPhase.bandit) {
+    final tile = (s.banditTile + 1) % s.board.tiles.length;
+    final victims = MatchEngine.banditVictims(s, tile);
     s = MatchEngine.apply(
       s,
-      MoveBandit((s.banditTile + 1) % s.board.tiles.length),
+      MoveBandit(tile, victim: victims.isEmpty ? null : victims.first),
     );
   }
   while (s.tactical != null) {
@@ -231,10 +237,21 @@ void main() {
       final tile = s.topology.vertices[site].tiles.firstWhere(
         (v) => v != s.banditTile,
       );
+      final near = s.topology.tileVertices[tile].firstWhere(
+        (vertex) => !s.sites.containsKey(vertex),
+      );
+      final far = s.topology.vertices
+          .firstWhere(
+            (vertex) =>
+                !s.topology.tileVertices[tile].contains(vertex.id) &&
+                !s.sites.containsKey(vertex.id),
+          )
+          .id;
       s = s.copyWith(
+        builders: {...s.builders, 1},
         knights: {
-          1: const KnightPiece(1, KnightRank.sentinel, true, -1),
-          2: const KnightPiece(1, KnightRank.warden, true, -1),
+          near: const KnightPiece(1, KnightRank.sentinel, true, -1),
+          far: const KnightPiece(1, KnightRank.warden, true, -1),
         },
       );
       final before = s.players[1].stores[Resource.ore]!;
@@ -261,7 +278,8 @@ void main() {
       expect(intercepted.tactical, isNull);
       expect(intercepted.phase, MatchPhase.actions);
       expect(intercepted.players[1].stores[Resource.ore], before);
-      expect(intercepted.knights[1]!.active, isFalse);
+      expect(intercepted.knights[near]!.active, isFalse);
+      expect(intercepted.knights[far]!.active, isTrue);
       expect(intercepted.reactionsUsed, contains(1));
       conserved(intercepted);
 
@@ -370,7 +388,13 @@ void main() {
     expect(s.active, 0);
     expect(s.phase, MatchPhase.invasion);
     expect(s.reactionsUsed, isEmpty);
-    expect(s.tactical!.responders, [1, 2]);
+    expect(s.tactical!.responders, [0, 1, 2]);
+    // The human seat is prompted first and can pass without goods.
+    s = MatchEngine.apply(
+      s,
+      RespondTactical(s.tactical!.id, 0, TacticalChoice.pass),
+    );
+    expect(s.tactical!.responder, 1);
     s = MatchEngine.apply(
       s,
       RespondTactical(
