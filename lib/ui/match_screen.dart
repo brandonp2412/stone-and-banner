@@ -169,9 +169,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   bool _hintsLoaded = false;
   final Set<String> _seenHints = {};
   String? _dismissedHintContext;
-  bool _botTradeOpen = false;
+  bool _incomingTradeOpen = false;
   bool _tradeComposerOpen = false;
-  int? _minimizedBotOfferId;
+  int? _incomingDialogOfferId;
+  BuildContext? _incomingDialogContext;
+  final Set<int> _notifiedTradeOfferIds = {};
   int? _waitingBotOfferId;
   int _botOfferSeconds = 30;
   int? _expiredBotOfferId;
@@ -315,7 +317,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     super.initState();
     unawaited(loadResourceIcons());
     unawaited(_loadHints());
-    _scheduleBotTrade();
+    _scheduleIncomingTrade();
     _turnClock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted ||
           s.phase == MatchPhase.finished ||
@@ -347,7 +349,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         if (_botOfferSeconds == 0 &&
             _expiredBotOfferId != incomingBotOffer.id) {
           _expiredBotOfferId = incomingBotOffer.id;
-          if (_botTradeOpen && !(ModalRoute.of(context)?.isCurrent ?? true)) {
+          if (_incomingTradeOpen &&
+              !(ModalRoute.of(context)?.isCurrent ?? true)) {
             Navigator.of(context)
                 .popUntil((route) => route == ModalRoute.of(context));
           }
@@ -1278,7 +1281,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         },
       ),
     );
-    if (mounted) setState(() => _tradeComposerOpen = false);
+    if (mounted) {
+      setState(() => _tradeComposerOpen = false);
+      _scheduleIncomingTrade();
+    }
     if (mounted &&
         event != null &&
         (!widget.observing || counter != null) &&
@@ -1289,75 +1295,89 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
   }
 
-  void _scheduleBotTrade() {
+  /// An offer is announced once. Closing the dialog does not answer it:
+  /// the same offer remains in the Trade tab without a floating reminder.
+  void _scheduleIncomingTrade() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
-          widget.online ||
-          _botTradeOpen ||
+          _incomingTradeOpen ||
           _tradeComposerOpen ||
           s.tactical != null ||
-          s.phase != MatchPhase.actions) {
+          s.phase != MatchPhase.actions ||
+          !(ModalRoute.of(context)?.isCurrent ?? true)) {
         return;
       }
-      final incoming = s.offers.where(
-        (o) =>
-            o.id != _minimizedBotOfferId &&
-            o.canRespond(viewerSeat) &&
-            o.proposer == s.active &&
-            widget.computerSeats.contains(o.proposer),
-      );
-      if (incoming.isEmpty) return;
-      _botTradeOpen = true;
-      showGeneralDialog<void>(
+      final incoming = s.offers
+          .where(
+            (offer) =>
+                !_notifiedTradeOfferIds.contains(offer.id) &&
+                offer.canRespond(viewerSeat) &&
+                ((!widget.observing && s.active == viewerSeat) ||
+                    (offer.proposer == s.active &&
+                        (!widget.online || widget.tradeReplyAllowed))),
+          )
+          .firstOrNull;
+      if (incoming == null) return;
+      _notifiedTradeOfferIds.add(incoming.id);
+      _incomingTradeOpen = true;
+      _incomingDialogOfferId = incoming.id;
+      showDialog<void>(
         context: context,
-        barrierDismissible: false,
-        transitionDuration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : const Duration(milliseconds: 320),
-        pageBuilder: (context, animation, secondaryAnimation) => PopScope(
-          canPop: false,
-          child: Dialog(
-            key: const ValueKey('bot-trade-dialog'),
-            child: SizedBox(
-              width: isCompactLandscape(context)
-                  ? MediaQuery.sizeOf(context).width - 16
-                  : 540,
-              height: isCompactLandscape(context)
-                  ? MediaQuery.sizeOf(context).height - 16
-                  : null,
+        barrierDismissible: true,
+        builder: (dialogContext) {
+          _incomingDialogContext = dialogContext;
+          return Dialog(
+            key: const ValueKey('incoming-trade-dialog'),
+            insetPadding: const EdgeInsets.all(10),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 560,
+                maxHeight: MediaQuery.sizeOf(dialogContext).height - 20,
+              ),
               child: SingleChildScrollView(
-                padding: EdgeInsets.all(isCompactLandscape(context) ? 6 : 16),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: IconButton(
-                        key: const ValueKey('minimize-bot-trade'),
-                        tooltip: 'Minimize trade',
-                        icon: const Icon(Icons.close_fullscreen),
-                        onPressed: () {
-                          setState(
-                            () => _minimizedBotOfferId = incoming.first.id,
-                          );
-                          Navigator.of(context).pop();
-                        },
-                      ),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Trade offer',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          key: const ValueKey('dismiss-incoming-trade'),
+                          tooltip: 'Dismiss',
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                        ),
+                      ],
                     ),
                     TradeMarket(
                       state: s,
                       viewerSeat: viewerSeat,
                       computerSeats: widget.computerSeats,
-                      allowOffers: true,
+                      onlyIncomingOfferId: incoming.id,
+                      allowOffers: false,
+                      allowCounters:
+                          !widget.observing ||
+                          widget.tradeReplyAllowed ||
+                          !widget.online,
                       privateOpponentHands: widget.online,
                       onBank: () {},
                       onOffer: () {},
                       onCounter: (trade) {
-                        Navigator.of(context).pop();
+                        Navigator.of(dialogContext).pop();
                         offer(trade);
                       },
                       onEvent: (event) {
-                        Navigator.of(context).pop();
+                        Navigator.of(dialogContext).pop();
                         send(event);
                       },
                     ),
@@ -1365,27 +1385,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 ),
               ),
             ),
-          ),
-        ),
-        transitionBuilder: (context, animation, secondaryAnimation, child) {
-          final curved = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-          );
-          return FadeTransition(
-            opacity: curved,
-            child: SlideTransition(
-              position: Tween(
-                begin: const Offset(0, .15),
-                end: Offset.zero,
-              ).animate(curved),
-              child: child,
-            ),
           );
         },
       ).whenComplete(() {
-        _botTradeOpen = false;
-        if (mounted) _scheduleBotTrade();
+        _incomingTradeOpen = false;
+        _incomingDialogContext = null;
+        _incomingDialogOfferId = null;
+        if (mounted) _scheduleIncomingTrade();
       });
     });
   }
@@ -1429,7 +1435,30 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(covariant MatchView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _scheduleBotTrade();
+    final oldSeat =
+        oldWidget.visibleSeat ??
+        oldWidget.viewingSeat ??
+        oldWidget.state.actingSeat;
+    if (oldWidget.state.seed != s.seed ||
+        oldWidget.state.events.length > s.events.length ||
+        oldSeat != viewerSeat) {
+      _notifiedTradeOfferIds.clear();
+    }
+    if (_incomingDialogOfferId != null &&
+        !s.offers.any(
+          (offer) =>
+              offer.id == _incomingDialogOfferId &&
+              offer.canRespond(viewerSeat),
+        )) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final dialogContext = _incomingDialogContext;
+        if (dialogContext != null &&
+            dialogContext.mounted &&
+            (ModalRoute.of(dialogContext)?.isCurrent ?? false)) {
+          Navigator.of(dialogContext).pop();
+        }
+      });
+    }
     if (!oldWidget.state.pendingDiscards.containsKey(viewerSeat) &&
         s.pendingDiscards.containsKey(viewerSeat)) {
       _discardSecondsLeft = 45;
@@ -1450,7 +1479,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           Navigator.of(context)
               .popUntil((route) => route == ModalRoute.of(context));
         }
+        if (mounted) _scheduleIncomingTrade();
       });
+    } else {
+      _scheduleIncomingTrade();
     }
     final previousSeat =
         oldWidget.visibleSeat ??
@@ -1769,24 +1801,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   },
                   icon: const Icon(Icons.edit_note_outlined),
                   label: const Text('Resume trade'),
-                ),
-              ),
-            if (_minimizedBotOfferId != null &&
-                s.offers.any(
-                  (o) =>
-                      o.id == _minimizedBotOfferId && o.canRespond(viewerSeat),
-                ))
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 152,
-                right: 10,
-                child: FilledButton.tonalIcon(
-                  key: const ValueKey('restore-bot-trade'),
-                  onPressed: () {
-                    setState(() => _minimizedBotOfferId = null);
-                    _scheduleBotTrade();
-                  },
-                  icon: const Icon(Icons.swap_horiz_rounded),
-                  label: Text('Trade offer · ${_botOfferSeconds}s'),
                 ),
               ),
             if (!mobile || _mobilePage == null)
@@ -2183,6 +2197,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
           if (s.tactical != null && !widget.observing) _backToBoardAction(),
           Expanded(child: _mobileActionHub()),
+          // Keep inventory visible while trading, without burying it below
+          // offer history in the scrolling panel.
+          if (_tab == 1 && s.tactical == null && !_tradeComposerOpen)
+            _resourceTray(),
         ],
       );
     }
@@ -2384,7 +2402,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   Widget _mobileActionHub() => ListView(
     controller: _panelScroll[_tab],
     key: const ValueKey('mobile-action-hub'),
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+    padding:
+        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height
+        ? const EdgeInsets.fromLTRB(10, 6, 10, 8)
+        : const EdgeInsets.fromLTRB(16, 12, 16, 16),
     children: [
       if (s.tactical != null && !widget.observing)
         SizedBox(
@@ -3542,8 +3563,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               ? null
               : () => setState(() => _mobilePage = null),
         ),
-        const SizedBox(height: 12),
-        if (MediaQuery.sizeOf(context).width < 900) _resourceTray(),
+        const SizedBox(height: 8),
         const Text(
           "Paper funds Innovation upgrades; cloth funds Commerce; coin funds Governance.",
           style: TextStyle(color: Color(0xffbac9cc), fontSize: 12),
@@ -4196,6 +4216,9 @@ class _TradeComposerState extends State<_TradeComposer> {
         : widget.counter == null
         ? 'Standing offer'
         : 'Counteroffer';
+    final viewport = MediaQuery.sizeOf(context);
+    final compactLandscape =
+        viewport.width < 900 && viewport.width > viewport.height;
     return Scaffold(
       appBar: MediaQuery.sizeOf(context).width < 900
           ? null
@@ -4220,9 +4243,63 @@ class _TradeComposerState extends State<_TradeComposer> {
               ],
             ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        padding: compactLandscape
+            ? const EdgeInsets.fromLTRB(10, 3, 10, 4)
+            : const EdgeInsets.fromLTRB(16, 8, 16, 12),
         children: [
-          if (MediaQuery.sizeOf(context).width < 900)
+          if (compactLandscape)
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                if (widget.onKindSelected != null)
+                  SizedBox(
+                    width: 190,
+                    child: SegmentedButton<_TradeKind>(
+                      segments: const [
+                        ButtonSegment(
+                          value: _TradeKind.player,
+                          label: Text('Player'),
+                        ),
+                        ButtonSegment(
+                          value: _TradeKind.bank,
+                          label: Text('Bank'),
+                        ),
+                      ],
+                      selected: {widget.kind},
+                      onSelectionChanged: (values) =>
+                          widget.onKindSelected!(values.first),
+                      showSelectedIcon: false,
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+                IconButton(
+                  key: const ValueKey('mobile-minimize-trade'),
+                  tooltip: 'Minimize trade',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    widget.onMinimize?.call(currentDraft);
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.close_fullscreen, size: 19),
+                ),
+                IconButton(
+                  tooltip: 'Close trade',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, size: 19),
+                ),
+              ],
+            )
+          else if (MediaQuery.sizeOf(context).width < 900)
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -4252,7 +4329,81 @@ class _TradeComposerState extends State<_TradeComposer> {
                 ),
               ],
             ),
-          if (widget.onKindSelected != null) ...[
+          if (compactLandscape && widget.onKindSelected != null)
+            SizedBox(
+              height: 40,
+              child: bank
+                  ? Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Exchanges',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        IconButton(
+                          key: const ValueKey('bank-bundles-minus'),
+                          tooltip: 'Fewer exchanges',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: bankTimes > 1
+                              ? () => setState(() => bankTimes--)
+                              : null,
+                          icon: const Icon(
+                            Icons.remove_circle_outline,
+                            size: 20,
+                          ),
+                        ),
+                        Text(
+                          '$bankTimes',
+                          key: const ValueKey('bank-bundle-count'),
+                        ),
+                        IconButton(
+                          key: const ValueKey('bank-bundles-plus'),
+                          tooltip: 'More exchanges',
+                          visualDensity: VisualDensity.compact,
+                          onPressed:
+                              bankTimes < 99 &&
+                                  available >= rate * (bankTimes + 1) &&
+                                  bankAvailable >= receipt * (bankTimes + 1)
+                              ? () => setState(() => bankTimes++)
+                              : null,
+                          icon: const Icon(Icons.add_circle_outline, size: 20),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        const Text('Offer to', style: TextStyle(fontSize: 12)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButton<int>(
+                            value: target,
+                            isExpanded: true,
+                            underline: const SizedBox.shrink(),
+                            items: [
+                              const DropdownMenuItem(
+                                value: -1,
+                                child: Text('Everyone'),
+                              ),
+                              for (var i = 0; i < s.players.length; i++)
+                                if (i != s.active)
+                                  DropdownMenuItem(
+                                    value: i,
+                                    child: Text(
+                                      'To ${s.players[i].id}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                            ],
+                            onChanged: (seat) {
+                              if (seat != null) setState(() => target = seat);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          if (widget.onKindSelected != null && !compactLandscape) ...[
             Row(
               children: [
                 Expanded(
@@ -4354,7 +4505,7 @@ class _TradeComposerState extends State<_TradeComposer> {
           ],
           if (widget.onKindSelected != null)
             SizedBox(
-              height: 20,
+              height: compactLandscape ? 17 : 20,
               child: Text(
                 bank
                     ? 'Rate $rate:$receipt · Bank stock: $bankAvailable'
@@ -4365,7 +4516,7 @@ class _TradeComposerState extends State<_TradeComposer> {
                 style: const TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
               ),
             ),
-          if (widget.onKindSelected != null)
+          if (widget.onKindSelected != null && !compactLandscape)
             Visibility(
               visible: bank,
               maintainSize: true,
@@ -4407,7 +4558,7 @@ class _TradeComposerState extends State<_TradeComposer> {
               final giveLeg = TradeLeg(
                 title: 'YOU GIVE',
                 hint: bank ? 'Pay the bank' : 'Give when accepted',
-                compact: widget.onKindSelected != null,
+                compact: widget.onKindSelected != null || compactLandscape,
                 resource: give,
                 count: required,
                 available: available,
@@ -4422,7 +4573,7 @@ class _TradeComposerState extends State<_TradeComposer> {
               final takeLeg = TradeLeg(
                 title: 'YOU RECEIVE',
                 hint: bank ? 'From the bank' : 'Request from your rival',
-                compact: widget.onKindSelected != null,
+                compact: widget.onKindSelected != null || compactLandscape,
                 resource: take,
                 holdings: bank ? s.bank : null,
                 count: bank ? receipt * bankTimes : takeCount,
@@ -4566,7 +4717,9 @@ class _TradeComposerState extends State<_TradeComposer> {
         ],
       ),
       bottomNavigationBar: SafeArea(
-        minimum: widget.onKindSelected == null
+        minimum: compactLandscape
+            ? const EdgeInsets.fromLTRB(8, 2, 8, 4)
+            : widget.onKindSelected == null
             ? const EdgeInsets.all(16)
             : const EdgeInsets.fromLTRB(12, 4, 12, 8),
         child: Center(

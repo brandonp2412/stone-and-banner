@@ -10,9 +10,7 @@ import 'package:stone_and_banner/ui/dice_roll.dart';
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
 
 void main() {
-  testWidgets('bot offer permits a counteroffer', (
-    tester,
-  ) async {
+  testWidgets('bot offer permits a counteroffer', (tester) async {
     var state = tableWithSupplies().copyWith(active: 1);
     final players = state.players.toList();
     players[1] = players[1].copyWith(
@@ -37,14 +35,9 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byKey(const ValueKey('bot-trade-dialog')), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 160));
-    expect(find.byType(SlideTransition), findsWidgets);
+    expect(find.byKey(const ValueKey('incoming-trade-dialog')), findsOneWidget);
     await tester.pumpAndSettle();
-    final create = tester.widget<FilledButton>(
-      find.byKey(const ValueKey('create-player-offer')),
-    );
-    expect(create.onPressed, isNull);
+    expect(find.byKey(const ValueKey('create-player-offer')), findsNothing);
     final offer = state.offers.single;
     final counter = tester.widget<OutlinedButton>(
       find.byKey(ValueKey('counter-offer-${offer.id}')),
@@ -56,7 +49,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('blocking dialog does not pause the local turn clock', (tester) async {
+  testWidgets('blocking dialog does not pause the local turn clock', (
+    tester,
+  ) async {
     var state = tableWithSupplies();
     final events = <MatchEvent>[];
     await tester.pumpWidget(

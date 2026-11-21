@@ -236,6 +236,14 @@ class _LanRoomPageState extends State<LanRoomPage> {
         !client.pending &&
         state != null &&
         seat == activeSeat;
+    final canReplyToTrade =
+        client.connected &&
+        !client.pending &&
+        state != null &&
+        seat != null &&
+        state.offers.any(
+          (offer) => offer.proposer == state.active && offer.canRespond(seat),
+        );
     final wait = !client.connected
         ? 'Reconnecting to LAN host…'
         : client.pending
@@ -275,6 +283,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
                     onlineView: client.view,
                     viewingSeat: seat,
                     observing: !canAct,
+                    tradeReplyAllowed: canReplyToTrade,
                     waitingMessage: canAct ? null : wait,
                     onEvent: client.dispatch,
                     onLeaveRoom: () => Navigator.pop(context),

@@ -871,8 +871,6 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
                           tradeReplyAllowed: canReplyToTrade,
                           waitingMessage: canPlayTurn
                               ? null
-                              : canReplyToTrade
-                              ? 'Trade offer awaiting your response'
                               : room.connected
                               ? 'Waiting for ${game.players[active!].id}…'
                               : 'Direct connection lost',

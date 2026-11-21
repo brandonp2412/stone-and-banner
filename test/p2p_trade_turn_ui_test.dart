@@ -48,8 +48,13 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('incoming-trade-dialog')), findsOneWidget);
     expect(find.text('Resume computer'), findsNothing);
     expect(find.text('End turn').hitTestable(), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('dismiss-incoming-trade')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('incoming-trade-dialog')), findsNothing);
     await tester.tap(find.text('Trade').first);
     await tester.pump();
     final offerId = state.offers.single.id;
@@ -93,7 +98,12 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('incoming-trade-dialog')), findsOneWidget);
     expect(find.text('End turn'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('dismiss-incoming-trade')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('restore-bot-trade')), findsNothing);
     await tester.tap(find.text('Actions').first);
     await tester.pump();
     await tester.tap(find.text('Trade').first);

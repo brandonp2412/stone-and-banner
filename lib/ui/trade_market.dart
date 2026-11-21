@@ -19,6 +19,7 @@ class TradeMarket extends StatelessWidget {
     this.allowCounters = true,
     this.privateOpponentHands = false,
     this.computerSeats = const <int>{},
+    this.onlyIncomingOfferId,
   });
 
   final MatchState state;
@@ -34,24 +35,32 @@ class TradeMarket extends StatelessWidget {
   final int viewerSeat;
   final VoidCallback? onReturnToBoard;
 
+  /// In the notification dialog, show just this offer and its response actions.
+  /// The Trade tab still shows all pending offers.
+  final int? onlyIncomingOfferId;
+
   static const ink = Color(0xff172b33);
   static const border = Color(0xff37515a);
   static const gold = Color(0xffe5c183);
 
   @override
   Widget build(BuildContext context) {
-    final ownTurn =
-        allowOffers &&
+    final isCurrentPlayerTurn =
         state.tactical == null &&
         state.phase == MatchPhase.actions &&
         state.active == viewerSeat;
+    final ownTurn = allowOffers && isCurrentPlayerTurn;
     final hasOutgoing = state.offers.any((o) => o.proposer == viewerSeat);
     final incoming = state.offers
-        .where((o) => o.canRespond(viewerSeat))
+        .where(
+          (o) =>
+              o.canRespond(viewerSeat) &&
+              (onlyIncomingOfferId == null || o.id == onlyIncomingOfferId),
+        )
         .toList();
-    final outgoing = state.offers
-        .where((o) => o.proposer == viewerSeat)
-        .toList();
+    final outgoing = onlyIncomingOfferId == null
+        ? state.offers.where((o) => o.proposer == viewerSeat).toList()
+        : <TradeProposal>[];
     final feedback = latestTradeFeedback(state, viewer: viewerSeat);
     final lastVisibleResponse = state.events.reversed
         .whereType<RespondTrade>()
@@ -62,55 +71,62 @@ class TradeMarket extends StatelessWidget {
         )
         .firstOrNull;
     final acceptedTrade = lastVisibleResponse?.accept == true;
+    final compactLandscape =
+        MediaQuery.sizeOf(context).width < 900 &&
+        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Primary actions must stay on the first visible row even in
         // 320px-high landscape and with large accessibility text.
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton(
-                key: const ValueKey('create-player-offer'),
-                onPressed: ownTurn && !hasOutgoing ? onOffer : null,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(44),
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  backgroundColor: gold,
-                  foregroundColor: const Color(0xff1c2830),
-                ),
-                child: const Text(
-                  'Player trade',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: ownTurn ? onBank : null,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(44),
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                ),
-                child: const Text(
-                  'Bank trade',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        if (onlyIncomingOfferId == null)
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  key: const ValueKey('create-player-offer'),
+                  onPressed: ownTurn && !hasOutgoing ? onOffer : null,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(44),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    backgroundColor: gold,
+                    foregroundColor: const Color(0xff1c2830),
+                  ),
+                  child: const Text(
+                    'Player trade',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-        if (ownTurn && incoming.isEmpty && outgoing.isEmpty) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: ownTurn ? onBank : null,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(44),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                  ),
+                  child: const Text(
+                    'Bank trade',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        if (!compactLandscape &&
+            ownTurn &&
+            incoming.isEmpty &&
+            outgoing.isEmpty) ...[
           const SizedBox(height: 8),
           const Text(
             'Bots consider offers immediately. Players can accept or counter offers.',
             style: TextStyle(color: Color(0xffacc4c9), fontSize: 12),
           ),
         ],
-        if (hasOutgoing)
+        if (hasOutgoing && onlyIncomingOfferId == null)
           Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
@@ -125,7 +141,7 @@ class TradeMarket extends StatelessWidget {
               style: TextStyle(color: gold, fontSize: 12),
             ),
           ),
-        if (!ownTurn && incoming.isEmpty)
+        if (onlyIncomingOfferId == null && !ownTurn && incoming.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Row(
@@ -161,7 +177,7 @@ class TradeMarket extends StatelessWidget {
               enabled:
                   state.phase == MatchPhase.actions &&
                   state.tactical == null &&
-                  (ownTurn || offer.proposer == state.active),
+                  (isCurrentPlayerTurn || offer.proposer == state.active),
             ),
         ],
         if (outgoing.isNotEmpty) ...[
@@ -180,11 +196,11 @@ class TradeMarket extends StatelessWidget {
           for (final offer in outgoing)
             _offerCard(context, offer, incoming: false, enabled: ownTurn),
         ],
-        if (feedback != null) ...[
-          const SizedBox(height: 14),
+        if (onlyIncomingOfferId == null && feedback != null) ...[
+          SizedBox(height: compactLandscape ? 7 : 14),
           Container(
             key: const ValueKey('trade-result'),
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(compactLandscape ? 8 : 12),
             decoration: BoxDecoration(
               color: acceptedTrade ? const Color(0xff153e36) : ink,
               borderRadius: BorderRadius.circular(14),
@@ -216,32 +232,44 @@ class TradeMarket extends StatelessWidget {
             ),
           ),
         ],
-        if (incoming.isEmpty && outgoing.isEmpty) ...[
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: ink,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: border),
+        if (onlyIncomingOfferId == null &&
+            incoming.isEmpty &&
+            outgoing.isEmpty) ...[
+          SizedBox(height: compactLandscape ? 6 : 16),
+          if (compactLandscape)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                'No active offers. Choose Player trade or Bank trade above.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xffadc4c6), fontSize: 12),
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: ink,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: border),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.local_post_office_outlined, color: gold, size: 26),
+                  SizedBox(height: 6),
+                  Text(
+                    'No offers on the table',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  SizedBox(height: 3),
+                  Text(
+                    'Offer a trade. Goods change hands only if it is accepted.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xffadc4c6), fontSize: 12),
+                  ),
+                ],
+              ),
             ),
-            child: const Column(
-              children: [
-                Icon(Icons.local_post_office_outlined, color: gold, size: 26),
-                SizedBox(height: 6),
-                Text(
-                  'No offers on the table',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                SizedBox(height: 3),
-                Text(
-                  'Offer a trade. Goods change hands only if it is accepted.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xffadc4c6), fontSize: 12),
-                ),
-              ],
-            ),
-          ),
         ],
       ],
     );
