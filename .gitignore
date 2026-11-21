@@ -53,3 +53,6 @@ app.*.map.json
 
 # My todo files
 TODO.md
+
+# Local Cloudflare Workers test databases
+/.wrangler/

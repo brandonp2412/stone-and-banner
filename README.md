@@ -13,48 +13,38 @@ No project SDK, wrapper, or graphics environment overrides are required.
 
 ## Web
 
-### Server-free WebRTC multiplayer (browser)
+### Peer-to-peer WebRTC multiplayer (web, Android, Linux)
 
 Open [Stone & Banner](https://brandonp2412.github.io/stone-and-banner/) and
-choose **P2P multiplayer**. The host keeps their browser tab open, generates
-one **invite link per guest**, and sends the links via any chat. Each guest
-opens their invitation, chooses a unique name, then sends back a **response
-link**. The host must **keep the original host tab open**: clicking a response
-link in the **same browser** can apply it automatically (in a new tab, or a
-fragment-only navigation that preserves the original document). The response
-page confirms whether the original host actually received it. If the
-response opens in a separate in-app browser/profile, use **Copy response
-link** and paste it into the host tab's **Response link from friend** field.
-Never replace or reload the host document: WebRTC connections are in-memory.
+choose **P2P multiplayer**. Host a room, then share the **same invitation
+link** with each guest. They open it, enter a name, and tap **Join game**.
+A small Cloudflare Durable Object exchanges WebRTC offers/answers automatically.
+No response links, copied SDP, accounts, or persistent server-side games are
+required. The host must keep the game running; refreshing closes the session.
 
-Both directions are necessary for *manual* WebRTC signalling: an invitation
-carries an SDP offer, and the response returns the SDP answer. One-link joins
-would require an external signalling channel; public STUN only assists NAT
-discovery and cannot exchange offers and answers.
+When free signalling is unavailable, the lobby exposes the old manual
+offer/answer pairing workflow. Manual invitations are still per-player;
+guests must return their response links to the host.
 
-When all 3–4 players are connected, the host starts the match. The host can also tap **Add AI
-opponent** to reserve any unfilled seats for computer players, mixing remote
-friends and bots in the same 3–4 player game. AI seats use the same
-HeuristicAi/AiTurnCoordinator as the local game and run entirely in the host
-browser; no bot service is required.
+Rooms support 3–4 seats with any combination of remote people and bots.
+Computer players run the same local AI on the host, not in the Worker.
+WebRTC DataChannels carry the encrypted multiplayer messages directly
+between devices where NAT allows. On restrictive NATs, a separately provisioned
+free capped TURN relay may forward encrypted WebRTC traffic. The existing
+Cloudflare /ice Worker supplies those TURN credentials, while the separate
+stone-banner-signal Durable Object only exchanges SDP during setup.
+SDP can expose connection metadata to the signalling operator, but no
+game state, gameplay moves or matches are stored by the signalling Worker.
 
-WebRTC DataChannels carry **only direct encrypted peer-to-peer game traffic**.
-No signalling server, TURN relay, accounts, or remote match storage are used.
-Public STUN servers operated by Google (stun.l.google.com:19302) and
-Cloudflare (stun.cloudflare.com:3478) help the browsers discover publicly
-reachable UDP endpoints and attempt NAT hole punching. STUN operators see
-connection metadata including your public IP; game moves are **never** sent
-to them. The host browser still performs game-state authority and transmits
-a filtered view to each player. Do not close, refresh, or navigate away from
-the host tab: the P2P session cannot be restored afterwards.
+To deploy signalling independently of the existing TURN Worker:
+    npx wrangler deploy --config wrangler.signalling.jsonc
 
-**WAN limitation:** STUN improves connectivity across home routers, but
-carrier-grade NAT, symmetric NAT, and restrictive firewalls can still make
-direct connections impossible. There is deliberately no TURN relay fallback
-or other hosted multiplayer service. If a connection attempt fails, the host
-can choose **Replace expired or unused invitations** and share new links,
-or participants can try a different network or direct public IPv6. Local-LAN
-play continues to work if STUN is unavailable.
+Deployment requires Cloudflare authentication and a Workers Free allocation.
+For local testing, set STONE_SIGNAL_ENABLED=true and override STONE_SIGNAL_URL
+with the local WebSocket URL. Public release builds now default to
+STONE_SIGNAL_ENABLED=true. Debug builds default to false unless overridden. The default endpoint is
+wss://stone-banner-signal.brandonp2412.workers.dev/signal/.
+The old manual flow remains available when signalling is offline.
 
 Play online: https://brandonp2412.github.io/stone-and-banner/
 

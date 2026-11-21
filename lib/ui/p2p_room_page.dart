@@ -58,7 +58,9 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     if (incomingLink != null) {
       try {
         incoming = P2pLinks.parse(incomingLink);
-        if (incoming!['type'] == 'offer') name.text = 'Guest';
+        if (incoming!['type'] == 'offer' || incoming!['type'] == 'room') {
+          name.text = 'Guest';
+        }
         if (incoming!['type'] == 'answer') {
           receivedResponseLink = incomingLink;
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -74,7 +76,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   void _useInviteLink() {
     try {
       final value = P2pLinks.parse(inviteField.text);
-      if (value['type'] != 'offer') {
+      if (value['type'] != 'offer' && value['type'] != 'room') {
         throw const FormatException('Paste a host invitation, not a response.');
       }
       setState(() {
@@ -358,11 +360,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            isCompactLandscape(context)
-                ? 'Send an invite, then apply your friend’s response link.'
-                : 'Host directly from this device. No game server or account required. '
-                      'To connect, your friend opens your invite and sends the response '
-                      'back to you. Apply their response in this host lobby to finish pairing.',
+            incoming?['type'] == 'room'
+                ? 'You have been invited. Enter your name and join.'
+                : 'Host a game and share one invite with everyone. '
+                      'The connection is negotiated automatically.',
           ),
           if (kIsWeb) ...[
             const SizedBox(height: 8),
@@ -398,31 +399,44 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
               border: OutlineInputBorder(),
             ),
           ),
-          if (incoming?['type'] == 'offer') ...[
-            const Text(
-              'Invitation received. Join to generate a response link.',
+          if (incoming?['type'] == 'offer' || incoming?['type'] == 'room') ...[
+            Text(
+              incoming?['type'] == 'room'
+                  ? 'Invitation received. Join to connect automatically.'
+                  : 'Invitation received. Join to generate a response link.',
             ),
             const SizedBox(height: 10),
             FilledButton.icon(
-              onPressed: room.preparing
+              onPressed: room.preparing || room.joiningOneLink
                   ? null
                   : () async {
                       try {
-                        await room.join(name.text, incoming!);
+                        if (incoming!['type'] == 'room') {
+                          await room.joinByRoomLink(
+                            name.text,
+                            incoming!['key'] as String,
+                          );
+                        } else {
+                          await room.join(name.text, incoming!);
+                        }
                       } on Object catch (e) {
                         setState(() => parseError = '$e');
                       }
                     },
               icon: const Icon(Icons.link),
               label: Text(
-                room.preparing
+                room.joiningOneLink
+                    ? 'Joining automatically…'
+                    : room.preparing
                     ? 'Collecting candidates…'
+                    : incoming?['type'] == 'room'
+                    ? 'Join game'
                     : 'Join and create response',
               ),
             ),
           ] else ...[
             const Text(
-              'Create a room and send a separate invitation to each guest.',
+              'Create a room and share one invite link with your friends.',
             ),
             const SizedBox(height: 9),
             SegmentedButton<int>(
@@ -514,54 +528,11 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     _copy('response link', receivedResponseLink ?? ''),
   ]);
 
-  Widget _lobby() => _pane([
-    Text(
-      'P2P room ${room.roomId ?? ''}',
-      style: Theme.of(context).textTheme.headlineSmall,
-    ),
-    const SizedBox(height: 7),
-    Text(
-      room.isHost
-          ? 'You are the authoritative host. Keep this session open when your '
-                'friend replies; never replace it with their link.'
-          : room.connected
-          ? 'Connected to host · Seat ${room.seat! + 1}'
-          : 'Waiting for the host to apply your response link…',
-    ),
-    const SizedBox(height: 10),
-    if (room.isHost) ...[
-      Row(
-        children: [
-          const Icon(Icons.smart_toy_outlined, size: 21),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Computer opponents: ${room.botCount}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          IconButton(
-            tooltip: 'Remove AI opponent',
-            onPressed: room.botCount > 0 && !room.started
-                ? () => room.setBotCount(room.botCount - 1)
-                : null,
-            icon: const Icon(Icons.remove_circle_outline),
-          ),
-          IconButton(
-            tooltip: 'Add AI opponent',
-            onPressed: room.botCount < room.availableBotSeats && !room.started
-                ? () => room.setBotCount(room.botCount + 1)
-                : null,
-            icon: const Icon(Icons.add_circle_outline),
-          ),
-        ],
-      ),
-      Text(
-        'Fill any empty seats with the same AI as solo play. '
-        'Friends always keep their own seats.',
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      const SizedBox(height: 12),
+  /// The old offer/response workflow remains available when signalling is
+  /// offline. Hide it during normal one-link hosting.
+  Widget _manualPairing() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
       FilledButton.tonalIcon(
         onPressed: room.preparing || room.started
             ? null
@@ -627,6 +598,75 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
               },
         child: Text(applying ? 'Connecting…' : 'Apply response link'),
       ),
+    ],
+  );
+
+  Widget _lobby() => _pane([
+    Text(
+      'P2P room ${room.roomId ?? ''}',
+      style: Theme.of(context).textTheme.headlineSmall,
+    ),
+    const SizedBox(height: 7),
+    Text(
+      room.isHost
+          ? 'You are hosting. Share one invitation with your friends.'
+          : room.connected
+          ? 'Connected to host · Seat ${room.seat! + 1}'
+          : room.oneLinkGuest
+          ? 'Connecting to the host automatically…'
+          : 'Waiting for the host to apply your response link…',
+    ),
+    const SizedBox(height: 10),
+    if (room.isHost) ...[
+      Row(
+        children: [
+          const Icon(Icons.smart_toy_outlined, size: 21),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Computer opponents: ${room.botCount}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Remove AI opponent',
+            onPressed: room.botCount > 0 && !room.started
+                ? () => room.setBotCount(room.botCount - 1)
+                : null,
+            icon: const Icon(Icons.remove_circle_outline),
+          ),
+          IconButton(
+            tooltip: 'Add AI opponent',
+            onPressed: room.botCount < room.availableBotSeats && !room.started
+                ? () => room.setBotCount(room.botCount + 1)
+                : null,
+            icon: const Icon(Icons.add_circle_outline),
+          ),
+        ],
+      ),
+      Text(
+        'Fill any empty seats with the same AI as solo play. '
+        'Friends always keep their own seats.',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      const SizedBox(height: 12),
+      if (room.signallingPreparing)
+        const Text('Preparing your one-link invitation…'),
+      if (room.roomLink case final String link) ...[
+        const Text('Share this link with everyone joining your game:'),
+        const SizedBox(height: 8),
+        _copy('room invitation', link),
+      ],
+      if (room.signallingError case final String error)
+        Text(error, style: Theme.of(context).textTheme.bodySmall),
+      if (!room.signallingPreparing && room.roomLink == null)
+        _manualPairing()
+      else
+        ExpansionTile(
+          title: const Text('Advanced: manual pairing fallback'),
+          tilePadding: EdgeInsets.zero,
+          children: [_manualPairing()],
+        ),
     ] else if (room.answerLink case final String link) ...[
       _copy('response link', link),
       const SizedBox(height: 7),

@@ -66,7 +66,7 @@
       const encoded = location.hash.substring("#p2p=".length);
       const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
       type = JSON.parse(atob(base64))?.type;
-      if (type !== "offer" && type !== "answer") return;
+      if (type !== "offer" && type !== "answer" && type !== "room") return;
     } catch (_) {
       return;
     }
@@ -79,7 +79,7 @@
     }
     // A host must never be replaced with a guest invitation.
     history.replaceState(history.state, "", location.pathname + location.search);
-    if (type === "offer") return;
+    if (type === "offer" || type === "room") return;
     const receiptId = crypto.randomUUID();
     let remaining = 5;
     const timer = setInterval(() => {

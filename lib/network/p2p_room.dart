@@ -9,6 +9,7 @@ import '../engine/heuristic_ai.dart';
 
 import '../engine/match.dart';
 import 'p2p_links.dart';
+import 'p2p_signalling.dart';
 import 'p2p_transport.dart';
 import 'room_host.dart';
 import 'room_protocol.dart';
@@ -70,6 +71,12 @@ class P2pRoom extends ChangeNotifier {
   final Set<String> _invited = {};
   final Set<String> _answered = {};
   final Map<String, Future<void>> _acceptingAnswers = {};
+  P2pSignalling? _signalling;
+  String? roomLink, signallingError;
+  bool signallingPreparing = false;
+  bool joiningOneLink = false;
+  bool oneLinkGuest = false;
+
   final Set<String> _open = {};
   Timer? _clock;
   String? _clockKey;
@@ -158,7 +165,185 @@ class P2pRoom extends ChangeNotifier {
     roomId = _room!.id;
     seat = 0;
     _refreshHost();
+    // The normal path uses one reusable room link. If the free Worker is
+    // unreachable, existing manual SDP offers remain available as fallback.
+    if (P2pSignalling.enabled) unawaited(_activateOneLink());
     notifyListeners();
+  }
+
+  Future<void> _activateOneLink() async {
+    if (!isHost || _disposed || roomId == null) return;
+    signallingPreparing = true;
+    signallingError = null;
+    notifyListeners();
+    final key = _randomId(16);
+    try {
+      final client = await P2pSignalling.connect(
+        key,
+        host: true,
+        onMessage: (message) {
+          if (_disposed) return;
+          final op = message['op'];
+          final peer = message['peer'];
+          if (peer is! String || peer.length > 64) return;
+          if (op == 'join') {
+            unawaited(_offerSignalledPeer(peer));
+          } else if (op == 'answer' && message['sdp'] is String) {
+            unawaited(_applySignalledAnswer(peer, message['sdp'] as String));
+          } else if (op == 'left') {
+            if (!_peerSeats.containsKey(peer)) {
+              _rtc.close(peer);
+              _invited.remove(peer);
+              _answered.remove(peer);
+              notifyListeners();
+            }
+          }
+        },
+        onError: (error) {
+          if (_disposed || !isHost) return;
+          signallingError = error;
+          roomLink = null;
+          notifyListeners();
+        },
+      );
+      if (_disposed) {
+        await client.dispose();
+        return;
+      }
+      _signalling = client;
+      roomLink = P2pLinks.roomLink(
+        kIsWeb
+            ? Uri.base
+            : Uri.parse('https://brandonp2412.github.io/stone-and-banner/'),
+        key,
+      );
+      signallingError = null;
+    } on Object catch (error) {
+      signallingError = 'One-link invites unavailable: $error';
+    } finally {
+      signallingPreparing = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<void> _offerSignalledPeer(String peer) async {
+    final room = _room;
+    final signalling = _signalling;
+    if (_disposed || room == null || signalling == null) return;
+    if (started ||
+        _invited.contains(peer) ||
+        _invited.length + botCount + 1 >= capacity) {
+      signalling.send({'op': 'reject', 'peer': peer});
+      return;
+    }
+    _invited.add(peer); // Reserve before asynchronously gathering candidates.
+    notifyListeners();
+    try {
+      final sdp = await _rtc.offer(peer);
+      if (_disposed || !_invited.contains(peer)) {
+        _rtc.close(peer);
+        return;
+      }
+      _recordDiagnostic('host signalled offer generated');
+      signalling.send({
+        'op': 'offer',
+        'peer': peer,
+        'room': room.id,
+        'sdp': sdp,
+      });
+    } on Object catch (error) {
+      _rtc.close(peer);
+      _invited.remove(peer);
+      signalling.send({'op': 'reject', 'peer': peer});
+      _recordDiagnostic('signalled offer failed: ${error.runtimeType}');
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<void> _applySignalledAnswer(String peer, String sdp) async {
+    if (!isHost || roomId == null || !_invited.contains(peer)) return;
+    try {
+      await acceptAnswer(
+        P2pLinks.link(
+          Uri.parse('https://brandonp2412.github.io/stone-and-banner/'),
+          {'type': 'answer', 'room': roomId, 'peer': peer, 'sdp': sdp},
+        ),
+      );
+    } on Object catch (error) {
+      _recordDiagnostic('signalled answer rejected: ${error.runtimeType}');
+      if (!_disposed) {
+        message = 'Could not connect invited guest: $error';
+        notifyListeners();
+      }
+    }
+  }
+
+  /// One shared link for all guests. Offer and answer never leave their apps.
+  Future<void> joinByRoomLink(String name, String key) async {
+    if (_room != null || guestPeer != null || joiningOneLink) {
+      throw StateError('Already joining or in a room.');
+    }
+    joiningOneLink = true;
+    preparing = true;
+    message = null;
+    notifyListeners();
+    final offerReady = Completer<Map<String, dynamic>>();
+    P2pSignalling? client;
+    try {
+      client = await P2pSignalling.connect(
+        key,
+        host: false,
+        onMessage: (data) {
+          if (offerReady.isCompleted) return;
+          if (data['op'] == 'offer' &&
+              data['peer'] is String &&
+              data['room'] is String &&
+              data['sdp'] is String) {
+            offerReady.complete(data);
+          } else if (data['op'] == 'error') {
+            offerReady.completeError(
+              StateError(
+                data['message'] as String? ?? 'Host cannot accept this guest.',
+              ),
+            );
+          }
+        },
+        onError: (error) {
+          if (!offerReady.isCompleted) {
+            offerReady.completeError(StateError(error));
+          } else if (!_disposed && !connected) {
+            message = error;
+            notifyListeners();
+          }
+        },
+      );
+      _signalling = client;
+      final offer = await offerReady.future.timeout(
+        const Duration(seconds: 40),
+      );
+      await join(name, {
+        'type': 'offer',
+        'room': offer['room'],
+        'peer': offer['peer'],
+        'sdp': offer['sdp'],
+      });
+      if (guestPeer == null || answerLink == null) {
+        throw StateError(message ?? 'Could not answer host invitation.');
+      }
+      final response = P2pLinks.parse(answerLink!);
+      client.send({'op': 'answer', 'sdp': response['sdp']});
+      oneLinkGuest = true;
+      answerLink = null; // One-link guests never need a manual response screen.
+      _recordDiagnostic('guest answer sent through signalling Worker');
+    } on Object {
+      await client?.dispose();
+      if (identical(_signalling, client)) _signalling = null;
+      rethrow;
+    } finally {
+      joiningOneLink = false;
+      preparing = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   int get pendingInvites =>
@@ -666,6 +851,7 @@ class P2pRoom extends ChangeNotifier {
     _ai.pause();
     _clock?.cancel();
     if (isHost) P2pTransport.setHosting(false);
+    unawaited(_signalling?.dispose());
     _rtc.dispose();
     super.dispose();
   }

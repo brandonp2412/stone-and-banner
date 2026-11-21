@@ -2,9 +2,13 @@ import 'dart:convert';
 
 /// ICE descriptions travel in URL fragments, not HTTP requests to Pages.
 abstract final class P2pLinks {
-  static String link(Uri origin, Map<String, dynamic> message) {
+  static String link(
+    Uri origin,
+    Map<String, dynamic> message, {
+    int version = 1,
+  }) {
     final encoded = base64Url
-        .encode(utf8.encode(jsonEncode({'v': 1, ...message})))
+        .encode(utf8.encode(jsonEncode({'v': version, ...message})))
         .replaceAll('=', '');
     // Keep the same document URL so that opening a response in the original
     // host tab changes only the fragment, never reloading the live room.
@@ -17,6 +21,15 @@ abstract final class P2pLinks {
       query: origin.query.isEmpty ? null : origin.query,
       fragment: 'p2p=$encoded',
     ).toString();
+  }
+
+  /// Reusable one-tap room invitation. SDP is exchanged automatically by the
+  /// temporary signalling Worker, never embedded in the shared link.
+  static String roomLink(Uri origin, String key) {
+    if (!RegExp(r'^[a-f0-9]{32}$').hasMatch(key)) {
+      throw const FormatException('Invalid room key.');
+    }
+    return link(origin, {'type': 'room', 'key': key}, version: 2);
   }
 
   static Map<String, dynamic> parse(String input) {
@@ -47,6 +60,13 @@ abstract final class P2pLinks {
     final payload = jsonDecode(
       utf8.decode(base64Url.decode(base64Url.normalize(raw))),
     );
+    if (payload is Map<String, dynamic> &&
+        payload['v'] == 2 &&
+        payload['type'] == 'room' &&
+        payload['key'] is String &&
+        RegExp(r'^[a-f0-9]{32}$').hasMatch(payload['key'] as String)) {
+      return payload;
+    }
     if (payload is! Map<String, dynamic> ||
         payload['v'] != 1 ||
         !['offer', 'answer'].contains(payload['type']) ||

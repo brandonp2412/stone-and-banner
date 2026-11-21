@@ -1,0 +1,12 @@
+{
+  "name": "stone-banner-signal",
+  "main": "tool/stone_banner_signal_worker.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "SIGNAL_ROOMS", "class_name": "SignalRoom" }]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["SignalRoom"] }
+  ]
+}
