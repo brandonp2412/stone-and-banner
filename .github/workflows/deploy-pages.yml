@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -67,6 +68,25 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: build/web
+      - name: Confirm unique indexed Pages artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 30); do
+            count=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '[.artifacts[] | select(.name=="github-pages")] | length')
+            if [ "$count" -eq 1 ]; then
+              echo "Pages artifact indexed and unique"
+              sleep 3
+              exit 0
+            fi
+            if [ "$count" -gt 1 ]; then
+              echo "::error::Duplicate Pages artifacts in one run"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::Pages artifact was not indexed"
+          exit 1
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
