@@ -78,10 +78,10 @@ deployed publicly, and no matchmaking or internet relay exists.
 ## Verification
 
 \`\`\`sh
-buildq --wait -- flutter analyze
-buildq --wait -- flutter test
-buildq --wait -- dart run tool/lan_smoke.dart
-buildq --wait -- flutter build apk --release
+pueue add --escape -- flutter analyze
+pueue add --escape -- flutter test
+pueue add --escape -- dart run tool/lan_smoke.dart
+pueue add --escape -- flutter build apk --release
 \`\`\`
 
 \`test/stage6_room_test.dart\` covers per-seat secrecy, illegal/wrong-seat
