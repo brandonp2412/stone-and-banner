@@ -10,7 +10,10 @@ import 'match_screen.dart';
 import 'lan_room_page.dart';
 
 class P2pRoomPage extends StatefulWidget {
-  const P2pRoomPage({super.key});
+  const P2pRoomPage({super.key, this.onExitToHome});
+
+  final VoidCallback? onExitToHome;
+
   @override
   State<P2pRoomPage> createState() => _P2pRoomPageState();
 }
@@ -26,6 +29,8 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   bool applying = false;
   bool? responseDelivered;
   bool forwardingResponse = false;
+  bool _leaveApproved = false;
+  bool _leavePromptOpen = false;
   String? receivedResponseLink;
 
   Future<void> _deliverResponse(String link) async {
@@ -81,6 +86,55 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
 
   void _refresh() {
     if (mounted) setState(() {});
+  }
+
+  void _exitRoom() {
+    if (widget.onExitToHome case final leaveToHome?) {
+      leaveToHome();
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
+  Future<void> _requestLeave() async {
+    if (_leavePromptOpen || _leaveApproved) return;
+    if (room.roomId == null) {
+      _exitRoom();
+      return;
+    }
+    _leavePromptOpen = true;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Leave multiplayer?'),
+        content: const Text(
+          'Leaving closes this peer-to-peer connection. If you are hosting, '
+          'everyone will lose their connection to the match.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Stay in room'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Leave room'),
+          ),
+        ],
+      ),
+    );
+    _leavePromptOpen = false;
+    if (!mounted || leave != true) return;
+    if (widget.onExitToHome != null) {
+      _exitRoom();
+      return;
+    }
+    setState(() => _leaveApproved = true);
+    // PopScope reads canPop from the next frame. Never tear down an active
+    // host room because the IME or Android back navigation issued a pop.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _exitRoom();
+    });
   }
 
   @override
@@ -151,7 +205,21 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   Widget _pane(List<Widget> children) => Center(
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 590),
-      child: ListView(padding: const EdgeInsets.all(20), children: children),
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          if (MediaQuery.sizeOf(context).width < 900)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _requestLeave,
+                icon: const Icon(Icons.arrow_back, size: 18),
+                label: const Text('Back'),
+              ),
+            ),
+          ...children,
+        ],
+      ),
     ),
   );
 
@@ -279,7 +347,11 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
       const ListTile(
         leading: CircularProgressIndicator(),
         title: Text('Sending response to your original host tab…'),
-        subtitle: Text('Keep the host tab open. This page is not a lobby.'),
+        subtitle: Text(
+          'Switch to the original host tab now. Both tabs must '
+          'be in the same browser; otherwise copy the link below and '
+          'paste it into the host lobby.',
+        ),
       )
     else if (responseDelivered == true)
       const ListTile(
@@ -529,66 +601,74 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     final active = game?.actingSeat;
     final canAct =
         room.connected && !room.pending && game != null && room.seat == active;
-    return Scaffold(
-      appBar: game == null
-          ? AppBar(title: Text(kIsWeb ? 'Multiplayer' : 'P2P multiplayer'))
-          : null,
-      body: Column(
-        children: [
-          if (parseError != null || room.message != null)
-            MaterialBanner(
-              content: Text(parseError ?? room.message!),
-              actions: [
-                TextButton.icon(
-                  onPressed: _copyingDiagnostics ? null : _copyDiagnostics,
-                  icon: const Icon(Icons.copy),
-                  label: const Text('Copy diagnostics'),
-                ),
-                TextButton(
-                  onPressed: () => setState(() {
-                    parseError = null;
-                    room.message = null;
-                  }),
-                  child: const Text('Dismiss'),
-                ),
-              ],
-            ),
-          Expanded(
-            child: game == null
-                ? room.roomId == null
-                      ? _setup()
-                      : _lobby()
-                : Stack(
-                    children: [
-                      MatchView(
-                        state: game,
-                        online: true,
-                        onlineView: room.view,
-                        viewingSeat: room.seat,
-                        computerSeats: room.botSeats,
-                        automationError: room.aiError,
-                        onResumeAutomation: room.isHost ? room.retryBots : null,
-                        observing: !canAct,
-                        waitingMessage: canAct
-                            ? null
-                            : room.connected
-                            ? 'Waiting for ${game.players[active!].id}…'
-                            : 'Direct connection lost',
-                        onEvent: room.dispatch,
-                      ),
-                      Positioned(
-                        top: MediaQuery.paddingOf(context).top + 3,
-                        right: MediaQuery.paddingOf(context).right + 4,
-                        child: IconButton(
-                          tooltip: 'Leave P2P match',
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close, size: 20),
-                        ),
-                      ),
-                    ],
+    return PopScope(
+      canPop: _leaveApproved || room.roomId == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_leaveApproved) _requestLeave();
+      },
+      child: Scaffold(
+        appBar: game == null && MediaQuery.sizeOf(context).width >= 900
+            ? AppBar(title: Text(kIsWeb ? 'Multiplayer' : 'P2P multiplayer'))
+            : null,
+        body: Column(
+          children: [
+            if (parseError != null || room.message != null)
+              MaterialBanner(
+                content: Text(parseError ?? room.message!),
+                actions: [
+                  TextButton.icon(
+                    onPressed: _copyingDiagnostics ? null : _copyDiagnostics,
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Copy diagnostics'),
                   ),
-          ),
-        ],
+                  TextButton(
+                    onPressed: () => setState(() {
+                      parseError = null;
+                      room.message = null;
+                    }),
+                    child: const Text('Dismiss'),
+                  ),
+                ],
+              ),
+            Expanded(
+              child: game == null
+                  ? room.roomId == null
+                        ? _setup()
+                        : _lobby()
+                  : Stack(
+                      children: [
+                        MatchView(
+                          state: game,
+                          online: true,
+                          onlineView: room.view,
+                          viewingSeat: room.seat,
+                          computerSeats: room.botSeats,
+                          automationError: room.aiError,
+                          onResumeAutomation: room.isHost
+                              ? room.retryBots
+                              : null,
+                          observing: !canAct,
+                          waitingMessage: canAct
+                              ? null
+                              : room.connected
+                              ? 'Waiting for ${game.players[active!].id}…'
+                              : 'Direct connection lost',
+                          onEvent: room.dispatch,
+                        ),
+                        Positioned(
+                          top: MediaQuery.paddingOf(context).top + 3,
+                          right: MediaQuery.paddingOf(context).right + 4,
+                          child: IconButton(
+                            tooltip: 'Leave P2P match',
+                            onPressed: _requestLeave,
+                            icon: const Icon(Icons.close, size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

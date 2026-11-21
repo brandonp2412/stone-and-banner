@@ -95,6 +95,9 @@ class P2pTransport {
     void report(RTCDataChannelState state) {
       if (state == RTCDataChannelState.RTCDataChannelOpen && !reportedOpen) {
         reportedOpen = true;
+        peer.everConnected = true;
+        peer.disconnectTimer?.cancel();
+        peer.disconnectTimer = null;
         peer.failureTimer?.cancel();
         peer.failureTimer = null;
         _signal(id, 'open');
@@ -104,6 +107,8 @@ class P2pTransport {
           'Encrypted WebRTC established; check ICE candidate types for route.',
         );
       } else if (state == RTCDataChannelState.RTCDataChannelClosed) {
+        peer.disconnectTimer?.cancel();
+        peer.disconnectTimer = null;
         _signal(id, 'close');
       }
     }
@@ -176,12 +181,32 @@ class P2pTransport {
         }
       } else if (state ==
           RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        peer.everConnected = true;
+        peer.disconnectTimer?.cancel();
+        peer.disconnectTimer = null;
         peer.failureTimer?.cancel();
         peer.failureTimer = null;
       } else if (state ==
-              RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        // Mobile browsers briefly suspend connectivity when sharing a response
+        // link. ICE may recover automatically; don't evict the player on the
+        // first transient disconnect.
+        peer.disconnectTimer ??= Timer(const Duration(seconds: 30), () {
+          peer.disconnectTimer = null;
+          if (_peers[id] == peer &&
+              peer.connection.connectionState !=
+                  RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+            _signal(id, 'close');
+          }
+        });
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-        _signal(id, 'close');
+        peer.disconnectTimer?.cancel();
+        peer.disconnectTimer = null;
+        if (peer.everConnected ||
+            state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+          _signal(id, 'close');
+        }
       }
     };
     connection.onIceConnectionState = (state) {
@@ -380,6 +405,7 @@ class P2pTransport {
     if (peer == null) return;
     peer.publicCandidateTimer?.cancel();
     peer.failureTimer?.cancel();
+    peer.disconnectTimer?.cancel();
     if (!peer.gathered.isCompleted) peer.gathered.complete();
     unawaited(peer.channel?.close());
     unawaited(peer.connection.close());
@@ -400,7 +426,9 @@ class _NativePeer {
   RTCDataChannel? channel;
   Timer? publicCandidateTimer;
   Timer? failureTimer;
+  Timer? disconnectTimer;
   bool remoteApplied = false;
+  bool everConnected = false;
   bool relayConfigured = false;
   String? relayConfigError;
 }

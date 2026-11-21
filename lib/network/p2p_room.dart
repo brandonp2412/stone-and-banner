@@ -435,7 +435,14 @@ class P2pRoom extends ChangeNotifier {
   void _hostMessage(String peer, Map<String, dynamic> msg) {
     final room = _room!;
     if (msg['op'] == 'hello') {
-      if (!_answered.contains(peer) || _peerSeats.containsKey(peer)) return;
+      // The channel can open before setRemoteDescription's Future completes.
+      // That first hello must not be discarded: it is the only greeting the
+      // guest sends until an explicit name retry.
+      if (!_invited.contains(peer) ||
+          !_open.contains(peer) ||
+          _peerSeats.containsKey(peer)) {
+        return;
+      }
       if (msg['name'] is! String) {
         throw const FormatException('Invalid player name.');
       }

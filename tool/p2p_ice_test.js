@@ -176,6 +176,21 @@ test('host errors only after applying a guest response and an ICE failure', asyn
   browser.stoneP2p.close('pending-host');
 });
 
+test('temporary ICE disconnect does not evict a connected guest', () => {
+  const {browser, connections} = browserHarness(true);
+  const events = [];
+  browser.stoneP2p.create('brief-drop', true, (event) => events.push(event));
+  connections[0].connectionState = 'connected';
+  connections[0].onconnectionstatechange();
+  connections[0].connectionState = 'disconnected';
+  connections[0].onconnectionstatechange();
+  assert.ok(!events.includes('close'), 'ICE can recover after browser suspension');
+  connections[0].connectionState = 'connected';
+  connections[0].onconnectionstatechange();
+  assert.ok(!events.includes('close'), 'recovery must cancel eviction');
+  browser.stoneP2p.close('brief-drop');
+});
+
 test('support diagnostics include candidate types, never raw IPs or SDP', async () => {
   const {browser} = browserHarness(false);
   browser.stoneP2p.create('diagnostic-test', true, () => {});

@@ -50,6 +50,7 @@ class StoneBannerApp extends StatefulWidget {
 
 class _StoneBannerAppState extends State<StoneBannerApp>
     with WidgetsBindingObserver {
+  bool _dismissedInitialP2pLink = false;
   static const _setupKey = 'stone_banner_setup_v1';
   bool _setupEdited = false;
   bool _restoringSetup = false;
@@ -815,8 +816,12 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         ),
       ),
       themeMode: themeMode,
-      home: kIsWeb && P2pTransport.initialLink() != null
-          ? const P2pRoomPage()
+      home: kIsWeb &&
+              !_dismissedInitialP2pLink &&
+              P2pTransport.initialLink() != null
+          ? P2pRoomPage(
+              onExitToHome: () => setState(() => _dismissedInitialP2pLink = true),
+            )
           : Builder(
         builder: (context) => PopScope(
           canPop: page == Page.home,

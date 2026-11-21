@@ -79,7 +79,7 @@ test('an unrelated response tab is not falsely marked delivered', async () => {
   const guest = makeBrowser(bus);
   const response = guest.api.forwardAnswer('https://example.test/#p2p=abc');
   assert.equal(guest.intervals.size, 1);
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 60; i++) {
     const timer = [...guest.intervals.values()][0];
     if (timer) timer();
   }

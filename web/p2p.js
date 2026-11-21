@@ -97,6 +97,14 @@
     for (const callback of responses) callback(link, receiptId);
   });
 
+  window.addEventListener("beforeunload", (event) => {
+    if (!hosting || peers.size === 0) return;
+    // Browser may ignore this prompt (especially iOS), but when supported it
+    // protects the in-memory WebRTC host from an accidental page replacement.
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
   // Cross-tab signalling uses an acknowledged same-origin BroadcastChannel.
   // It cannot reach separate browser profiles or in-app browser partitions.
   function forwardAnswer(link) {
@@ -104,7 +112,7 @@
       return Promise.resolve(false);
     const id = crypto.randomUUID();
     return new Promise((resolve) => {
-      let remaining = 5;
+      let remaining = 60;
       const send = () => {
         if (--remaining < 0) {
           clearInterval(timer);
@@ -144,10 +152,15 @@
     channel.onopen = () => {
       clearTimeout(peer.failureTimer);
       peer.failureTimer = null;
+      peer.everConnected = true;
       signal(id, "open");
       reportDirectPath(id);
     };
-    channel.onclose = () => signal(id, "close");
+    channel.onclose = () => {
+      clearTimeout(peer.disconnectTimer);
+      peer.disconnectTimer = null;
+      signal(id, "close");
+    };
     channel.onerror = () => signal(id, "error", "Data channel error.");
     channel.onmessage = (event) => {
       if (typeof event.data === "string" && event.data.length <= 131072)
@@ -160,7 +173,7 @@
     if (peers.has(id)) throw Error("Peer already exists.");
     const connection = new RTCPeerConnection({iceServers: directIceServers, iceTransportPolicy: "all"});
     const peer = {connection, callback, channel: null,
-      relayConfigured: false, relayConfigError: null, failureTimer: null};
+      relayConfigured: false, relayConfigError: null, failureTimer: null, disconnectTimer: null, everConnected: false};
     peer.configReady = relayConfig().then(servers => {
       if (peers.get(id) !== peer) return;
       connection.setConfiguration({iceServers: servers, iceTransportPolicy: "all"});
@@ -174,6 +187,9 @@
     connection.onconnectionstatechange = () => {
       const state = connection.connectionState;
       if (state === "failed") {
+        clearTimeout(peer.disconnectTimer);
+        peer.disconnectTimer = null;
+        if (peer.everConnected) signal(id, "close");
         if (!isHost) {
           // The guest can fail preliminary ICE checks before the host has even
           // applied the answer link. Do not report that as a final NAT failure.
@@ -188,10 +204,23 @@
             "Copy diagnostics for local/remote candidates and relay availability.");
         }
       } else if (state === "connected") {
+        peer.everConnected = true;
         clearTimeout(peer.failureTimer);
         peer.failureTimer = null;
+        clearTimeout(peer.disconnectTimer);
+        peer.disconnectTimer = null;
       }
-      if (state === "disconnected" || state === "closed") signal(id, "close");
+      if (state === "disconnected") {
+        peer.disconnectTimer ??= setTimeout(() => {
+          peer.disconnectTimer = null;
+          if (peers.get(id) === peer && connection.connectionState !== "connected")
+            signal(id, "close");
+        }, 30000);
+      } else if (state === "closed") {
+        clearTimeout(peer.disconnectTimer);
+        peer.disconnectTimer = null;
+        signal(id, "close");
+      }
     };
     if (isHost) attachChannel(id, connection.createDataChannel("stone-banner", {ordered: true}));
   }
@@ -412,6 +441,7 @@
       if (!peer) return;
       peers.delete(id);
       clearTimeout(peer.failureTimer);
+      clearTimeout(peer.disconnectTimer);
       peer.channel?.close();
       peer.connection.close();
     },
