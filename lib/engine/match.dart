@@ -380,6 +380,7 @@ class MatchState {
     Map<int, int> dryRolls = const {},
     Set<int> reliefUsed = const {},
     this.reaverPressure = 0,
+    this.raidInterval = 6,
     this.invasions = 0,
     this.turnSerial = 0,
     this.firstCapitalOwner,
@@ -433,7 +434,7 @@ class MatchState {
   final Map<int, KnightPiece> knights;
   final Set<int> fortified, reaverScars, reliefUsed;
   final Map<int, int> dryRolls;
-  final int reaverPressure, invasions, turnSerial;
+  final int reaverPressure, invasions, turnSerial, raidInterval;
 
   /// Earlier replays retain their original invasion response order.
   final int invasionInvitesFromEvent;
@@ -471,6 +472,7 @@ class MatchState {
     Set<int>? reliefUsed,
     Map<int, int>? dryRolls,
     int? reaverPressure,
+    int? raidInterval,
     int? invasions,
     int? turnSerial,
     int? firstCapitalOwner,
@@ -516,6 +518,7 @@ class MatchState {
     reliefUsed: reliefUsed ?? this.reliefUsed,
     dryRolls: dryRolls ?? this.dryRolls,
     reaverPressure: reaverPressure ?? this.reaverPressure,
+    raidInterval: raidInterval ?? this.raidInterval,
     invasions: invasions ?? this.invasions,
     turnSerial: turnSerial ?? this.turnSerial,
     firstCapitalOwner: firstCapitalOwner ?? this.firstCapitalOwner,
@@ -590,6 +593,7 @@ class MatchEngine {
     MatchBalance balance = MatchBalance.baseline,
     int invasionInvitesFromEvent = 0,
     int cardDeckVersion = 1,
+    int raidInterval = 6,
   }) {
     _require(names.length >= 3 && names.length <= 4, 'Choose 3 or 4 players.');
     _require(
@@ -602,6 +606,7 @@ class MatchEngine {
       seed: seed,
       cardDeckVersion: cardDeckVersion,
       balance: balance,
+      raidInterval: raidInterval,
       invasionInvitesFromEvent: invasionInvitesFromEvent,
       board: board,
       topology: BoardTopology(board),
@@ -630,6 +635,7 @@ class MatchEngine {
     MatchBalance balance = MatchBalance.baseline,
     int invasionInvitesFromEvent = 0,
     int cardDeckVersion = 1,
+    int raidInterval = 6,
   }) {
     var state = newGame(
       names,
@@ -638,6 +644,7 @@ class MatchEngine {
       balance: balance,
       invasionInvitesFromEvent: invasionInvitesFromEvent,
       cardDeckVersion: cardDeckVersion,
+      raidInterval: raidInterval,
     );
     for (final event in events) {
       state = _apply(state, event, replaying: true);
@@ -649,6 +656,7 @@ class MatchEngine {
     'format': 'stone-and-banner-replay-v1',
     'invasionInvitesFromEvent': s.invasionInvitesFromEvent,
     'cardDeckVersion': s.cardDeckVersion,
+    'raidInterval': s.raidInterval,
     'seed': s.seed,
     'boardSeed': s.board.seed,
     'balance': s.balance.toJson(),
@@ -745,6 +753,8 @@ class MatchEngine {
       invasionInvitesFromEvent:
           value['invasionInvitesFromEvent'] as int? ?? events.length,
       cardDeckVersion: value['cardDeckVersion'] as int? ?? 1,
+      // Missing on older replays: retain their original three-round rule.
+      raidInterval: value['raidInterval'] as int? ?? 3,
     );
   }
 
@@ -766,6 +776,7 @@ class MatchEngine {
     'builders': s.builders.toList()..sort(),
     'holder': s.longestRoadHolder,
     'pressure': s.reaverPressure,
+    'raidInterval': s.raidInterval,
     'invasions': s.invasions,
     'serial': s.turnSerial,
     'firstCapital': s.firstCapitalOwner,
@@ -2324,7 +2335,10 @@ class MatchEngine {
             (event.chooseDiscards
                     ? s.copyWith(pendingDiscards: discardsOnSeven(s))
                     : _discardOnSeven(s))
-                .copyWith(reaverPressure: s.reaverPressure + 1);
+                .copyWith(
+                  reaverPressure:
+                      s.reaverPressure + (s.raidInterval == 3 ? 1 : 0),
+                );
       }
       s = _drawStrategy(s);
     } else if (event is MoveBandit) {
@@ -2610,7 +2624,7 @@ class MatchEngine {
         round: newRound,
         turnSerial: s.turnSerial + 1,
         reaverPressure: pressure,
-        phase: next == 0 && pressure >= 3
+        phase: next == 0 && pressure >= s.raidInterval
             ? MatchPhase.invasion
             : MatchPhase.roll,
         clearDice: true,

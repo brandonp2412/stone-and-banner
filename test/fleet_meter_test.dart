@@ -8,7 +8,7 @@ void main() {
     tester,
   ) async {
     final state = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 100);
-    for (var pressure = 0; pressure <= 3; pressure++) {
+    for (var pressure = 0; pressure <= 6; pressure++) {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -19,7 +19,7 @@ void main() {
                 child: InvasionMeter(
                   state: state.copyWith(
                     reaverPressure: pressure,
-                    phase: pressure == 3
+                    phase: pressure == 6
                         ? MatchPhase.invasion
                         : MatchPhase.roll,
                   ),
@@ -31,9 +31,12 @@ void main() {
       );
       expect(
         find.text(switch (pressure) {
-          0 => 'Invasion in 3 rounds',
-          1 => 'Invasion in 2 rounds',
-          2 => 'Invasion in 1 round',
+          0 => 'Invasion in 6 rounds',
+          1 => 'Invasion in 5 rounds',
+          2 => 'Invasion in 4 rounds',
+          3 => 'Invasion in 3 rounds',
+          4 => 'Invasion in 2 rounds',
+          5 => 'Invasion in 1 round',
           _ => 'Invasion now',
         }),
         findsOneWidget,

@@ -227,6 +227,7 @@ abstract final class RoomProtocol {
       },
       reliefUsed: list('reliefUsed').cast<int>().toSet(),
       reaverPressure: number('pressure'),
+      raidInterval: data['raidInterval'] as int? ?? 3,
       invasions: number('invasions'),
       turnSerial: number('serial'),
       firstCapitalOwner: data['firstCapital'] as int?,

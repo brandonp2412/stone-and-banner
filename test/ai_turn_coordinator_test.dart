@@ -5,8 +5,7 @@ import 'package:stone_and_banner/engine/match.dart';
 
 void main() {
   MatchState advanceHuman(MatchState s) {
-    while ((s.tactical?.responder ?? s.active) == 0 &&
-        s.phase != MatchPhase.finished) {
+    while (s.actingSeat == 0 && s.phase != MatchPhase.finished) {
       final view = AiActionAdapter.observe(s, 0);
       final chosen = AiActionAdapter.decide(view);
       if (chosen == null) throw StateError('Human fixture has no action');

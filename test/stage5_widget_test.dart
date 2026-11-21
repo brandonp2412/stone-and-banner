@@ -195,7 +195,7 @@ void main() {
     var s = drafted().copyWith(
       phase: MatchPhase.actions,
       active: 2,
-      reaverPressure: 2,
+      reaverPressure: 5,
     );
     s = grant(grant(s, 1, Resource.ore), 2, Resource.wheat);
     s = MatchEngine.apply(s, const EndTurn());

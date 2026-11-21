@@ -3,6 +3,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../engine/board.dart';
+import 'labels.dart';
 import '../engine/match.dart';
 import '../engine/cards.dart';
 import '../engine/trade_sentiment.dart';
@@ -18,6 +20,7 @@ class MatchActivity extends StatefulWidget {
     this.computerSeats = const <int>{},
     this.emote,
     this.emoteSerial = 0,
+    this.emoteSeat,
   });
 
   final MatchState state;
@@ -25,6 +28,7 @@ class MatchActivity extends StatefulWidget {
   final Set<int> computerSeats;
   final String? emote;
   final int emoteSerial;
+  final int? emoteSeat;
 
   @override
   State<MatchActivity> createState() => _MatchActivityState();
@@ -73,12 +77,16 @@ class _MatchActivityState extends State<MatchActivity> {
     super.didUpdateWidget(oldWidget);
     if (widget.emoteSerial != oldWidget.emoteSerial && widget.emote != null) {
       _reply?.cancel();
-      _showEmote(widget.emote!, widget.viewerSeat);
-      final replies = widget.computerSeats
-          .where(
-            (seat) => seat != widget.viewerSeat && _random.nextDouble() < .35,
-          )
-          .toList();
+      _showEmote(widget.emote!, widget.emoteSeat ?? widget.viewerSeat);
+      // Bot replies are cosmetic and only belong to local reactions.
+      final replies = widget.emoteSeat != null
+          ? <int>[]
+          : widget.computerSeats
+                .where(
+                  (seat) =>
+                      seat != widget.viewerSeat && _random.nextDouble() < .35,
+                )
+                .toList();
       if (replies.isNotEmpty) {
         final seat = replies[_random.nextInt(replies.length)];
         _reply = Timer(const Duration(milliseconds: 1400), () {
@@ -248,7 +256,37 @@ class _MatchActivityState extends State<MatchActivity> {
         );
       // Ordinary moves already animate on the board; no duplicate pop-up.
       case RollDice():
+        final newlyRelieved = state.reliefUsed.difference(previous.reliefUsed);
+        if (newlyRelieved.contains(widget.viewerSeat)) {
+          return cue(
+            '🌾',
+            'Catch-up aid: +1 resource',
+            'A dry-roll safety net for players behind on points',
+            color: teal,
+          );
+        }
+        return null;
       case PlaceVillage():
+        if (previous.phase == MatchPhase.setupVillage &&
+            previous.setupStep >= previous.players.length &&
+            actor == widget.viewerSeat) {
+          final earned = <String>[];
+          for (final good in Resource.values) {
+            final amount =
+                (state.players[actor].stores[good] ?? 0) -
+                (previous.players[actor].stores[good] ?? 0);
+            if (amount > 0) earned.add('$amount ${good.displayName}');
+          }
+          if (earned.isNotEmpty) {
+            return cue(
+              '🌾',
+              'Starting settlement harvest',
+              earned.join(', '),
+              color: teal,
+            );
+          }
+        }
+        return null;
       case PlaceRoad():
       case UpgradeSite():
       case DevelopTown():

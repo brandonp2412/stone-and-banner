@@ -11,8 +11,8 @@ class InvasionMeter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pressure = state.reaverPressure.clamp(0, 3);
-    final remaining = 3 - pressure;
+    final pressure = state.reaverPressure.clamp(0, state.raidInterval);
+    final remaining = state.raidInterval - pressure;
     final arriving = state.phase == MatchPhase.invasion || remaining == 0;
     final arrival = arriving
         ? 'Invasion now'
@@ -62,7 +62,7 @@ class InvasionMeter extends StatelessWidget {
                   children: [
                     for (final label in {
                       arrival,
-                      'Invasion in 3 rounds',
+                      'Invasion in ${state.raidInterval} rounds',
                       'Invasion in 1 round',
                       'Invasion now',
                     })

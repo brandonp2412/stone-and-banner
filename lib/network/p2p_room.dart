@@ -152,6 +152,39 @@ class P2pRoom extends ChangeNotifier {
   MatchState? game;
   Map<String, dynamic>? view;
 
+  // Ephemeral reactions: never affect turn order, dice, resource accounting or replay.
+  int emoteSerial = 0;
+  String? emote;
+  int? emoteSeat;
+  static const supportedEmotes = {'👋', '😄', '😤', '😏', '👏', '🤝'};
+
+  void sendEmote(String emoji) {
+    if (!started || !connected || !supportedEmotes.contains(emoji)) return;
+    if (isHost) {
+      _publishEmote(0, emoji);
+    } else if (seat != null && guestPeer != null) {
+      _send(guestPeer!, {'op': 'emote', 'emoji': emoji});
+    }
+  }
+
+  void _publishEmote(int player, String emoji) {
+    if (!started ||
+        !supportedEmotes.contains(emoji) ||
+        player < 0 ||
+        player >= players.length) {
+      return;
+    }
+    emote = emoji;
+    emoteSeat = player;
+    emoteSerial++;
+    if (isHost) {
+      for (final peer in _peerSeats.keys) {
+        _send(peer, {'op': 'emote', 'seat': player, 'emoji': emoji});
+      }
+    }
+    notifyListeners();
+  }
+
   void host(String name, int seats, int seed) {
     if (_room != null || guestPeer != null) {
       throw StateError('Already in a room.');
@@ -674,6 +707,11 @@ class P2pRoom extends ChangeNotifier {
         } else {
           _stateFor(peer, seat);
         }
+      case 'emote':
+        if (msg['emoji'] is String) {
+          // Identify the sender from the authenticated peer, never the payload.
+          _publishEmote(seat, msg['emoji'] as String);
+        }
       case 'sync':
         _stateFor(peer, seat);
       default:
@@ -683,6 +721,10 @@ class P2pRoom extends ChangeNotifier {
 
   void _guestMessage(Map<String, dynamic> msg) {
     switch (msg['op']) {
+      case 'emote':
+        final from = msg['seat'];
+        final emoji = msg['emoji'];
+        if (from is int && emoji is String) _publishEmote(from, emoji);
       case 'welcome':
         if (msg['room'] != roomId || msg['seat'] is! int) return;
         seat = msg['seat'] as int;

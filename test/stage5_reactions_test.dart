@@ -379,7 +379,7 @@ void main() {
     var s = draft(155).copyWith(
       phase: MatchPhase.actions,
       active: 2,
-      reaverPressure: 2,
+      reaverPressure: 5,
       reactionsUsed: {1, 2},
     );
     s = grant(grant(s, 1, Resource.ore, 1), 2, Resource.wheat, 1);

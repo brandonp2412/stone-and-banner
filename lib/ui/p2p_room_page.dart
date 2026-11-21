@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'compact_layout.dart';
@@ -418,6 +420,13 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
                           );
                         } else {
                           await room.join(name.text, incoming!);
+                          // Same-browser guests can deliver the response immediately,
+                          // before manual signalling allows ICE checks to time out.
+                          // Other browsers still offer the copyable response link.
+                          final answer = room.answerLink;
+                          if (kIsWeb && answer != null) {
+                            unawaited(_deliverResponse(answer));
+                          }
                         }
                       } on Object catch (e) {
                         setState(() => parseError = '$e');
@@ -837,6 +846,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
                               ? 'Waiting for ${game.players[active!].id}…'
                               : 'Direct connection lost',
                           onEvent: room.dispatch,
+                          onEmote: room.sendEmote,
+                          networkEmote: room.emote,
+                          networkEmoteSeat: room.emoteSeat,
+                          networkEmoteSerial: room.emoteSerial,
                           onLeaveRoom: _requestLeave,
                         ),
                       ],

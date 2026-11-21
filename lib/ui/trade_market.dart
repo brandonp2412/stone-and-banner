@@ -16,11 +16,15 @@ class TradeMarket extends StatelessWidget {
     required this.viewerSeat,
     this.onReturnToBoard,
     this.allowOffers = true,
+    this.privateOpponentHands = false,
     this.computerSeats = const <int>{},
   });
 
   final MatchState state;
   final bool allowOffers;
+
+  /// Rivals are redacted in online views; only the host may check their stock.
+  final bool privateOpponentHands;
   final Set<int> computerSeats;
   final VoidCallback onBank, onOffer;
   final ValueChanged<TradeProposal> onCounter;
@@ -273,7 +277,8 @@ class TradeMarket extends StatelessWidget {
     final canAccept =
         enabled &&
         canPayTrade(state.players[viewerSeat].stores, offer.wants) &&
-        canPayTrade(state.players[offer.proposer].stores, offer.gives);
+        (privateOpponentHands ||
+            canPayTrade(state.players[offer.proposer].stores, offer.gives));
     return Card(
       key: ValueKey('trade-offer-${offer.id}'),
       margin: const EdgeInsets.only(bottom: 9),

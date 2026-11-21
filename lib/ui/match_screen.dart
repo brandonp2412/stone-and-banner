@@ -76,6 +76,10 @@ class MatchView extends StatefulWidget {
     this.onRules,
     this.onSettings,
     this.pauseInBackground = true,
+    this.onEmote,
+    this.networkEmote,
+    this.networkEmoteSeat,
+    this.networkEmoteSerial = 0,
   });
   final MatchState state;
   final ValueChanged<MatchEvent> onEvent;
@@ -91,6 +95,10 @@ class MatchView extends StatefulWidget {
   final VoidCallback? onHome, onLeaveRoom, onRules;
   final Future<void> Function()? onSettings;
   final bool pauseInBackground;
+  final ValueChanged<String>? onEmote;
+  final String? networkEmote;
+  final int? networkEmoteSeat;
+  final int networkEmoteSerial;
   @override
   State<MatchView> createState() => _MatchViewState();
 }
@@ -1275,6 +1283,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   void _scheduleBotTrade() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
+          widget.online ||
           _botTradeOpen ||
           _tradeComposerOpen ||
           s.tactical != null ||
@@ -1331,6 +1340,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                       viewerSeat: viewerSeat,
                       computerSeats: widget.computerSeats,
                       allowOffers: true,
+                      privateOpponentHands: widget.online,
                       onBank: () {},
                       onOffer: () {},
                       onCounter: (trade) {
@@ -1792,8 +1802,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     state: s,
                     viewerSeat: viewerSeat,
                     computerSeats: widget.computerSeats,
-                    emote: _emote,
-                    emoteSerial: _emoteSerial,
+                    emote: widget.networkEmote ?? _emote,
+                    emoteSerial: widget.online && widget.onEmote != null
+                        ? widget.networkEmoteSerial
+                        : _emoteSerial,
+                    emoteSeat: widget.networkEmoteSeat,
                   ),
                 ),
               ),
@@ -2397,10 +2410,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   Widget _emoteButton() => PopupMenuButton<String>(
     tooltip: 'React',
     icon: const Text('🙂', style: TextStyle(fontSize: 22)),
-    onSelected: (emoji) => setState(() {
-      _emote = emoji;
-      _emoteSerial++;
-    }),
+    onSelected: (emoji) {
+      if (widget.online && widget.onEmote != null) {
+        widget.onEmote!(emoji);
+      } else {
+        setState(() {
+          _emote = emoji;
+          _emoteSerial++;
+        });
+      }
+    },
     itemBuilder: (context) => [
       for (final emoji in ['👋', '😄', '😤', '😏', '👏', '🤝'])
         PopupMenuItem(
@@ -3517,6 +3536,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           state: s,
           computerSeats: widget.computerSeats,
           allowOffers: !widget.observing,
+          privateOpponentHands: widget.online,
           onBank: exchange,
           onOffer: offer,
           onCounter: offer,

@@ -123,7 +123,7 @@ void main() {
     final state = MatchEngine.newGame(
       ['Human', 'Bot1', 'Bot2'],
       20261121,
-    ).copyWith(phase: MatchPhase.actions, active: 2, reaverPressure: 3);
+    ).copyWith(phase: MatchPhase.actions, active: 2, reaverPressure: 5);
     final invasion = MatchEngine.apply(state, const EndTurn());
     expect(invasion.phase, MatchPhase.invasion);
     expect(invasion.tactical?.responders, [0, 1, 2]);

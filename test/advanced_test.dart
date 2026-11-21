@@ -459,7 +459,7 @@ void main() {
     expect(hand(discarded), 4);
     conserved(discarded);
     expect(hand(protected), 8);
-    expect(exposed.reaverPressure, 1);
+    expect(exposed.reaverPressure, 0);
     conserved(exposed);
     conserved(protected);
   });
