@@ -1,67 +1,58 @@
-// Static-hosted manual signalling. Public STUN for direct UDP NAT traversal; no TURN or gameplay server.
+// Static-hosted manual signalling. Direct ICE first, capped free TURN on restrictive NATs.
 (() => {
   "use strict";
   // Flutter may rewrite hash routes, so retain the signalling fragment first.
   const initialLink = location.hash.startsWith("#p2p=") ? location.href : null;
   // Public STUN endpoints are used only for endpoint discovery, never for
   // relaying moves. Two independent operators improve availability.
-  const iceServers = [
+  const directIceServers = [
     {urls: "stun:stun.l.google.com:19302"},
     {urls: "stun:stun.cloudflare.com:3478"},
   ];
+  const relayConfigUrl = "https://stone-banner-turn.brandonp2412.workers.dev/ice";
+  // The Worker holds the TURN secret; no credential is committed or baked into
+  // the publicly hosted Flutter build. A short timeout preserves LAN play when
+  // the free relay quota is exhausted or the Worker is unreachable.
+  let relayConfigPromise;
+  function relayConfig() {
+    relayConfigPromise ??= (async () => {
+      const abort = typeof AbortController === 'undefined' ? null : new AbortController();
+      const timer = abort ? setTimeout(() => abort.abort(), 7000) : null;
+      try {
+        const response = await fetch(relayConfigUrl, {
+          mode: "cors", cache: "no-store", ...(abort ? {signal: abort.signal} : {}),
+        });
+        if (!response.ok) throw Error(`Free relay unavailable (HTTP ${response.status})`);
+        const payload = await response.json();
+        if (!Array.isArray(payload.iceServers) ||
+            !payload.iceServers.some(server => /^turns?:/.test(server.urls || "")))
+          throw Error("Free relay supplied no TURN candidates");
+        return payload.iceServers;
+      } finally { clearTimeout(timer); }
+    })().catch(error => { relayConfigPromise = undefined; throw error; });
+    return relayConfigPromise;
+  }
   const peers = new Map();
   const responseChannel = typeof BroadcastChannel === "undefined"
       ? null : new BroadcastChannel("stone-banner-p2p-responses-v1");
   const responses = new Set();
   const pendingForwards = new Map();
   let hosting = false;
-  const directAddressKey = "stone-banner-p2p-direct-address";
 
-  // The browser may hide a WireGuard/LAN interface behind mDNS or omit it
-  // entirely. A user-supplied address advertises another route to the *same*
-  // browser UDP socket; it never introduces a signalling or gameplay server.
   function validPrivateIPv4(value) {
-    if (typeof value !== "string" || !/^\d{1,3}(\.\d{1,3}){3}$/.test(value))
-      return false;
+    if (typeof value !== "string" || !/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return false;
     const a = value.split(".").map(Number);
-    if (a.some(n => n > 255) || a[3] === 0 || a[3] === 255) return false;
-    return a[0] === 10 || (a[0] === 172 && a[1] >= 16 && a[1] <= 31) ||
-      (a[0] === 192 && a[1] === 168) ||
-      (a[0] === 100 && a[1] >= 64 && a[1] <= 127);
-  }
-  let directAddress = "";
-  try {
-    const saved = localStorage.getItem(directAddressKey);
-    if (validPrivateIPv4(saved)) directAddress = saved;
-  } catch (_) { /* Private browsing may disallow persistence. */ }
-
-  function setDirectAddress(value) {
-    const address = String(value).trim();
-    if (address && !validPrivateIPv4(address))
-      throw Error("Use a reachable private IPv4 address (e.g. 10.x or 192.168.x.x).");
-    directAddress = address;
-    try {
-      if (address) localStorage.setItem(directAddressKey, address);
-      else localStorage.removeItem(directAddressKey);
-    } catch (_) { /* Still usable for the current tab. */ }
+    return a.every(n => n >= 0 && n <= 255) &&
+      (a[0] === 10 || a[0] === 172 && a[1] >= 16 && a[1] <= 31 ||
+       a[0] === 192 && a[1] === 168 || a[0] === 100 && a[1] >= 64 && a[1] <= 127);
   }
 
-  function descriptionWithDirectAddress(connection) {
+  function safeDescription(connection) {
     const description = connection.localDescription;
-    if (!directAddress || !description?.sdp) return JSON.stringify(description);
-    const rows = description.sdp.split(/\r\n/);
-    const index = rows.findIndex(line => line.startsWith("a=candidate:") &&
-      / 1 udp /i.test(line) && / typ host(?: |$)/.test(line));
-    if (index < 0) return JSON.stringify(description);
-    const parts = rows[index].split(" ");
-    if (parts.length < 8) return JSON.stringify(description);
-    if (parts[4] === directAddress) return JSON.stringify(description);
-    // A distinct foundation makes this an additional, independently checked
-    // address. Preserve the *real* UDP socket port and ICE credentials.
-    parts[0] = "a=candidate:8717234";
-    parts[3] = String(Math.min(Number(parts[3]) - 1, 2113937150));
-    parts[4] = directAddress;
-    rows.splice(index + 1, 0, parts.join(" "));
+    if (!description?.sdp) return JSON.stringify(description);
+    // Management VPN is solely for remote ADB access, never gameplay.
+    const rows = description.sdp.split(/\r?\n/).filter(row =>
+      !(row.startsWith("a=candidate:") && / 10\.66\.66\.\d+ /i.test(row)));
     return JSON.stringify({type: description.type, sdp: rows.join("\r\n")});
   }
 
@@ -146,10 +137,6 @@
     if (peer) peer.callback(event, data);
   }
 
-  function peerNatProbeCount(id) {
-    return peers.get(id)?.natProbeCandidates || 0;
-  }
-
   function attachChannel(id, channel) {
     const peer = peers.get(id);
     if (!peer) return;
@@ -169,19 +156,26 @@
   function create(id, isHost, callback) {
     if (!window.RTCPeerConnection) throw Error("WebRTC is unavailable.");
     if (peers.has(id)) throw Error("Peer already exists.");
-    const connection = new RTCPeerConnection({iceServers, iceTransportPolicy: "all"});
-    peers.set(id, {connection, callback, channel: null, natProbeCandidates: 0});
+    const connection = new RTCPeerConnection({iceServers: directIceServers, iceTransportPolicy: "all"});
+    const peer = {connection, callback, channel: null,
+      relayConfigured: false, relayConfigError: null};
+    peer.configReady = relayConfig().then(servers => {
+      if (peers.get(id) !== peer) return;
+      connection.setConfiguration({iceServers: servers, iceTransportPolicy: "all"});
+      peer.relayConfigured = true;
+    }).catch(error => {
+      peer.relayConfigError = String(error).slice(0, 160);
+      signal(id, "diagnostic", `Free TURN relay unavailable; direct connections only: ${peer.relayConfigError}`);
+    });
+    peers.set(id, peer);
     connection.ondatachannel = (event) => attachChannel(id, event.channel);
     connection.onconnectionstatechange = () => {
       const state = connection.connectionState;
       if (state === "failed") {
         const message = isHost && !connection.remoteDescription
-          ? "Host is awaiting the guest’s response link; this is not yet a network failure."
-          : isHost
-            ? "WebRTC ICE failed. This can be LAN mDNS discovery, a blocked UDP route, or an incomplete candidate list—not necessarily NAT. Copy diagnostics to investigate."
-            : peerNatProbeCount(id) > 0
-              ? `Direct WebRTC failed despite trying ${peerNatProbeCount(id)} alternate UDP candidates. Your carrier may be blocking inbound peer connectivity. Copy diagnostics for the ICE check counts; no relay is used.`
-              : "WebRTC ICE failed. Ensure the host applied your response link. If both are on Wi-Fi, mDNS/UDP discovery may be blocked. Copy diagnostics to investigate.";
+          ? "Host is awaiting the guest response link; no network handshake yet."
+          : "WebRTC ICE failed. Check that the host applied the guest response, " +
+            "and copy diagnostics for local/remote candidates and relay availability.";
         signal(id, "error", message);
       }
       if (state === "disconnected" || state === "closed") signal(id, "close");
@@ -192,6 +186,13 @@
   // Manual (non-trickle) signalling requires candidates to be embedded in SDP.
   // Do not fail outright when external STUN is filtered: return the host/IPv6
   // candidates gathered so far so that same-LAN play still works.
+  function peerRelayConfigured(connection) {
+    for (const peer of peers.values()) {
+      if (peer.connection === connection) return peer.relayConfigured;
+    }
+    return false;
+  }
+
   function waitForCandidates(connection) {
     if (connection.iceGatheringState === "complete") return Promise.resolve(true);
     return new Promise((resolve) => {
@@ -210,13 +211,15 @@
         if (connection.iceGatheringState === "complete") return finish(true);
         const foundPublic = event?.candidate?.type === "srflx" ||
           / typ (srflx|prflx)/.test(connection.localDescription?.sdp || "");
-        // A confirmed public endpoint is already enough for a non-trickle
-        // invitation. Briefly collect additional candidates without making
-        // everyone stare at a 12-second spinner.
-        if (foundPublic && !publicCandidateTimer)
+        // If TURN was provisioned, non-trickle invites must actually include
+        // a relay candidate before returning. STUN alone fails on many mobile
+        // carrier NATs even though a server-reflexive address was gathered.
+        const hasRelay = event?.candidate?.type === "relay" ||
+          / typ relay(?: |$)/m.test(connection.localDescription?.sdp || "");
+        if ((hasRelay || (!peerRelayConfigured(connection) && foundPublic)) && !publicCandidateTimer)
           publicCandidateTimer = setTimeout(() => finish(false), 1000);
       };
-      const timeout = setTimeout(() => finish(false), 9000);
+      const timeout = setTimeout(() => finish(false), 12000);
       connection.addEventListener("icegatheringstatechange", check);
       connection.addEventListener("icecandidate", check);
       check();
@@ -228,7 +231,9 @@
     const candidates = sdp.split(/\r?\n/).filter(line => line.startsWith("a=candidate:"));
     const types = new Set(candidates.map(line => line.match(/ typ (host|srflx|prflx|relay)(?: |$)/)?.[1]).filter(Boolean));
     const hasPublic = types.has("srflx") || types.has("prflx");
-    const summary = hasPublic
+    const summary = types.has("relay")
+      ? "TURN relay candidate gathered; WAN connection available when direct paths fail."
+      : hasPublic
       ? "Public STUN candidate found; direct internet connection can be attempted."
       : types.has("host")
         ? "Only local candidates available; direct internet connection may fail."
@@ -262,107 +267,36 @@
         [local, remote].some(candidate => validPrivateIPv4(candidate.address || candidate.ip));
       const internet = [local, remote].some(candidate =>
         candidate.candidateType === "srflx");
-      signal(id, "path", usesPrivateRoute
+      signal(id, "path", [local, remote].some(candidate => candidate.candidateType === "relay")
+        ? "Encrypted WebRTC via free TURN relay (WAN; not WireGuard)."
+        : usesPrivateRoute
         ? "Direct encrypted P2P over a private LAN/VPN route (no relay)."
         : internet
           ? "Direct encrypted P2P via public NAT traversal (STUN-assisted)."
           : "Direct encrypted P2P connection established.");
     } catch (_) {
-      signal(id, "path", "Direct encrypted P2P connection established.");
+      signal(id, "path", "Encrypted WebRTC established; inspect ICE diagnostics for connection route.");
     }
   }
 
   async function offer(id) {
+    await peers.get(id).configReady;
     const connection = peers.get(id).connection;
     await connection.setLocalDescription(await connection.createOffer());
     const complete = await waitForCandidates(connection);
     summarizeCandidates(id, complete);
-    return descriptionWithDirectAddress(connection);
+    return safeDescription(connection);
   }
-  // Some mobile networks map the same outbound UDP socket to *different*
-  // public ports for each STUN destination. On such networks, a standard
-  // server-reflexive offer may be unreachable from the peer even though a
-  // nearby UDP mapping succeeds. This is a bounded, lower-priority, direct-
-  // only ICE fallback; it never routes game traffic through a relay or VPN.
-  // Activate only when two STUN observations prove endpoint-dependent port
-  // mapping. In particular, never modify normal same-LAN offers.
-  function endpointDependentCandidateOffer(description) {
-    if (description?.type !== "offer" || typeof description.sdp !== "string")
-      return {description, count: 0};
-    const rows = description.sdp.split(/\r?\n/);
-    const candidates = rows.filter(row => row.startsWith("a=candidate:"));
-    const srflx = candidates.map(row => ({parts: row.split(/\s+/)}))
-      .filter(({parts}) => {
-        const marker = parts.indexOf("typ");
-        return parts.length >= 8 && parts[2].toLowerCase() === "udp" &&
-          marker >= 0 && parts[marker + 1] === "srflx" &&
-          parts.indexOf("raddr") >= 0 && parts.indexOf("rport") >= 0;
-      });
-    // Multiple observations for one socket, with incompatible public ports,
-    // are required. Avoid guessing on independent interfaces/sockets.
-    const groups = new Map();
-    for (const {parts} of srflx) {
-      const address = parts[4];
-      const port = Number(parts[5]);
-      const raddr = parts[parts.indexOf("raddr") + 1];
-      const rport = parts[parts.indexOf("rport") + 1];
-      if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(address) ||
-          validPrivateIPv4(address) || address.startsWith("127.") ||
-          !Number.isInteger(port) || port < 1024 || port > 65535)
-        continue;
-      const key = [parts[1], address, raddr, rport].join("|");
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(parts);
-    }
-    // Use the strongest sign of symmetric NAT; constrain the number and
-    // range of checks to avoid a large SDP/UDP flood.
-    const group = [...groups.values()].find(values =>
-      new Set(values.map(parts => parts[5])).size >= 2);
-    if (!group) return {description, count: 0};
-    const first = group[0];
-    const observed = new Set(group.map(parts => Number(parts[5])));
-    const ports = new Set();
-    for (let delta = 1; delta <= 96 && ports.size < 280; delta++) {
-      for (const port of observed) {
-        if (port - delta > 1024 && !observed.has(port - delta))
-          ports.add(port - delta);
-        if (port + delta <= 65535 && !observed.has(port + delta))
-          ports.add(port + delta);
-        if (ports.size >= 280) break;
-      }
-    }
-    const extras = [];
-    for (const port of ports) {
-      const parts = [...first];
-      parts[0] = "a=candidate:" + String(940000000 + port);
-      parts[3] = "1677729500";
-      parts[5] = String(port);
-      extras.push(parts.join(" "));
-    }
-    if (!extras.length) return {description, count: 0};
-    const end = rows.findIndex(row => row.startsWith("a=end-of-candidates"));
-    if (end >= 0) rows.splice(end, 0, ...extras);
-    else {
-      const last = rows.findLastIndex(row => row.startsWith("a=candidate:"));
-      rows.splice(last + 1, 0, ...extras);
-    }
-    return {description: {type: description.type, sdp: rows.join("\r\n")},
-      count: extras.length};
-  }
-
   async function answer(id, remote) {
+    await peers.get(id).configReady;
     const connection = peers.get(id).connection;
     const description = JSON.parse(remote);
     if (description.type !== "offer") throw Error("Not a WebRTC offer.");
-    const probed = endpointDependentCandidateOffer(description);
-    peers.get(id).natProbeCandidates = probed.count;
-    await connection.setRemoteDescription(probed.description);
+    await connection.setRemoteDescription(description);
     await connection.setLocalDescription(await connection.createAnswer());
     const complete = await waitForCandidates(connection);
     summarizeCandidates(id, complete);
-    if (probed.count > 0)
-      signal(id, "diagnostic", `Carrier NAT maps UDP destinations to different ports. Testing ${probed.count} direct alternatives; this is not guaranteed and uses no relay.`);
-    return descriptionWithDirectAddress(connection);
+    return safeDescription(connection);
   }
   async function accept(id, remote) {
     const description = JSON.parse(remote);
@@ -403,8 +337,8 @@
       remoteDescription: connection.remoteDescription?.type || "none",
       localCandidates: candidateDetails(connection.localDescription),
       remoteCandidates: candidateDetails(connection.remoteDescription),
-      privateAddressHintConfigured: !!directAddress,
-      carrierNatProbeCandidates: peer.natProbeCandidates || 0,
+      relayConfigured: peer.relayConfigured,
+      relayConfigError: peer.relayConfigError,
       connectivityChecks: null,
       selectedPair: null,
     };
@@ -472,8 +406,6 @@
     forwardAnswer,
     acknowledgeAnswer,
     setHosting(value) { hosting = !!value; },
-    directAddress() { return directAddress; },
-    setDirectAddress,
   };
   responseChannel?.addEventListener("message", (event) => {
     const data = event.data;

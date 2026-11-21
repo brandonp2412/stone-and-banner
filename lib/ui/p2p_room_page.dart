@@ -20,7 +20,6 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   final name = TextEditingController(text: 'Host');
   final answerField = TextEditingController();
   final inviteField = TextEditingController();
-  final directAddress = TextEditingController();
   Map<String, dynamic>? incoming;
   String? parseError;
   int seats = 3;
@@ -47,7 +46,6 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   void initState() {
     super.initState();
     room = P2pRoom()..addListener(_refresh);
-    if (kIsWeb) directAddress.text = P2pTransport.directAddress();
     final incomingLink = P2pTransport.initialLink();
     if (incomingLink != null) {
       try {
@@ -92,81 +90,8 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
     name.dispose();
     answerField.dispose();
     inviteField.dispose();
-    directAddress.dispose();
     super.dispose();
   }
-
-  Future<void> _editDirectAddress() async {
-    directAddress.text = P2pTransport.directAddress();
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Private LAN / WireGuard route'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Optional: enter this device’s private IPv4 address reachable '
-              'by the other player. This can connect browsers over a shared '
-              'WireGuard or LAN network without a relay. Set it on both devices '
-              'before generating invitations and responses. The address is '
-              'included in the links you share. Restart pairing after changing it. '
-              'On iPhone, find your IP under Settings → Wi-Fi → ⓘ → IP Address.',
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: directAddress,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'This device’s Wi-Fi IPv4 address',
-                hintText: '10.0.0.2',
-                border: OutlineInputBorder(),
-                helperText: 'Optional. Use your own IP, not the host’s.',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              try {
-                P2pTransport.setDirectAddress(directAddress.text);
-                Navigator.pop(dialogContext);
-              } on Object catch (e) {
-                ScaffoldMessenger.of(dialogContext)
-                    .showSnackBar(SnackBar(content: Text('$e')));
-              }
-            },
-            child: const Text('Save LAN address'),
-          ),
-        ],
-      ),
-    );
-    if (mounted) {
-      directAddress.text = P2pTransport.directAddress();
-      setState(() {});
-    }
-  }
-
-  Widget _directAddressAction() => kIsWeb
-      ? Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: _editDirectAddress,
-            icon: const Icon(Icons.vpn_lock_outlined, size: 18),
-            label: Text(
-              directAddress.text.isEmpty
-                  ? 'Same Wi-Fi not connecting? Set your device’s LAN IP'
-                  : 'LAN address configured: ${directAddress.text}',
-            ),
-          ),
-        )
-      : const SizedBox.shrink();
 
   Widget _copy(String label, String link) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -277,7 +202,6 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
               border: OutlineInputBorder(),
             ),
           ),
-          _directAddressAction(),
           if (incoming?['type'] == 'offer') ...[
             const Text(
               'Invitation received. Join to generate a response link.',
@@ -437,7 +361,6 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
         'Friends always keep their own seats.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      _directAddressAction(),
       const SizedBox(height: 12),
       FilledButton.tonalIcon(
         onPressed: room.preparing || room.started

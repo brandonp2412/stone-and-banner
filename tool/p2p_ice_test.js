@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-function browserHarness(withPublicCandidate, {gathering = false} = {}) {
+function browserHarness(withPublicCandidate, {gathering = false, relay = false} = {}) {
   const calls = [];
   const configs = [];
   const connections = [];
@@ -24,6 +24,7 @@ function browserHarness(withPublicCandidate, {gathering = false} = {}) {
       this.localDescription = null;
     }
     createDataChannel() { return {readyState: 'connecting', close() {}}; }
+    setConfiguration(config) { this.configuration = config; }
     createOffer() { return Promise.resolve({type: 'offer', sdp: 'v=0\r\n'}); }
     createAnswer() { return Promise.resolve({type: 'answer', sdp: 'v=0\r\n'}); }
     async setRemoteDescription(description) { this.remoteDescription = description; }
@@ -32,7 +33,8 @@ function browserHarness(withPublicCandidate, {gathering = false} = {}) {
         requestsSent: 202, requestsReceived: 0, responsesReceived: 0}]]);
     }
     async setLocalDescription(description) {
-      this.localDescription = {...description, sdp: description.sdp + candidates};
+      this.localDescription = {...description, sdp: description.sdp + candidates +
+        (relay ? 'a=candidate:2 1 udp 100 192.0.2.2 3478 typ relay\r\n' : '')};
     }
     addEventListener(type, handler) { this.listeners.set(type, handler); }
     removeEventListener(type) { this.listeners.delete(type); }
@@ -46,6 +48,10 @@ function browserHarness(withPublicCandidate, {gathering = false} = {}) {
     location: {hash: '', href: 'https://example.test/stone-and-banner/'},
     setTimeout,
     clearTimeout,
+    ...(relay ? {fetch: async () => ({ok: true, json: async () => ({iceServers: [
+      {urls: 'stun:stun.l.google.com:19302'},
+      {urls: 'turn:global.relay.metered.ca:80', username: 'test-user', credential: 'test-pass'},
+    ]})})} : {}),
     localStorage: {
       getItem: key => storage.get(key) ?? null,
       setItem: (key, value) => storage.set(key, value),
@@ -57,42 +63,19 @@ function browserHarness(withPublicCandidate, {gathering = false} = {}) {
   return {browser, configs, calls, storage, connections};
 }
 
-test('carrier NAT port-dependent mappings enable bounded direct-only UDP alternatives', async () => {
+test('an offer is accepted unchanged without speculative NAT port probing', async () => {
   const {browser, connections} = browserHarness(true);
   browser.stoneP2p.create('cellular-guest', false, () => {});
   const sdp = 'v=0\r\n' +
     'a=candidate:1 1 udp 1680000000 203.0.113.20 33330 typ srflx raddr 100.70.80.9 rport 48576\r\n' +
-    'a=candidate:2 1 udp 1680000000 203.0.113.20 33308 typ srflx raddr 100.70.80.9 rport 48576\r\n' +
-    'a=end-of-candidates\r\n';
+    'a=candidate:2 1 udp 1680000000 203.0.113.20 33308 typ srflx raddr 100.70.80.9 rport 48576\r\n';
   const answer = JSON.parse(await browser.stoneP2p.answer('cellular-guest',
     JSON.stringify({type: 'offer', sdp})));
   assert.equal(answer.type, 'answer');
-  // Inspect the SDP applied to the guest, rather than just a helper return.
-  // Each alternative retains the real ICE credentials, IP and protocol.
-  const remote = connections[0].remoteDescription;
-  assert.equal(remote.type, 'offer');
-  const candidates = remote.sdp.split('\r\n').filter(row => row.startsWith('a=candidate:'));
-  assert.ok(candidates.length > 100 && candidates.length < 300, 'bounded extra candidates');
-  assert.ok(candidates.some(row => row.includes(' 203.0.113.20 33329 typ srflx')));
-  assert.ok(candidates.some(row => row.includes(' 203.0.113.20 33331 typ srflx')));
-  assert.ok(candidates.every(row => !row.includes('typ relay')));
-  assert.equal(candidates.at(-1).includes('raddr 100.70.80.9 rport 48576'), true);
+  assert.equal(connections[0].remoteDescription.sdp, sdp);
   const report = JSON.parse(await browser.stoneP2p.diagnostics('cellular-guest'));
-  assert.ok(report.carrierNatProbeCandidates > 100);
   assert.equal(report.connectivityChecks.requestsSent, 202);
-  assert.equal(report.connectivityChecks.responsesReceived, 0);
   assert.ok(!JSON.stringify(report).includes('203.0.113.20'));
-});
-
-test('no candidate probing on ordinary single-mapping LAN or STUN offers', async () => {
-  const {browser, connections} = browserHarness(true);
-  const reports = [];
-  browser.stoneP2p.create('ordinary-guest', false, (event, data) => reports.push([event, data]));
-  await browser.stoneP2p.answer('ordinary-guest', JSON.stringify({type: 'offer', sdp:
-    'v=0\r\na=candidate:1 1 udp 123 192.168.1.10 44300 typ host\r\n' +
-    'a=candidate:2 1 udp 123 203.0.113.20 33330 typ srflx raddr 100.70.80.9 rport 48576\r\n'}));
-  assert.ok(!reports.some(([event, data]) => event === 'diagnostic' && /endpoint-dependent/i.test(data)));
-  assert.equal(connections[0].remoteDescription.sdp.split('a=candidate:').length - 1, 2);
 });
 
 test('public STUN adds only direct candidates, without TURN or relays', async () => {
@@ -108,8 +91,22 @@ test('public STUN adds only direct candidates, without TURN or relays', async ()
   assert.ok(urls.includes('stun:stun.l.google.com:19302'));
   assert.ok(urls.includes('stun:stun.cloudflare.com:3478'));
   assert.ok(urls.every(url => url.startsWith('stun:')));
-  assert.match(events.find(([event]) => event === 'diagnostic')[1], /Public STUN candidate found/);
+  assert.ok(events.some(([event, data]) => event === 'diagnostic' && /Public STUN candidate found/.test(data)));
   browser.stoneP2p.close('player-1');
+});
+
+test('free relay is configured before offer and candidates are embedded in manual SDP', async () => {
+  const {browser, connections} = browserHarness(true, {relay: true});
+  const events = [];
+  browser.stoneP2p.create('relay-player', true, (event, data) => events.push([event, data]));
+  const offer = JSON.parse(await browser.stoneP2p.offer('relay-player'));
+  assert.match(offer.sdp, /typ relay/);
+  assert.ok(connections[0].configuration.iceServers.some(server =>
+    server.urls.startsWith('turn:')));
+  assert.ok(events.some(([event, data]) => event === 'diagnostic' &&
+    data.includes('TURN relay candidate gathered')));
+  assert.equal(JSON.parse(await browser.stoneP2p.diagnostics('relay-player')).relayConfigured, true);
+  browser.stoneP2p.close('relay-player');
 });
 
 test('unavailable public candidate keeps local connectivity instead of failing', async () => {
@@ -118,7 +115,7 @@ test('unavailable public candidate keeps local connectivity instead of failing',
   browser.stoneP2p.create('player-2', true, (event, data) => events.push([event, data]));
   const offer = JSON.parse(await browser.stoneP2p.offer('player-2'));
   assert.match(offer.sdp, /typ host/);
-  assert.match(events.find(([event]) => event === 'diagnostic')[1], /Only local candidates/);
+  assert.ok(events.some(([event, data]) => event === 'diagnostic' && /Only local candidates/.test(data)));
   browser.stoneP2p.close('player-2');
 });
 
@@ -132,29 +129,26 @@ test('public candidate stops waiting for missing ICE gathering completion', asyn
   browser.stoneP2p.close('player-3');
 });
 
-test('a private WireGuard address is persisted and added as an extra candidate', async () => {
-  const {browser, storage} = browserHarness(false);
-  browser.stoneP2p.setDirectAddress('10.66.66.3');
-  assert.equal(browser.stoneP2p.directAddress(), '10.66.66.3');
-  browser.stoneP2p.create('wireguard', true, () => {});
-  const offer = JSON.parse(await browser.stoneP2p.offer('wireguard'));
-  assert.match(offer.sdp, /10\.0\.0\.2 5555 typ host/);
-  assert.match(offer.sdp, /10\.66\.66\.3 5555 typ host/);
-  assert.equal(storage.get('stone-banner-p2p-direct-address'), '10.66.66.3');
-  browser.stoneP2p.close('wireguard');
-  browser.stoneP2p.setDirectAddress('');
-  assert.equal(storage.has('stone-banner-p2p-direct-address'), false);
+test('control-only WireGuard candidates are excluded from shared offers', async () => {
+  const {browser, connections} = browserHarness(false);
+  browser.stoneP2p.create('cellular-player', true, () => {});
+  const peer = connections[0];
+  await browser.stoneP2p.offer('cellular-player');
+  peer.localDescription.sdp += 'a=candidate:77 1 udp 123 10.66.66.3 3344 typ host\r\n';
+  const safe = JSON.parse(await (async () => {
+    // Generate a second offer with the native SDP candidate injected by the fake.
+    peer.setLocalDescription = async description => {
+      peer.localDescription = {...description, sdp: description.sdp +
+        'a=candidate:77 1 udp 123 10.66.66.3 3344 typ host\r\n' +
+        'a=candidate:2 1 udp 123 192.168.1.4 3344 typ host\r\n'};
+    };
+    return browser.stoneP2p.offer('cellular-player');
+  })());
+  assert.doesNotMatch(safe.sdp, /10\.66\.66\./);
+  assert.match(safe.sdp, /192\.168\.1\.4/);
+  assert.equal(typeof browser.stoneP2p.setDirectAddress, 'undefined');
+  browser.stoneP2p.close('cellular-player');
 });
-
-test('invalid or public address hints are rejected without changing configuration', () => {
-  const {browser} = browserHarness(false);
-  for (const address of ['8.8.8.8', '999.168.1.1', '127.0.0.1', '10.66.66.0', '10.66.66.255']) {
-    assert.throws(() => browser.stoneP2p.setDirectAddress(address), /private IPv4/);
-  }
-  browser.stoneP2p.setDirectAddress('192.168.1.102');
-  assert.equal(browser.stoneP2p.directAddress(), '192.168.1.102');
-});
-
 
 test('support diagnostics include candidate types, never raw IPs or SDP', async () => {
   const {browser} = browserHarness(false);
@@ -167,7 +161,7 @@ test('support diagnostics include candidate types, never raw IPs or SDP', async 
   assert.equal(report.localCandidates[0].type, 'host');
   assert.equal(report.localCandidates[0].protocol, 'udp');
   assert.equal(report.localCandidates[0].privateIPv4, true);
-  assert.equal(report.privateAddressHintConfigured, false);
+  assert.equal(report.relayConfigured, false);
   assert.ok(!raw.includes('10.0.0.2'));
   assert.ok(!raw.includes('a=candidate'));
   browser.stoneP2p.close('diagnostic-test');

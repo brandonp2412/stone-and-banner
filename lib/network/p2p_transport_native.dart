@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
-/// Direct, encrypted WebRTC DataChannel transport for Linux and Android.
-/// Uses the same SDP offer/answer JSON as the browser implementation.
-/// No signalling, TURN, account or gameplay server is involved.
+/// Encrypted WebRTC DataChannel transport for Linux and Android.
+/// Uses manual SDP offer/answer links, direct ICE or free capped TURN relay.
+/// No hosted gameplay state or persistent signalling server is involved.
 class P2pTransport {
   P2pTransport(this.onEvent);
 
@@ -24,6 +25,48 @@ class P2pTransport {
     {'urls': 'stun:stun.l.google.com:19302'},
     {'urls': 'stun:stun.cloudflare.com:3478'},
   ];
+  static final Uri _relayConfigUrl = Uri.parse(
+    'https://stone-banner-turn.brandonp2412.workers.dev/ice',
+  );
+
+  // The free relay's credential stays in a Worker secret, not the APK or Git.
+  // On quota exhaustion we still allow direct LAN/STUN connections and explain
+  // that WAN reliability is degraded in the copied ICE diagnostics.
+  static Future<List<Map<String, dynamic>>> _relayServers() async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+    try {
+      final request = await client
+          .getUrl(_relayConfigUrl)
+          .timeout(const Duration(seconds: 7));
+      final response = await request.close().timeout(
+        const Duration(seconds: 7),
+      );
+      if (response.statusCode != HttpStatus.ok) {
+        throw StateError(
+          'Free relay unavailable (HTTP ${response.statusCode}).',
+        );
+      }
+      final raw = await utf8.decoder
+          .bind(response)
+          .join()
+          .timeout(const Duration(seconds: 7));
+      final payload = jsonDecode(raw);
+      if (payload is! Map || payload['iceServers'] is! List) {
+        throw const FormatException('Invalid free relay configuration.');
+      }
+      final servers = <Map<String, dynamic>>[];
+      for (final item in payload['iceServers'] as List) {
+        if (item is! Map || item['urls'] is! String) continue;
+        servers.add(Map<String, dynamic>.from(item));
+      }
+      if (!servers.any((item) => (item['urls'] as String).startsWith('turn'))) {
+        throw const FormatException('No TURN servers were configured.');
+      }
+      return servers;
+    } finally {
+      client.close(force: true);
+    }
+  }
 
   final void Function(String peer, String event, String data) onEvent;
   final Map<String, _NativePeer> _peers = {};
@@ -33,10 +76,6 @@ class P2pTransport {
   static Future<bool> forwardAnswer(String message) async => false;
   static void acknowledgeAnswer(String id, bool accepted) {}
   static void setHosting(bool hosting) {}
-  // Native WebRTC enumerates LAN and WireGuard interfaces itself. Browsers
-  // need an explicit private-address hint when those interfaces are hidden.
-  static String directAddress() => '';
-  static void setDirectAddress(String address) {}
 
   // Native applications receive links by pasting them into the lobby.
   void listenAnswers(void Function(String link, String receiptId) callback) {}
@@ -57,7 +96,11 @@ class P2pTransport {
       if (state == RTCDataChannelState.RTCDataChannelOpen && !reportedOpen) {
         reportedOpen = true;
         _signal(id, 'open');
-        _signal(id, 'path', 'Direct encrypted P2P connection established.');
+        _signal(
+          id,
+          'path',
+          'Encrypted WebRTC established; check ICE candidate types for route.',
+        );
       } else if (state == RTCDataChannelState.RTCDataChannelClosed) {
         _signal(id, 'close');
       }
@@ -76,12 +119,28 @@ class P2pTransport {
     if (_disposed || _peers.containsKey(id)) {
       throw StateError('Peer already exists or transport was disposed.');
     }
+    var servers = <Map<String, dynamic>>[..._iceServers];
+    String? relayError;
+    try {
+      servers = await _relayServers();
+    } on Object catch (error) {
+      relayError = error.toString();
+    }
     final connection = await createPeerConnection({
-      'iceServers': _iceServers,
+      'iceServers': servers,
       'iceTransportPolicy': 'all',
     });
     final peer = _NativePeer(connection);
     _peers[id] = peer;
+    peer.relayConfigured = relayError == null;
+    peer.relayConfigError = relayError;
+    if (relayError != null) {
+      _signal(
+        id,
+        'diagnostic',
+        'Free TURN relay unavailable; direct paths only: $relayError',
+      );
+    }
 
     connection.onDataChannel = (channel) => _attach(id, channel);
     connection.onConnectionState = (state) {
@@ -109,7 +168,10 @@ class P2pTransport {
     };
     connection.onIceCandidate = (candidate) {
       final text = candidate.candidate ?? '';
-      if ((text.contains(' typ srflx') || text.contains(' typ prflx')) &&
+      if ((text.contains(' typ relay') ||
+              (!peer.relayConfigured &&
+                  (text.contains(' typ srflx') ||
+                      text.contains(' typ prflx')))) &&
           peer.publicCandidateTimer == null) {
         peer.publicCandidateTimer = Timer(const Duration(seconds: 1), () {
           if (!peer.gathered.isCompleted) peer.gathered.complete();
@@ -130,7 +192,7 @@ class P2pTransport {
     // Non-trickle manual signalling: wait for local (and, when available,
     // STUN-reflexive) ICE candidates to appear in the returned SDP.
     await peer.gathered.future.timeout(
-      const Duration(seconds: 9),
+      const Duration(seconds: 12),
       onTimeout: () {},
     );
     peer.publicCandidateTimer?.cancel();
@@ -139,18 +201,31 @@ class P2pTransport {
       throw StateError('Could not gather WebRTC connection details.');
     }
     final sdp = description.sdp!;
+    final hasRelay = sdp.contains(' typ relay');
     final hasPublic = sdp.contains(' typ srflx') || sdp.contains(' typ prflx');
     final hasHost = sdp.contains(' typ host');
     _signal(
       id,
       'diagnostic',
-      hasPublic
+      hasRelay
+          ? 'TURN relay candidate gathered; WAN path can traverse carrier NAT.'
+          : hasPublic
           ? 'Public STUN candidate found; direct internet connection can be attempted.'
           : hasHost
           ? 'Only local candidates available; direct internet connection may fail.'
           : 'No ICE candidates found; check network connectivity.',
     );
-    return jsonEncode({'type': description.type, 'sdp': sdp});
+    // This subnet is reserved for device-control WireGuard. WebRTC may
+    // discover it as a host interface, but gameplay must never traverse it.
+    final gameSdp = sdp
+        .split(RegExp(r'\r?\n'))
+        .where(
+          (line) =>
+              !line.startsWith('a=candidate:') ||
+              !RegExp(r' 10\.66\.66\.\d+ ').hasMatch(line),
+        )
+        .join('\r\n');
+    return jsonEncode({'type': description.type, 'sdp': gameSdp});
   }
 
   Future<String> offer(String id) async {
@@ -244,6 +319,8 @@ class P2pTransport {
     final remote = await connection.getRemoteDescription();
     return jsonEncode({
       'engine': 'flutter_webrtc native',
+      'relayConfigured': peer.relayConfigured,
+      'relayConfigError': peer.relayConfigError,
       'iceConnectionState':
           connection.iceConnectionState?.toString() ?? 'unknown',
       'iceGatheringState':
@@ -293,4 +370,6 @@ class _NativePeer {
   final Completer<void> gathered = Completer<void>();
   RTCDataChannel? channel;
   Timer? publicCandidateTimer;
+  bool relayConfigured = false;
+  String? relayConfigError;
 }

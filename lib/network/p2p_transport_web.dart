@@ -28,12 +28,6 @@ external void _acknowledgeAnswer(JSString id, JSBoolean accepted);
 @JS('stoneP2p.setHosting')
 external void _setHosting(JSBoolean hosting);
 
-@JS('stoneP2p.directAddress')
-external JSString _directAddress();
-
-@JS('stoneP2p.setDirectAddress')
-external void _setDirectAddress(JSString address);
-
 class P2pTransport {
   static String? initialLink() {
     // Flutter's standalone web test harness doesn't load our index.html.
@@ -101,7 +95,4 @@ class P2pTransport {
   static void acknowledgeAnswer(String id, bool accepted) =>
       _acknowledgeAnswer(id.toJS, accepted.toJS);
   static void setHosting(bool hosting) => _setHosting(hosting.toJS);
-  static String directAddress() => _directAddress().toDart;
-  static void setDirectAddress(String address) =>
-      _setDirectAddress(address.toJS);
 }
