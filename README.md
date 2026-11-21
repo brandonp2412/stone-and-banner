@@ -7,9 +7,11 @@ Original offline-first Android strategy game built in **Flutter/Dart**. The app 
 ```sh
 flutter pub get
 flutter analyze
-buildq --wait -- flutter test
-buildq --wait -- flutter build apk --release
+pueue add --escape -- flutter test
+pueue add --escape -- flutter build apk --release
 ```
+
+After each submission, use `pueue wait ID` and check the result with `pueue log --json ID`.
 
 Release APK: `build/app/outputs/flutter-apk/app-release.apk` (local testing only). Package ID `nz.presley.stoneandbanner`. No network, account or analytics service is required for local play. Local matches autosave as private on-device replays and can be resumed through a handoff screen; Both raw JSON and compact replay codes expose all players' hidden hands, so share only with trusted participants. Use Copy replay or compact share codes with Import replay for reproducible portable match logs. Use an isolated Waydroid emulator for Android testing; do not require another machine.
 

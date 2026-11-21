@@ -9,4 +9,4 @@
 - [x] **7. Balance:** seeded simulation, strategy equity, comeback rates, first-seat advantage, property and regression tests (see `BALANCE.md` and `STAGE7-EVIDENCE.md`; track parity remains unproven).
 - [ ] **8. Harden:** original art, accessibility, release/UI validation, user device QA and IP/security checks, no public store publication without approval. **Local candidate verified** on local test host Waydroid with 71 Flutter tests and end-to-end victory; signing, legal/security, physical-device and accessibility approval gates remain (see STAGE8-EVIDENCE.md).
 
-Each stage requires `flutter analyze`, `buildq --wait -- flutter test`, release build, local test host Waydroid smoke test, evidence and local commit. Do not mark incomplete features done.
+Each stage requires `flutter analyze`, `pueue add --escape -- flutter test`, release build, verify the task result with pueue log --json ID, local test host Waydroid smoke test, evidence and local commit. Do not mark incomplete features done.

@@ -266,3 +266,10 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 - Nox buildq **#4568** analyzer clean, **#4569** 137 Flutter tests passed, **#4570** Android release built only, **#4574** Linux release built, **#4575** three-socket LAN protocol smoke passed, **#4577** deterministic pre-win fixture regenerated.
 - Actual isolated Linux release GUI proved one-human/two-AI setup, opening draft, human dice, full AI turn cycle and Round 2 save/resume. Separate real GUI imported a reducer-generated 1,143-event pre-win replay, manually upgraded Town Junction 42 to Capital, and rendered **Bot-0 wins! 15/15 VP**. **This is fixture victory UI proof, not a naturally played human-versus-AI victory.**
 - Glass connector HTTP 429; Nox Waydroid user 11 occupied by another session, so **no Waydroid installation/launch**, 2-GUI LAN, fresh card/trade/reaction UI, rematch, or full natural 15-VP game was proved. Stage 8 release gates remain open.
+
+## Slice 19/20 — visual consistency baseline (4 November 2026 NZDT)
+
+- [Nine-row Linux screenshot/action/visual manifest](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-19/SCREENSHOT-MANIFEST.md) and [historical cross-flow contact sheet](../../.local/state/stone-and-banner/e2e/stone-banner-ai-e2e-19/contact_sheet_prior_flows_01.jpg) on Nox.
+- Isolated real Linux release imported an authentic 89-event replay through the UI, revealed Bot-1 Round 7 board and captured action-panel density. Blank/missed-focus frames retained.
+- Observed gap: mostly unavailable chips and three disabled Town Development controls crowd the 440px action view. Proposed progressive disclosure remains unimplemented.
+- No source fix, after screenshots, Waydroid action, tests, analyzer, new build or validated commit: Glass connector 429; Nox code-editing connector stalled. No Samsung or public release.

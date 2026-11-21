@@ -7,9 +7,9 @@ parameters are serialized in replays, never silently selected in the UI.
 ## Reproduce on local test host
 
 ```sh
-buildq --wait -- dart run tool/balance.dart 120 90 docs/STAGE7-METRICS.json
-buildq --wait -- dart run tool/balance.dart 240 90 docs/STAGE7-CONFIRM.json original,market_4_to_1 2000
-buildq --wait -- flutter test
+pueue add --escape -- dart run tool/balance.dart 120 90 docs/STAGE7-METRICS.json
+pueue add --escape -- dart run tool/balance.dart 240 90 docs/STAGE7-CONFIRM.json original,market_4_to_1 2000
+pueue add --escape -- flutter test
 ```
 
 Seeds 1000–1119 and independent confirmation seeds 2000–2239.

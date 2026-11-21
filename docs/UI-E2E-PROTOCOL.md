@@ -20,7 +20,7 @@ record the **new** WAYLAND_DISPLAY socket. Use isolated XDG_CONFIG_HOME
 to keep saved matches separate. A Linux host can be generated in a temporary
 source snapshot with flutter create --platforms linux when the checked-out
 repo lacks one. Do not add generated Linux code to this Android-targeted
-checkout. Compile using buildq and record the executable SHA-256. Never
+checkout. Compile using pueue and record the executable SHA-256. Never
 inject keyboard events into a visible compositor.
 
 On Waydroid, select an exact --adb-serial observed using adb devices -l.
