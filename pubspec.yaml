@@ -1,7 +1,7 @@
 name: stone_and_banner
 description: "Original turn-based strategy game Stone & Banner."
 publish_to: none
-version: 0.8.4+2016
+version: 0.8.4+2017
 environment:
   sdk: ^3.13.4
 dependencies:
@@ -9,6 +9,7 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.5.6
   web_socket_channel: ^3.0.3
+  http: ^1.5.0
   url_launcher: ^6.3.3
   flutter_webrtc: ^1.6.3
 dev_dependencies:

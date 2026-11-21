@@ -56,9 +56,20 @@ async def main():
             await guest2.wait_for_timeout(2000)
             await enable_semantics(guest2)
             print("SECOND TEXTBOXES",await guest2.get_by_role("textbox").count(),flush=True)
-            await guest2.get_by_role("textbox").first.fill("Bob")
+            field = guest2.get_by_role("textbox").first
+            await field.click()
+            await field.press("ControlOrMeta+A")
+            await field.press_sequentially("Bob",delay=90)
+            await field.press("Tab")
+            print("SECOND NAME BEFORE JOIN",await field.input_value(),flush=True)
             await guest2.get_by_text("Join game",exact=True).click()
-            await guest2.get_by_text("Connected to host",exact=False).wait_for(timeout=65000)
+            try:
+                await guest2.get_by_text("Connected to host",exact=False).wait_for(timeout=24000)
+            except Exception:
+                print("GUEST2 FAILURE BODY:",(await guest2.locator("body").inner_text())[:3000],flush=True)
+                print("HOST FAILURE BODY:",(await host.locator("body").inner_text())[:3000],flush=True)
+                await guest2.screenshot(path="/tmp/stone-one-link-guest2-failed.png")
+                raise
             await host.bring_to_front()
             await host.wait_for_timeout(1200)
             print("HOST PLAYERS:",(await host.locator("body").inner_text())[:1500],flush=True)

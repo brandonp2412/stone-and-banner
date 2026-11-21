@@ -23,7 +23,7 @@ class P2pRoomPage extends StatefulWidget {
   State<P2pRoomPage> createState() => _P2pRoomPageState();
 }
 
-class _P2pRoomPageState extends State<P2pRoomPage> {
+class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
   late final P2pRoom room;
   final name = TextEditingController(text: 'Host');
   final answerField = TextEditingController();
@@ -55,6 +55,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     room = P2pRoom()..addListener(_refresh);
     final incomingLink = P2pTransport.initialLink();
     if (incomingLink != null) {
@@ -145,7 +146,15 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      room.ensureInvitesConnected();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     room.removeListener(_refresh);
     room.dispose();
     name.dispose();
@@ -407,6 +416,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
                   ? 'Invitation received. Join to connect automatically.'
                   : 'Invitation received. Join to generate a response link.',
             ),
+            if (room.joiningOneLink && room.joinStatus != null) ...[
+              const SizedBox(height: 8),
+              Text(room.joinStatus!),
+            ],
             const SizedBox(height: 10),
             FilledButton.icon(
               onPressed: room.preparing || room.joiningOneLink
@@ -676,6 +689,24 @@ class _P2pRoomPageState extends State<P2pRoomPage> {
           tilePadding: EdgeInsets.zero,
           children: [_manualPairing()],
         ),
+    ] else if (room.oneLinkGuest && !room.connected) ...[
+      const Text(
+        'Not connected yet? If your player name is taken, '
+        'choose another and retry without reopening the invite.',
+      ),
+      const SizedBox(height: 8),
+      TextField(
+        controller: name,
+        decoration: const InputDecoration(
+          labelText: 'Player name',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      const SizedBox(height: 6),
+      OutlinedButton(
+        onPressed: () => room.retryName(name.text),
+        child: const Text('Retry with this name'),
+      ),
     ] else if (room.answerLink case final String link) ...[
       _copy('response link', link),
       const SizedBox(height: 7),

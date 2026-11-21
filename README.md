@@ -46,6 +46,17 @@ STONE_SIGNAL_ENABLED=true. Debug builds default to false unless overridden. The 
 wss://stone-banner-signal.brandonp2412.workers.dev/signal/.
 The old manual flow remains available when signalling is offline.
 
+**Connection diagnostics:** If a one-link invite fails, use **Copy diagnostics**
+on the error banner. Reports now record each signalling handshake attempt,
+elapsed time, socket errors/close codes, and an independent HTTPS status probe
+showing whether Cloudflare could find the host signalling socket. The probe
+includes Cloudflare's request Ray ID when available. The report omits room
+keys, SDP, peer IDs and full IP addresses. A host may remain online while its
+signalling WebSocket is rejected; these are no longer treated as equivalent.
+The Worker supports temporarily unavailable hosts, reconnection on resume,
+and older host app builds that do not send host_ready.
+
+
 Play online: https://brandonp2412.github.io/stone-and-banner/
 
 The GitHub Actions workflow builds and publishes this site after each push to

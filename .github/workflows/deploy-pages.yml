@@ -23,6 +23,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install Node.js for signalling tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -32,9 +36,27 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
       - name: Test P2P invitations and room authority
-        run: flutter test test/p2p_links_test.dart test/one_link_invites_test.dart test/p2p_bot_lobby_test.dart test/stage6_room_test.dart
+        run: flutter test test/p2p_links_test.dart test/one_link_invites_test.dart test/p2p_signalling_diagnostics_test.dart test/p2p_bot_lobby_test.dart test/stage6_room_test.dart
       - name: Verify direct WebRTC ICE and response handshakes
         run: node --test tool/p2p_ice_test.js tool/p2p_answer_test.js
+      - name: Test Cloudflare signalling Worker and diagnostics endpoint
+        run: |
+          npx --yes wrangler@4.166.0 dev --config wrangler.signalling.jsonc --port 8799 --ip 127.0.0.1 --local > /tmp/stone-signalling-ci.log 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 40); do
+            if curl -s --max-time 2 -o /dev/null http://127.0.0.1:8799/; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/stone-signalling-ci.log
+            exit 1
+          fi
+          node tool/signal_worker_smoke.mjs
       - name: Build website
         run: flutter build web --release --base-href /stone-and-banner/
       - name: Bust browser bridge cache on each deployment

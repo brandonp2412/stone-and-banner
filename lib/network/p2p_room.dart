@@ -72,7 +72,10 @@ class P2pRoom extends ChangeNotifier {
   final Set<String> _answered = {};
   final Map<String, Future<void>> _acceptingAnswers = {};
   P2pSignalling? _signalling;
-  String? roomLink, signallingError;
+  String? _signallingKey;
+  Timer? _signallingRetry;
+  int _signallingFailures = 0;
+  String? roomLink, signallingError, joinStatus;
   bool signallingPreparing = false;
   bool joiningOneLink = false;
   bool oneLinkGuest = false;
@@ -88,6 +91,12 @@ class P2pRoom extends ChangeNotifier {
   String? networkDiagnostic, connectionPath;
   final Map<String, String> peerPaths = {};
   final List<String> _diagnosticEvents = [];
+  final List<Map<String, Object?>> _signallingTrace = [];
+
+  void _recordSignalling(Map<String, Object?> event) {
+    _signallingTrace.add(event);
+    if (_signallingTrace.length > 100) _signallingTrace.removeAt(0);
+  }
 
   void _recordDiagnostic(String value) {
     final timestamp = DateTime.now().toUtc().toIso8601String();
@@ -129,10 +138,19 @@ class P2pRoom extends ChangeNotifier {
         'seatsConnected': connectedPlayers.where((value) => value).length,
       },
       'uiError': _redact(uiError),
+      'signalling': {
+        'hasInviteLink': roomLink != null,
+        'hostOnline': isHost && _signalling != null,
+        'reconnecting':
+            signallingPreparing || _signallingRetry?.isActive == true,
+        'guestWaiting': joiningOneLink && joinStatus != null,
+        'error': _redact(signallingError),
+      },
       'roomMessage': _redact(message),
       'networkDiagnostic': _redact(networkDiagnostic),
       'connectionPath': _redact(connectionPath),
       'timeline': _diagnosticEvents,
+      'signallingTrace': _signallingTrace,
       'peers': peerReports,
     };
     return const JsonEncoder.withIndent('  ').convert(report);
@@ -204,16 +222,47 @@ class P2pRoom extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reuse one room key across mobile suspension or signalling network loss.
+  void ensureInvitesConnected() {
+    if (!_disposed &&
+        isHost &&
+        _signalling == null &&
+        !signallingPreparing &&
+        P2pSignalling.enabled) {
+      _signallingRetry?.cancel();
+      unawaited(_activateOneLink());
+    }
+  }
+
+  void _retrySignalling() {
+    if (_disposed || !isHost || _signallingRetry?.isActive == true) return;
+    final seconds = (2 << _signallingFailures.clamp(0, 4)).clamp(2, 32);
+    _signallingFailures++;
+    _signallingRetry = Timer(Duration(seconds: seconds), () {
+      _signallingRetry = null;
+      ensureInvitesConnected();
+    });
+  }
+
   Future<void> _activateOneLink() async {
-    if (!isHost || _disposed || roomId == null) return;
+    if (!isHost ||
+        _disposed ||
+        roomId == null ||
+        _signalling != null ||
+        signallingPreparing) {
+      return;
+    }
     signallingPreparing = true;
-    signallingError = null;
+    signallingError = roomLink == null ? null : 'Reconnecting invitations…';
     notifyListeners();
-    final key = _randomId(16);
+    _signallingKey ??= _randomId(16);
+    final key = _signallingKey!;
+    var lostDuringConnect = false;
     try {
       final client = await P2pSignalling.connect(
         key,
         host: true,
+        onDiagnostic: _recordSignalling,
         onMessage: (message) {
           if (_disposed) return;
           final op = message['op'];
@@ -234,8 +283,13 @@ class P2pRoom extends ChangeNotifier {
         },
         onError: (error) {
           if (_disposed || !isHost) return;
-          signallingError = error;
-          roomLink = null;
+          _recordDiagnostic('host signalling connection interrupted');
+          final previous = _signalling;
+          if (previous == null) lostDuringConnect = true;
+          _signalling = null;
+          if (previous != null) unawaited(previous.dispose());
+          signallingError = 'Invitation service disconnected; reconnecting…';
+          _retrySignalling();
           notifyListeners();
         },
       );
@@ -243,16 +297,29 @@ class P2pRoom extends ChangeNotifier {
         await client.dispose();
         return;
       }
+      if (lostDuringConnect) {
+        await client.dispose();
+        throw StateError('Signalling closed during initial connection.');
+      }
       _signalling = client;
-      roomLink = P2pLinks.roomLink(
+      roomLink ??= P2pLinks.roomLink(
         kIsWeb
             ? Uri.base
             : Uri.parse('https://brandonp2412.github.io/stone-and-banner/'),
         key,
       );
+      _signallingFailures = 0;
+      _signallingRetry?.cancel();
+      _signallingRetry = null;
       signallingError = null;
+      client.send({'op': 'host_ready'});
+      _recordDiagnostic('host invitation signalling ready');
     } on Object catch (error) {
-      signallingError = 'One-link invites unavailable: $error';
+      _recordDiagnostic('host signalling failed: ${error.runtimeType}');
+      signallingError = roomLink == null
+          ? 'Online invitations unavailable. Retrying; manual pairing still works.'
+          : 'Invitation service reconnecting automatically…';
+      _retrySignalling();
     } finally {
       signallingPreparing = false;
       if (!_disposed) notifyListeners();
@@ -320,18 +387,28 @@ class P2pRoom extends ChangeNotifier {
     preparing = true;
     message = null;
     notifyListeners();
+    joinStatus = null;
     final offerReady = Completer<Map<String, dynamic>>();
     P2pSignalling? client;
     try {
       client = await P2pSignalling.connect(
         key,
         host: false,
+        onDiagnostic: _recordSignalling,
         onMessage: (data) {
           if (offerReady.isCompleted) return;
-          if (data['op'] == 'offer' &&
+          if (data['op'] == 'waiting') {
+            joinStatus = 'Waiting for the host signalling session…';
+            _recordDiagnostic('guest waiting for host signalling');
+            notifyListeners();
+          } else if (data['op'] == 'host_online') {
+            joinStatus = 'Host connected. Establishing WebRTC…';
+            notifyListeners();
+          } else if (data['op'] == 'offer' &&
               data['peer'] is String &&
               data['room'] is String &&
               data['sdp'] is String) {
+            joinStatus = null;
             offerReady.complete(data);
           } else if (data['op'] == 'error') {
             offerReady.completeError(
@@ -352,7 +429,11 @@ class P2pRoom extends ChangeNotifier {
       );
       _signalling = client;
       final offer = await offerReady.future.timeout(
-        const Duration(seconds: 40),
+        const Duration(seconds: 35),
+        onTimeout: () => throw StateError(
+          'No offer arrived from the host signalling socket. '
+          'Copy diagnostics to see the server state, or retry joining.',
+        ),
       );
       await join(name, {
         'type': 'offer',
@@ -366,13 +447,21 @@ class P2pRoom extends ChangeNotifier {
       final response = P2pLinks.parse(answerLink!);
       client.send({'op': 'answer', 'sdp': response['sdp']});
       oneLinkGuest = true;
+      joinStatus = null;
       answerLink = null; // One-link guests never need a manual response screen.
       _recordDiagnostic('guest answer sent through signalling Worker');
-    } on Object {
+    } on Object catch (error) {
+      _recordDiagnostic('guest join failed: ${error.runtimeType}');
+      // If WebSocket opened but no offer arrived, the status probe records
+      // whether the Worker still sees the host before returning the error.
+      if (client != null && guestPeer == null) {
+        await P2pSignalling.probeRoom(key, onDiagnostic: _recordSignalling);
+      }
       await client?.dispose();
       if (identical(_signalling, client)) _signalling = null;
       rethrow;
     } finally {
+      joinStatus = null;
       joiningOneLink = false;
       preparing = false;
       if (!_disposed) notifyListeners();
@@ -892,6 +981,7 @@ class P2pRoom extends ChangeNotifier {
     _disposed = true;
     _ai.pause();
     _clock?.cancel();
+    _signallingRetry?.cancel();
     if (isHost) P2pTransport.setHosting(false);
     unawaited(_signalling?.dispose());
     _rtc.dispose();
