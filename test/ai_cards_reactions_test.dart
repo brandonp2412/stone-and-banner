@@ -332,7 +332,7 @@ void main() {
       var state = stock(fixture(), 0, {Resource.wood: 3});
       state = stock(state, 1, {Resource.ore: 2});
       state = showProduction(state, 1, [Resource.ore]);
-      const proposal = ProposeTrade(1, Resource.wood, 1, Resource.ore, 1);
+      const proposal = ProposeTrade(-1, Resource.wood, 1, Resource.ore, 1);
       state = MatchEngine.apply(state, proposal);
       final id = state.offers.single.id;
       state = MatchEngine.apply(
@@ -353,7 +353,10 @@ void main() {
       expect(view.legalActions.any(isRepeat), isFalse);
       expect(view.legalActions.whereType<ProposeTrade>(), isEmpty);
       // The history boundary permits the same terms on a later turn.
-      final later = state.copyWith(events: [...state.events, const EndTurn()]);
+      final later = state.copyWith(
+        events: [...state.events, const EndTurn()],
+        offers: const [],
+      );
       expect(
         AiActionAdapter.observe(later, 0).legalActions.any(isRepeat),
         isTrue,
@@ -372,7 +375,7 @@ void main() {
     final offer = AiCardStrategy.propose(view);
     expect(offer, isA<ProposeTrade>());
     final trade = offer! as ProposeTrade;
-    expect(trade.target, 1);
+    expect(trade.target, -1);
     expect(trade.give, Resource.wood);
     expect(
       trade.giveCount,
@@ -408,11 +411,17 @@ void main() {
     final offer = AiCardStrategy.propose(view);
     expect(offer, isA<ProposeTrade>());
     final proposal = offer! as ProposeTrade;
-    expect(proposal.target, 1);
+    expect(proposal.target, -1);
     expect(proposal.give, Resource.wood);
     expect([Resource.wheat, Resource.ore], contains(proposal.want));
     final pending = AiActionAdapter.applySelected(proposing, view, proposal);
     expect(pending.offers, hasLength(1));
+    expect(pending.offers.single.canRespond(1), isTrue);
+    expect(
+      pending.offers.single.canRespond(2),
+      isTrue,
+      reason: 'Bot broadcasts must reach every other human seat',
+    );
     expect(AiCardStrategy.propose(AiActionAdapter.observe(pending, 0)), isNull);
     conserve(pending);
 

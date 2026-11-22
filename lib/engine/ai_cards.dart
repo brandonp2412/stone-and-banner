@@ -237,33 +237,40 @@ abstract final class AiCardStrategy {
   /// publicly visible build requirements and production are considered;
   /// another player's hidden hand is never inspected.
   static double _recipientAppeal(AiTurnView view, ProposeTrade offer) {
-    final goal = view.publicGoals[offer.target];
-    final production = view.publicProduction[offer.target];
-    // Asking for multiple copies of one good is particularly likely to fail:
-    // even a producing player may not have that much in hand.
+    // Broadcasts should be appealing to at least one *other* player, rather
+    // than checking the invalid seat -1 or peeking at anybody's hand.
     if (offer.wants.values.any((amount) => amount > 1)) return -1000;
+    final recipients = offer.target == -1
+        ? [
+            for (var i = 0; i < view.publicScores.length; i++)
+              if (i != view.seat) i,
+          ]
+        : [offer.target];
+    if (recipients.isEmpty) return -1000;
+    double appealFor(int seat) {
+      final goal = view.publicGoals[seat];
+      final production = view.publicProduction[seat];
+      double value(Resource good) {
+        final usefulForBuild = (goal[good] ?? 0) > 0;
+        final produces = production[good] ?? false;
+        final expansion = good == Resource.wood || good == Resource.brick
+            ? 0.7
+            : 0.0;
+        return (usefulForBuild ? 2.4 : 0.6) + (produces ? 0 : 0.85) + expansion;
+      }
 
-    double value(Resource good) {
-      final usefulForBuild = (goal[good] ?? 0) > 0;
-      final produces = production[good] ?? false;
-      // Roads are useful even when the next settlement upgrade needs ore.
-      final usefulForExpansion = good == Resource.wood || good == Resource.brick
-          ? 0.7
-          : 0.0;
-      return (usefulForBuild ? 2.4 : 0.6) +
-          (produces ? 0 : 0.85) +
-          usefulForExpansion;
+      final received = offer.gives.entries.fold<double>(
+        0,
+        (sum, entry) => sum + value(entry.key) * entry.value,
+      );
+      final paid = offer.wants.entries.fold<double>(
+        0,
+        (sum, entry) => sum + value(entry.key) * entry.value,
+      );
+      return received - paid;
     }
 
-    var received = 0.0;
-    for (final entry in offer.gives.entries) {
-      received += value(entry.key) * entry.value;
-    }
-    var paid = 0.0;
-    for (final entry in offer.wants.entries) {
-      paid += value(entry.key) * entry.value;
-    }
-    return received - paid;
+    return recipients.map(appealFor).reduce((a, b) => a > b ? a : b);
   }
 
   static MatchEvent? propose(AiTurnView view) {
@@ -277,6 +284,10 @@ abstract final class AiCardStrategy {
         .where(
           (offer) =>
               offer.counterOf == null &&
+              // A broadcast should be generous enough to be worth answering.
+              // Do not flood everybody with requests for equally valued goods.
+              offer.gives.values.fold<int>(0, (a, b) => a + b) >
+                  offer.wants.values.fold<int>(0, (a, b) => a + b) &&
               _bundleGain(view, offer.gives, offer.wants) > 0.5 &&
               _recipientAppeal(view, offer) > 0.75,
         )
@@ -294,17 +305,9 @@ abstract final class AiCardStrategy {
           1.25 * _recipientAppeal(view, offer);
     }
 
-    // Within comparably fair offers, avoid feeding the current leader.
-    final next = List.generate(view.publicScores.length, (i) => i)
-        .where((seat) => seat != view.seat)
-        .reduce((a, b) => view.publicScores[a] <= view.publicScores[b] ? a : b);
     candidates.sort((a, b) {
       final score = value(b).compareTo(value(a));
       if (score != 0) return score;
-      final target = (a.target == next ? 0 : 1).compareTo(
-        b.target == next ? 0 : 1,
-      );
-      if (target != 0) return target;
       final give = a.give.index.compareTo(b.give.index);
       return give != 0 ? give : a.want.index.compareTo(b.want.index);
     });

@@ -50,18 +50,23 @@ void main() {
         expect(rect.right <= size.width && rect.bottom <= size.height, isTrue);
         if (outward.dy.abs() >= outward.dx.abs() * .55) {
           verticalLabels++;
-          if (outward.dy < 0) {
+          if (size.width > size.height * 1.25 &&
+              boardBounds.left > labelSize.width + 24 &&
+              size.width - boardBounds.right > labelSize.width + 24) {
             expect(
-              rect.bottom,
-              lessThan(boardBounds.top),
-              reason: 'North dock overlaps board at $size',
+              rect.right < boardBounds.left || rect.left > boardBounds.right,
+              isTrue,
+              reason: 'Top/bottom dock must use a side gutter at $size',
             );
-          } else {
             expect(
               rect.top,
-              greaterThan(boardBounds.bottom),
-              reason: 'South dock overlaps board at $size',
+              greaterThan(60),
+              reason: 'Dock must not obscure the raid HUD at $size',
             );
+          } else if (outward.dy < 0) {
+            expect(rect.bottom, lessThan(boardBounds.top));
+          } else {
+            expect(rect.top, greaterThan(boardBounds.bottom));
           }
         }
       }

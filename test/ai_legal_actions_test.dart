@@ -202,8 +202,10 @@ void main() {
           // Sample complete candidate sets, not merely the chosen event.
           if (steps % 19 == 0) {
             for (final event in view.legalActions) {
+              // The trusted AI adapter converts an impossible acceptance of
+              // a non-reserving (since-spent) offer into a safe decline.
               expect(
-                () => MatchEngine.apply(state, event),
+                () => AiActionAdapter.applySelected(state, view, event),
                 returnsNormally,
                 reason: 'seed=$seed seats=$seats ${event.toJson()}',
               );

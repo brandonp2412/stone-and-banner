@@ -163,7 +163,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   int? _animatedRoad;
   int? _animatedRoadStart;
   Timer? _turnClock;
-  int _secondsLeft = 90;
+  int _secondsLeft = 90; // Set from online/offline rules at initialization.
   int? _expiredEventCount;
   bool _endModalDismissed = false;
   bool _hintsEnabled = true;
@@ -212,6 +212,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   GameplayHint? get _activeGameplayHint {
     if (!_hintsLoaded ||
         !_hintsEnabled ||
+        // Multiplayer instruction overlays can consume a timed turn. Players
+        // can still consult the rulebook without blocking each other's game.
+        widget.online ||
         widget.observing ||
         _dismissedHintContext == _hintContext) {
       return null;
@@ -321,6 +324,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _secondsLeft = widget.online ? 150 : 90;
     unawaited(loadResourceIcons());
     unawaited(_loadHints());
     _scheduleIncomingTrade();
@@ -784,8 +788,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
     if (move != _Move.inspect) {
       final radius = math.max(
-        22,
-        g.radius * (move == _Move.village || move == _Move.upgrade ? .4 : .45),
+        30,
+        g.radius * (move == _Move.village || move == _Move.upgrade ? .5 : .45),
       );
       for (final id in availableTargets) {
         if ((point - g.vertex(s.topology.vertices[id])).distance <= radius) {
@@ -852,7 +856,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           best = id;
         }
       }
-      if (best != null && distance <= math.max(22, g.radius * .4)) {
+      if (best != null && distance <= math.max(30, g.radius * .5)) {
         send(move == _Move.village ? PlaceVillage(best) : UpgradeSite(best));
       }
     } else if (move == _Move.road) {
@@ -1206,6 +1210,18 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 child: ListView.builder(
                   itemCount: options.length,
                   itemBuilder: (context, index) => ListTile(
+                    leading: SizedBox(
+                      width: 72,
+                      height: 47,
+                      child: CustomPaint(
+                        key: ValueKey('target-preview-${options[index]}'),
+                        painter: _TargetPreviewPainter(
+                          state: s,
+                          target: options[index],
+                          mode: move,
+                        ),
+                      ),
+                    ),
                     title: Text(targetDescription(options[index])),
                     minVerticalPadding: 5,
                     dense: true,
@@ -1276,7 +1292,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               width: mobileTrade ? double.infinity : 660,
               height: mobileTrade
                   ? MediaQuery.sizeOf(context).height
-                  : MediaQuery.sizeOf(context).height * (fromTray ? .75 : .9),
+                  : math.min(
+                      MediaQuery.sizeOf(context).height - (fromTray ? 90 : 32),
+                      fromTray ? 480.0 : 450.0,
+                    ),
               child: _TradeComposer(
                 state: counter == null ? s : s.copyWith(active: viewerSeat),
                 kind: kind,
@@ -1339,8 +1358,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           .firstOrNull;
       if (incoming == null) return;
       _notifiedTradeOfferIds.add(incoming.id);
-      _incomingTradeOpen = true;
-      _incomingDialogOfferId = incoming.id;
+      setState(() {
+        _incomingTradeOpen = true;
+        _incomingDialogOfferId = incoming.id;
+      });
       showDialog<void>(
         context: context,
         barrierDismissible: true,
@@ -1408,10 +1429,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           );
         },
       ).whenComplete(() {
-        _incomingTradeOpen = false;
-        _incomingDialogContext = null;
-        _incomingDialogOfferId = null;
-        if (mounted) _scheduleIncomingTrade();
+        if (!mounted) return;
+        setState(() {
+          _incomingTradeOpen = false;
+          _incomingDialogContext = null;
+          _incomingDialogOfferId = null;
+        });
+        _scheduleIncomingTrade();
       });
     });
   }
@@ -1419,9 +1443,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   final _panelScroll = List.generate(4, (_) => ScrollController());
 
   bool get _compact => MediaQuery.sizeOf(context).height < 350;
-  bool get _isLargeDesktop =>
-      MediaQuery.sizeOf(context).width >= 1200 &&
-      MediaQuery.sizeOf(context).height >= 550;
 
   int _tab = 0;
   // null: map; -1: full-screen actions.
@@ -1657,7 +1678,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if (oldWidget.state.turnSerial != s.turnSerial ||
         oldWidget.state.active != s.active ||
         oldWidget.state.actingSeat != s.actingSeat) {
-      _secondsLeft = 90;
+      _secondsLeft = widget.online ? 150 : 90;
       _expiredEventCount = null;
     }
     if (oldWidget.state.events.length != s.events.length ||
@@ -1827,21 +1848,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 deferAnimation: _rollingDice != null,
               ),
             ),
-            if (_isLargeDesktop)
-              Positioned.fill(
-                child: MatchActivity(
-                  key: const ValueKey('centered-desktop-emotes'),
-                  state: s,
-                  viewerSeat: viewerSeat,
-                  computerSeats: widget.computerSeats,
-                  emotesOnly: true,
-                  emote: widget.networkEmote ?? _emote,
-                  emoteSerial: widget.online && widget.onEmote != null
-                      ? widget.networkEmoteSerial
-                      : _emoteSerial,
-                  emoteSeat: widget.networkEmoteSeat,
-                ),
-              ),
             if (_discardMinimized && s.pendingDiscards.containsKey(viewerSeat))
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 106,
@@ -2588,10 +2594,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       final size = MediaQuery.sizeOf(context);
       final portrait = size.height > size.width && bounds.maxWidth < 600;
       final height = portrait
-          ? 104.0
+          ? 106.0
           : math.max(
               bounds.maxWidth < 900
-                  ? 44.0
+                  ? bounds.maxWidth < 720
+                        ? 44.0
+                        : 52.0
                   : _compact
                   ? 48.0
                   : 52.0,
@@ -2679,24 +2687,52 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                   Row(
                                     children: [
                                       SizedBox(
-                                        width: 29,
+                                        width: portrait ? 20 : 29,
                                         height: 40,
                                         child: Stack(
+                                          clipBehavior: Clip.none,
                                           children: [
                                             Align(
-                                              alignment: Alignment.center,
+                                              alignment: Alignment.topCenter,
                                               child: Icon(
                                                 i == s.active
                                                     ? Icons.flag_rounded
                                                     : Icons.shield_outlined,
-                                                size: 20,
+                                                size: portrait ? 16 : 20,
                                                 color: seatColors[i],
+                                              ),
+                                            ),
+                                            Positioned(
+                                              left: 0,
+                                              right: 0,
+                                              bottom: 0,
+                                              height: 21,
+                                              child: MatchActivity(
+                                                key: ValueKey(
+                                                  'player-emote-$i',
+                                                ),
+                                                state: s,
+                                                viewerSeat: viewerSeat,
+                                                targetSeat: i,
+                                                emotesOnly: true,
+                                                computerSeats:
+                                                    widget.computerSeats,
+                                                emote:
+                                                    widget.networkEmote ??
+                                                    _emote,
+                                                emoteSerial:
+                                                    widget.online &&
+                                                        widget.onEmote != null
+                                                    ? widget.networkEmoteSerial
+                                                    : _emoteSerial,
+                                                emoteSeat:
+                                                    widget.networkEmoteSeat,
                                               ),
                                             ),
                                           ],
                                         ),
                                       ),
-                                      const SizedBox(width: 6),
+                                      SizedBox(width: portrait ? 3 : 6),
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment:
@@ -2714,50 +2750,53 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                                 fontWeight: FontWeight.w700,
                                               ),
                                             ),
-                                            Text(
-                                              i == winner
-                                                  ? 'Winner'
-                                                  : i == s.active
-                                                  ? 'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.longestRoadHolder == i ? ' · Road +2' : ''}'
-                                                  : s.longestRoadHolder == i
-                                                  ? 'Longest road · +2 VP'
-                                                  : 'Realm ${i + 1}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                height: 1.2,
-                                                color: i == s.active
-                                                    ? seatColors[i]
-                                                    : const Color(0xffa6b6ba),
+                                            if (!portrait)
+                                              Text(
+                                                i == winner
+                                                    ? 'Winner'
+                                                    : i == s.active
+                                                    ? 'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.longestRoadHolder == i ? ' · Road +2' : ''}'
+                                                    : s.longestRoadHolder == i
+                                                    ? 'Longest road · +2 VP'
+                                                    : 'Realm ${i + 1}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  height: 1.2,
+                                                  color: i == s.active
+                                                      ? seatColors[i]
+                                                      : const Color(0xffa6b6ba),
+                                                ),
                                               ),
-                                            ),
                                           ],
                                         ),
                                       ),
                                       SizedBox(
-                                        width:
-                                            MediaQuery.textScalerOf(context)
-                                                .scale(20) *
-                                            1.4,
+                                        width: portrait
+                                            ? 22
+                                            : MediaQuery.textScalerOf(context)
+                                                      .scale(20) *
+                                                  1.4,
                                         child: Text(
                                           '${MatchEngine.score(s, i)}',
                                           textAlign: TextAlign.right,
                                           style: TextStyle(
                                             color: seatColors[i],
-                                            fontSize: 20,
+                                            fontSize: portrait ? 14 : 20,
                                             fontWeight: FontWeight.w800,
                                           ),
                                         ),
                                       ),
-                                      const Text(
-                                        ' /15',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          height: 1.2,
-                                          color: Color(0xffa6b6ba),
+                                      if (!portrait)
+                                        const Text(
+                                          ' /15',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            height: 1.2,
+                                            color: Color(0xffa6b6ba),
+                                          ),
                                         ),
-                                      ),
                                     ],
                                   ),
                                   Positioned.fill(
@@ -2766,7 +2805,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                       state: s,
                                       viewerSeat: viewerSeat,
                                       targetSeat: i,
-                                      showEmotes: !_isLargeDesktop,
+                                      showEmotes: false,
                                       computerSeats: widget.computerSeats,
                                       emote: widget.networkEmote ?? _emote,
                                       emoteSerial:
@@ -3703,6 +3742,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         TradeMarket(
           state: s,
           computerSeats: widget.computerSeats,
+          hiddenIncomingOfferId: _incomingTradeOpen
+              ? _incomingDialogOfferId
+              : null,
           allowOffers: !widget.observing,
           allowCounters: !widget.observing || widget.tradeReplyAllowed,
           privateOpponentHands: widget.online,
@@ -5061,6 +5103,59 @@ class BoardGeometry {
         math.sqrt(3) * radius * (p.q + p.r / 2) * horizontalScale,
         1.5 * radius * p.r * verticalScale,
       );
+}
+
+/// A spatial locator alongside each legal-target row, so the numbers in a
+/// long junction list correspond to an actual part of the board.
+class _TargetPreviewPainter extends CustomPainter {
+  const _TargetPreviewPainter({
+    required this.state,
+    required this.target,
+    required this.mode,
+  });
+
+  final MatchState state;
+  final int target;
+  final _Move mode;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final full = BoardGeometry(const Size(700, 560));
+    final vertices = state.topology.vertices.map(full.vertex).toList();
+    final left = vertices.map((p) => p.dx).reduce(math.min);
+    final right = vertices.map((p) => p.dx).reduce(math.max);
+    final top = vertices.map((p) => p.dy).reduce(math.min);
+    final bottom = vertices.map((p) => p.dy).reduce(math.max);
+    Offset mini(Offset point) => Offset(
+      5 + (point.dx - left) / math.max(1, right - left) * (size.width - 10),
+      4 + (point.dy - top) / math.max(1, bottom - top) * (size.height - 8),
+    );
+    final edgePaint = Paint()
+      ..color = const Color(0xff557177)
+      ..strokeWidth = 1.3;
+    for (final edge in state.topology.edges) {
+      canvas.drawLine(
+        mini(vertices[edge.a]),
+        mini(vertices[edge.b]),
+        edgePaint,
+      );
+    }
+    final selected = switch (mode) {
+      _Move.road => () {
+        final edge = state.topology.edges[target];
+        return mini((vertices[edge.a] + vertices[edge.b]) / 2);
+      }(),
+      _Move.bandit => mini(full.tile(state.board.tiles[target].position)),
+      _ => mini(vertices[target]),
+    };
+    canvas.drawCircle(selected, 6.2, Paint()..color = const Color(0xff101e25));
+    canvas.drawCircle(selected, 4.5, Paint()..color = const Color(0xffffd679));
+    canvas.drawCircle(selected, 1.7, Paint()..color = const Color(0xff101e25));
+  }
+
+  @override
+  bool shouldRepaint(covariant _TargetPreviewPainter old) =>
+      state != old.state || target != old.target || mode != old.mode;
 }
 
 class _Painter extends CustomPainter {

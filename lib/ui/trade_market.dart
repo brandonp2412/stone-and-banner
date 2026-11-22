@@ -20,6 +20,7 @@ class TradeMarket extends StatelessWidget {
     this.privateOpponentHands = false,
     this.computerSeats = const <int>{},
     this.onlyIncomingOfferId,
+    this.hiddenIncomingOfferId,
   });
 
   final MatchState state;
@@ -39,6 +40,9 @@ class TradeMarket extends StatelessWidget {
   /// The Trade tab still shows all pending offers.
   final int? onlyIncomingOfferId;
 
+  /// This offer is already shown in the incoming-trade dialog.
+  final int? hiddenIncomingOfferId;
+
   static const ink = Color(0xff172b33);
   static const border = Color(0xff37515a);
   static const gold = Color(0xffe5c183);
@@ -55,6 +59,7 @@ class TradeMarket extends StatelessWidget {
         .where(
           (o) =>
               o.canRespond(viewerSeat) &&
+              o.id != hiddenIncomingOfferId &&
               (onlyIncomingOfferId == null || o.id == onlyIncomingOfferId),
         )
         .toList();
@@ -155,9 +160,11 @@ class TradeMarket extends StatelessWidget {
                   color: Color(0xffe5c183),
                 ),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Roll or resolve the current event before trading.',
+                    state.active != viewerSeat
+                        ? 'Waiting for ${state.players[state.active].id}…'
+                        : 'Roll or resolve the current event before trading.',
                     style: TextStyle(color: Color(0xffaec2c6), fontSize: 12),
                   ),
                 ),

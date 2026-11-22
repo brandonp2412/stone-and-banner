@@ -1099,7 +1099,10 @@ class P2pRoom extends ChangeNotifier {
     }
     _clock?.cancel();
     _clockKey = key;
-    _clock = Timer(const Duration(seconds: 90), () {
+    // A human needs enough time to inspect offers and compose a reply before
+    // the host automatically advances the match. AI actions do not use this
+    // allowance; they run on their own bounded cadence.
+    _clock = Timer(const Duration(seconds: 150), () {
       final current = room!.state;
       if (current == null) return;
       final tactical = current.tactical;

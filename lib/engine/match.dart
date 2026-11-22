@@ -2516,7 +2516,11 @@ class MatchEngine {
           : original.target;
       _require(
         original == null ||
-            (original.proposer == s.active || original.target == s.active),
+            original.proposer == s.active ||
+            original.target == s.active ||
+            // A standing broadcast may be countered on a recipient's own turn,
+            // even when its original proposer is no longer active.
+            (original.target == -1 && original.canRespond(proposer)),
         'Cannot counter an unrelated turn.',
       );
       _require(s.phase == MatchPhase.actions, 'Offer during your actions.');

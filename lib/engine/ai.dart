@@ -176,18 +176,29 @@ abstract final class AiActionAdapter {
     final grievances = TradeSentiment.grievances(state, seat);
     final distinct = <String, MatchEvent>{};
     for (final action in actions) {
-      if (action is ProposeTrade &&
-          action.counterOf == null &&
-          (!TradeSentiment.willingToOffer(
+      if (action is ProposeTrade && action.counterOf == null) {
+        // A broadcast is valid when at least one opponent could plausibly
+        // supply the requested goods. Everyone still receives the invitation.
+        // Never index the private/public player arrays using target -1.
+        final recipients = action.target == -1
+            ? [
+                for (var i = 0; i < state.players.length; i++)
+                  if (i != seat) i,
+              ]
+            : [action.target];
+        final feasible = recipients.any(
+          (recipient) =>
+              TradeSentiment.willingToOffer(
                 state,
                 seat,
-                action.target,
-                grievances[action.target] ?? 0,
-              ) ||
-              !action.wants.keys.every(
-                (good) => recipientCanProduce(state, action.target, good),
-              ))) {
-        continue;
+                recipient,
+                grievances[recipient] ?? 0,
+              ) &&
+              action.wants.keys.every(
+                (good) => recipientCanProduce(state, recipient, good),
+              ),
+        );
+        if (!feasible) continue;
       }
       distinct.putIfAbsent(jsonEncode(action.toJson()), () => action);
     }
@@ -620,20 +631,20 @@ abstract final class AiActionAdapter {
           final paid = gives.values.fold<int>(0, (a, b) => a + b);
           final asked = wants.values.fold<int>(0, (a, b) => a + b);
           if (asked > paid || paid > asked * 2) continue;
-          for (var target = 0; target < s.players.length; target++) {
-            if (target == s.active) continue;
-            actions.add(
-              ProposeTrade(
-                target,
-                gives.keys.first,
-                gives.values.first,
-                wants.keys.first,
-                wants.values.first,
-                giveBundle: gives,
-                wantBundle: wants,
-              ),
-            );
-          }
+          // Original AI offers are always broadcasts. Every human sees the
+          // same trade, and at most one recipient can accept it. Counters
+          // remain addressed to the original proposer.
+          actions.add(
+            ProposeTrade(
+              -1,
+              gives.keys.first,
+              gives.values.first,
+              wants.keys.first,
+              wants.values.first,
+              giveBundle: gives,
+              wantBundle: wants,
+            ),
+          );
         }
       }
     }
