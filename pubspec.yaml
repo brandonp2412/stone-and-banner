@@ -1,7 +1,7 @@
 name: stone_and_banner
 description: "Turn-based strategy game of settlements, trading, knights, raids and multiplayer."
 publish_to: none
-version: 0.8.4+2023
+version: 0.8.4+2025
 environment:
   sdk: ^3.13.4
 dependencies:

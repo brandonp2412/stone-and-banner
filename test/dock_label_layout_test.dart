@@ -225,6 +225,23 @@ void main() {
     }
   });
 
+  test('portrait board uses available height instead of staying flattened', () {
+    final topology = tableWithSupplies().topology;
+    for (final size in [const Size(360, 630), const Size(393, 695)]) {
+      final geometry = BoardGeometry(size);
+      final points = topology.vertices.map(geometry.vertex).toList();
+      final boardHeight =
+          points.map((p) => p.dy).reduce(math.max) -
+          points.map((p) => p.dy).reduce(math.min);
+      expect(
+        boardHeight,
+        greaterThan(size.height * .45),
+        reason: 'Portrait board should occupy most available map height',
+      );
+      expect(geometry.verticalFactor, greaterThan(geometry.horizontalFactor));
+    }
+  });
+
   test('landscape board reclaims the vertical dock-label gutter', () {
     const size = Size(1536, 508);
     final previousRadius =

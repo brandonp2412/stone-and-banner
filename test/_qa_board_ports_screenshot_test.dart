@@ -15,6 +15,9 @@ void main() {
     ('medium', const Size(1024, 550)),
     ('compact', const Size(844, 390)),
     ('small', const Size(640, 320)),
+    ('samsung', const Size(780, 360)),
+    ('portrait-s25', const Size(360, 780)),
+    ('portrait-tall', const Size(393, 852)),
   ]) {
     testWidgets('Capture port labels $name', (tester) async {
       tester.view.physicalSize = size;

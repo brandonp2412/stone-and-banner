@@ -7,6 +7,7 @@ import 'compact_layout.dart';
 import 'package:flutter/material.dart';
 
 import 'dock_label_layout.dart';
+import 'dock_leader_paths.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -5076,32 +5077,48 @@ class BoardGeometry {
   final Size size;
   static const horizontalScale = 1.28;
   static const verticalScale = .72;
-  // Wide boards can expand vertically once the dock badges fit beside them.
-  // Across this fixed 19-hex topology the extreme coast is 5.54 radii
-  // from centre horizontally. Reserve enough room for a 2:1 resource badge.
+
+  // Landscape uses the oblique tabletop projection. In portrait, retaining
+  // that same squashed projection makes the hexes occupy barely a quarter of
+  // the screen, leaving enormous empty bands above and below the board.
+  // Use near-natural hex proportions when the available canvas is taller.
+  bool get isPortrait => size.height > size.width * 1.10;
+  double get horizontalFactor => isPortrait ? .98 : horizontalScale;
+  double get verticalFactor => isPortrait ? 1.12 : verticalScale;
+
   double get radius {
+    if (isPortrait) {
+      // Keep room above/below the terrain for all dock labels and the
+      // raid/actions overlays, while filling the phone's usable width.
+      return math.min(
+        size.width / (9.6 * horizontalFactor),
+        math.max(1, size.height - 112) / (8 * verticalFactor),
+      );
+    }
+    // The standard board spans 8 lattice units vertically. With sufficient
+    // side gutters, port labels no longer require a 64px vertical reserve.
     const sideBadgeGutter = 130.0;
     final fullHeightRadius =
-        math.max(1, size.height - 16) / (8 * verticalScale);
+        math.max(1, size.height - 16) / (8 * verticalFactor);
     final sideBadgesFit =
         size.width > size.height * 1.25 &&
         size.width / 2 - fullHeightRadius * 5.54 > sideBadgeGutter;
     return math.min(
-      size.width / (9.2 * horizontalScale),
-      math.max(1, size.height - (sideBadgesFit ? 16 : 64)) /
-          (8 * verticalScale),
+      size.width / (9.2 * horizontalFactor),
+      math.max(1, size.height - (sideBadgesFit ? 30 : 64)) /
+          (8 * verticalFactor),
     );
   }
 
   Offset get center => Offset(size.width / 2, size.height / 2);
   Offset vertex(BoardVertex p) =>
       center +
-      Offset(p.x * radius * horizontalScale, p.y * radius * verticalScale);
+      Offset(p.x * radius * horizontalFactor, p.y * radius * verticalFactor);
   Offset tile(HexCoord p) =>
       center +
       Offset(
-        math.sqrt(3) * radius * (p.q + p.r / 2) * horizontalScale,
-        1.5 * radius * p.r * verticalScale,
+        math.sqrt(3) * radius * (p.q + p.r / 2) * horizontalFactor,
+        1.5 * radius * p.r * verticalFactor,
       );
 }
 
@@ -5215,8 +5232,8 @@ class _Painter extends CustomPainter {
         final p =
             c +
             Offset(
-              radius * math.cos(angle) * BoardGeometry.horizontalScale,
-              radius * math.sin(angle) * BoardGeometry.verticalScale,
+              radius * math.cos(angle) * g.horizontalFactor,
+              radius * math.sin(angle) * g.verticalFactor,
             );
         if (n == 0) {
           hex.moveTo(p.dx, p.dy);
@@ -5243,7 +5260,7 @@ class _Painter extends CustomPainter {
       canvas.clipPath(hex);
       canvas.translate(c.dx, c.dy);
       // The board uses an oblique projection, but artwork must stay isotropic.
-      _terrain(canvas, Offset.zero, radius, tile.land);
+      _terrain(canvas, Offset.zero, radius, tile.land, g);
       canvas.restore();
       canvas.drawPath(
         hex,
@@ -5820,16 +5837,55 @@ class _Painter extends CustomPainter {
       ],
     );
 
-    // Paint all shore markers and leaders first. Painting each badge in the
-    // same loop lets the next dock's leader overwrite an earlier badge.
-    for (var i = 0; i < docks.length; i++) {
-      final dock = docks[i];
-      final label = labels[i];
-      final badge = Rect.fromCenter(
-        center: label,
-        width: dock.text.width + 12,
-        height: dock.text.height + 8,
+    final leaderPaths = layoutDockLeaderPaths(
+      size: size,
+      tileCenters: [
+        for (final tile in state.board.tiles) g.tile(tile.position),
+      ],
+      radius: g.radius,
+      horizontalFactor: g.horizontalFactor,
+      verticalFactor: g.verticalFactor,
+      requests: [
+        for (var i = 0; i < docks.length; i++)
+          DockLeaderRequest(
+            shore: docks[i].midpoint,
+            badge: Rect.fromCenter(
+              center: labels[i],
+              width: docks[i].text.width + 12,
+              height: docks[i].text.height + 8,
+            ),
+          ),
+      ],
+    );
+
+    // The shore leads are routed through water, not diagonally over tiles.
+    // Paint every lead before badges so no line can overwrite text.
+    for (final points in leaderPaths) {
+      if (points.length < 2) continue;
+      final route = Path()..moveTo(points.first.dx, points.first.dy);
+      for (final point in points.skip(1)) {
+        route.lineTo(point.dx, point.dy);
+      }
+      canvas.drawPath(
+        route,
+        Paint()
+          ..color = const Color(0xff101c24)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
       );
+      canvas.drawPath(
+        route,
+        Paint()
+          ..color = const Color(0xfff0d493)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.7
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
+    for (final dock in docks) {
       canvas.drawLine(
         dock.a,
         dock.b,
@@ -5847,30 +5903,6 @@ class _Painter extends CustomPainter {
         dock.midpoint,
         2.8,
         Paint()..color = const Color(0xffffefba),
-      );
-      final delta = label - dock.midpoint;
-      final xFraction = delta.dx.abs() < .001
-          ? double.infinity
-          : (badge.width / 2) / delta.dx.abs();
-      final yFraction = delta.dy.abs() < .001
-          ? double.infinity
-          : (badge.height / 2) / delta.dy.abs();
-      final boundary = label - delta * math.min(xFraction, yFraction);
-      canvas.drawLine(
-        dock.midpoint,
-        boundary,
-        Paint()
-          ..color = const Color(0xff101c24)
-          ..strokeWidth = 4.6
-          ..strokeCap = StrokeCap.round,
-      );
-      canvas.drawLine(
-        dock.midpoint,
-        boundary,
-        Paint()
-          ..color = const Color(0xffffe1a0)
-          ..strokeWidth = 2.3
-          ..strokeCap = StrokeCap.round,
       );
     }
     for (var i = 0; i < docks.length; i++) {
@@ -5898,7 +5930,7 @@ class _Painter extends CustomPainter {
 
   // Geometric marks are fixed decorations for each terrain.
   // They never read or advance the match's random event stream.
-  void _terrain(Canvas canvas, Offset c, double r, Land land) {
+  void _terrain(Canvas canvas, Offset c, double r, Land land, BoardGeometry g) {
     final resource = switch (land) {
       Land.woodland => Resource.wood,
       Land.clayBeds => Resource.brick,
@@ -5910,7 +5942,7 @@ class _Painter extends CustomPainter {
     if (resource == null) {
       // Only the barren terrain decoration follows the board projection.
       canvas.save();
-      canvas.scale(BoardGeometry.horizontalScale, BoardGeometry.verticalScale);
+      canvas.scale(g.horizontalFactor, g.verticalFactor);
       final dune = Paint()
         ..color = const Color(0xffe9cf91).withValues(alpha: .4)
         ..style = PaintingStyle.stroke
@@ -5934,7 +5966,7 @@ class _Painter extends CustomPainter {
     for (final side in [-1.0, 1.0]) {
       paintResourceIcon(
         canvas,
-        c + Offset(side * r * .60 * BoardGeometry.horizontalScale, 0),
+        c + Offset(side * r * .60 * g.horizontalFactor, 0),
         r * .42,
         resource,
       );
