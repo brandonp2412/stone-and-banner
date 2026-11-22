@@ -92,14 +92,18 @@ void main() {
     await tester.tap(find.text('Realm'));
     await tester.pumpAndSettle();
     expect(
-      find.byKey(const PageStorageKey('panel-2')),
+      find.byKey(const PageStorageKey('panel-3')),
       findsOneWidget,
-      reason: 'Off-turn tab taps stay on the current panel',
+      reason: 'Desktop tabs remain navigable on another player’s turn',
     );
-    for (var seat = 0; seat < initial.players.length; seat++) {
-      expect(find.byKey(ValueKey('public-realm-$seat')), findsNothing);
-    }
-    expect(find.text('Town Developments'), findsNothing);
+    expect(find.text('Town Developments'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(
+        find.byKey(const ValueKey('quick-innovation-development')),
+      ).onPressed,
+      isNull,
+      reason: 'Viewing the realm cannot grant off-turn development actions',
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

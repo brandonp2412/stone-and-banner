@@ -9,6 +9,7 @@ import '../engine/match.dart';
 import '../engine/cards.dart';
 import '../engine/trade_sentiment.dart';
 import 'trade_feedback.dart';
+import 'emote_icon.dart';
 
 /// Presentation-only feedback: every cue is derived from a committed event.
 /// No animation enters the reducer, replay, random seed, or network protocol.
@@ -19,6 +20,8 @@ class MatchActivity extends StatefulWidget {
     required this.viewerSeat,
     this.computerSeats = const <int>{},
     this.targetSeat,
+    this.emotesOnly = false,
+    this.showEmotes = true,
     this.emote,
     this.emoteSerial = 0,
     this.emoteSeat,
@@ -28,6 +31,7 @@ class MatchActivity extends StatefulWidget {
   final int viewerSeat;
   final Set<int> computerSeats;
   final int? targetSeat;
+  final bool emotesOnly, showEmotes;
   final String? emote;
   final int emoteSerial;
   final int? emoteSeat;
@@ -83,7 +87,9 @@ class _MatchActivityState extends State<MatchActivity> {
   @override
   void didUpdateWidget(covariant MatchActivity oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.emoteSerial != oldWidget.emoteSerial && widget.emote != null) {
+    if (widget.showEmotes &&
+        widget.emoteSerial != oldWidget.emoteSerial &&
+        widget.emote != null) {
       _reply?.cancel();
       _showEmote(widget.emote!, widget.emoteSeat ?? widget.viewerSeat);
       // Bot replies are cosmetic and only belong to local reactions.
@@ -104,10 +110,13 @@ class _MatchActivityState extends State<MatchActivity> {
         });
       }
     }
+    if (widget.emotesOnly) return;
     final state = widget.state;
     if (state.events.length <= oldWidget.state.events.length) return;
     final event = state.events.last;
-    final actor = event is RespondTactical
+    final actor = event is DiscardResources
+        ? event.player
+        : event is RespondTactical
         ? event.player
         : event is RespondTrade
         ? event.player
@@ -263,10 +272,18 @@ class _MatchActivityState extends State<MatchActivity> {
 
     switch (event) {
       case DiscardResources():
+        if (event.player == widget.viewerSeat) return null;
+        final name = state.players[event.player].id;
+        final jokes = [
+          '$name just paid the bandit tax. Embarrassing.',
+          '$name got mugged by basic arithmetic.',
+          '$name donated to the Bad Decisions Fund.',
+          '$name’s pockets have officially surrendered.',
+        ];
         return cue(
           '📦',
-          '${state.players[event.player].id} discards resources',
-          '${event.goods.values.fold<int>(0, (a, b) => a + b)} goods returned to the bank',
+          jokes[index % jokes.length],
+          '${event.goods.values.fold<int>(0, (a, b) => a + b)} resources gone. Absolutely tragic.',
           color: blue,
         );
       // Ordinary moves already animate on the board; no duplicate pop-up.
@@ -532,18 +549,12 @@ class _MatchActivityState extends State<MatchActivity> {
                           vertical: 2,
                         ),
                         child: cue.isEmote
-                            ? Text(
-                                cue.emoji,
-                                style: const TextStyle(fontSize: 17, height: 1),
-                              )
+                            ? GameEmoteIcon(cue.emoji, size: 17)
                             : SizedBox(
                                 width: 110,
                                 child: Row(
                                   children: [
-                                    Text(
-                                      cue.emoji,
-                                      style: const TextStyle(fontSize: 18),
-                                    ),
+                                    GameEmoteIcon(cue.emoji, size: 18),
                                     const SizedBox(width: 3),
                                     Expanded(
                                       child: Text(
@@ -566,6 +577,35 @@ class _MatchActivityState extends State<MatchActivity> {
                     ),
                   ),
                 ),
+        ),
+      );
+    }
+    if (widget.emotesOnly) {
+      final cue = _cue;
+      return IgnorePointer(
+        child: Center(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 230),
+            child: cue == null
+                ? const SizedBox.shrink(key: ValueKey('center-emote-empty'))
+                : Column(
+                    key: ValueKey('center-emote-${cue.index}'),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GameEmoteIcon(cue.emoji, size: 94),
+                      const SizedBox(height: 5),
+                      Text(
+                        widget.state.players[cue.seat].id,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          shadows: [Shadow(blurRadius: 9, color: Colors.black)],
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
         ),
       );
     }
@@ -633,13 +673,9 @@ class _ActivityCard extends StatelessWidget {
                       child: CustomPaint(painter: _CheekyDevilPainter()),
                     ),
                   )
-                : Text(
+                : GameEmoteIcon(
                     cue.emoji,
-                    style: TextStyle(
-                      fontSize: MediaQuery.sizeOf(context).width < 900
-                          ? 22
-                          : 32,
-                    ),
+                    size: MediaQuery.sizeOf(context).width < 900 ? 22 : 32,
                   ),
           ),
           SizedBox(width: MediaQuery.sizeOf(context).width < 900 ? 6 : 12),

@@ -24,6 +24,7 @@ import 'trade_leg.dart';
 import 'focus_hint.dart';
 import 'gameplay_hint.dart';
 import 'match_activity.dart';
+import 'emote_icon.dart';
 import 'match_end_modal.dart';
 import 'board_event_effects.dart';
 import 'dice_roll.dart';
@@ -304,6 +305,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   }
 
   late final AnimationController _numberPulseController;
+  late final AnimationController _banditBlockController;
+  int? _humiliatedBanditTile;
   late final AnimationController _cardsTabController;
   late final AnimationController _cityFallController;
   late final AnimationController _longestRoadController;
@@ -436,6 +439,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     _numberPulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1550),
+      value: 1,
+    );
+    _banditBlockController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1850),
       value: 1,
     );
   }
@@ -809,9 +817,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           math.min(18, g.radius * .3)) {
         return s.sites.containsKey(id)
             ? 'Upgrade settlement · ${_upgradeCostLabel()}'
-            : MatchEngine.legalRecruit(s, id)
-            ? 'Build Knight · ${_costLabel(MatchEngine.recruitCost)}'
-            : 'Build village · ${_costLabel(MatchEngine.villageCost)}';
+            : MatchEngine.legalVillage(s, id)
+            ? 'Build a settlement · ${_costLabel(MatchEngine.villageCost)}'
+            : 'Build Knight · ${_costLabel(MatchEngine.recruitCost)}';
       }
     }
     final road = _roadNear(point, g, [
@@ -1050,15 +1058,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     child: const Text('Upgrade settlement'),
                   ),
                 if (canVillage)
-                  FilledButton.tonal(
+                  FilledButton(
                     onPressed: () =>
                         Navigator.pop(context, PlaceVillage(vertex)),
                     child: Text(
-                      'Village · ${_costLabel(MatchEngine.villageCost)}',
+                      'Build settlement · ${_costLabel(MatchEngine.villageCost)}',
                     ),
                   ),
                 if (canRecruit)
-                  FilledButton(
+                  OutlinedButton(
                     key: const ValueKey('build-knight-at-junction'),
                     onPressed: () =>
                         Navigator.pop(context, RecruitKnight(vertex)),
@@ -1411,6 +1419,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   final _panelScroll = List.generate(4, (_) => ScrollController());
 
   bool get _compact => MediaQuery.sizeOf(context).height < 350;
+  bool get _isLargeDesktop =>
+      MediaQuery.sizeOf(context).width >= 1200 &&
+      MediaQuery.sizeOf(context).height >= 550;
 
   int _tab = 0;
   // null: map; -1: full-screen actions.
@@ -1439,6 +1450,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     _newCardTimer?.cancel();
     _roadController.dispose();
     _numberPulseController.dispose();
+    _banditBlockController.dispose();
     _cardsTabController.dispose();
     _cityFallController.dispose();
     _longestRoadController.dispose();
@@ -1562,6 +1574,22 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
     if (rolled && !MediaQuery.disableAnimationsOf(context)) {
       _numberPulseController.forward(from: 0);
+    }
+    final blockedRobbery = s.events
+        .skip(oldWidget.state.events.length)
+        .any(
+          (event) =>
+              event is RespondTactical &&
+              event.choice == TacticalChoice.intercept,
+        );
+    if ((rolled &&
+            s.dice != null &&
+            s.board.tiles[s.banditTile].productionNumber == s.dice) ||
+        blockedRobbery) {
+      _humiliatedBanditTile = s.banditTile;
+      if (!MediaQuery.disableAnimationsOf(context)) {
+        _banditBlockController.forward(from: 0);
+      }
     }
     // Animate roads built by either a human or a computer. No game-state
     // changes are needed: this is purely visual, so replay stays deterministic.
@@ -1799,6 +1827,21 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 deferAnimation: _rollingDice != null,
               ),
             ),
+            if (_isLargeDesktop)
+              Positioned.fill(
+                child: MatchActivity(
+                  key: const ValueKey('centered-desktop-emotes'),
+                  state: s,
+                  viewerSeat: viewerSeat,
+                  computerSeats: widget.computerSeats,
+                  emotesOnly: true,
+                  emote: widget.networkEmote ?? _emote,
+                  emoteSerial: widget.online && widget.onEmote != null
+                      ? widget.networkEmoteSerial
+                      : _emoteSerial,
+                  emoteSeat: widget.networkEmoteSeat,
+                ),
+              ),
             if (_discardMinimized && s.pendingDiscards.containsKey(viewerSeat))
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 106,
@@ -2535,10 +2578,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     },
     itemBuilder: (context) => [
       for (final emoji in ['👋', '😄', '😤', '😏', '👏', '🤝'])
-        PopupMenuItem(
-          value: emoji,
-          child: Text(emoji, style: const TextStyle(fontSize: 24)),
-        ),
+        PopupMenuItem(value: emoji, child: GameEmoteIcon(emoji, size: 24)),
     ],
   );
 
@@ -2726,6 +2766,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                       state: s,
                                       viewerSeat: viewerSeat,
                                       targetSeat: i,
+                                      showEmotes: !_isLargeDesktop,
                                       computerSeats: widget.computerSeats,
                                       emote: widget.networkEmote ?? _emote,
                                       emoteSerial:
@@ -2948,6 +2989,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             roadCelebration: _longestRoadController,
                             highlightedRoads: _longestRoadRoute,
                             numberPulse: _numberPulseController,
+                            banditBlock: _banditBlockController,
+                            humiliatedBanditTile: _humiliatedBanditTile,
                           ),
                           child: SizedBox.expand(
                             child: Stack(
@@ -3224,7 +3267,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               message: label,
               child: InkWell(
                 onTap:
-                    widget.observing &&
+                    MediaQuery.sizeOf(context).width < 900 &&
+                        widget.observing &&
                         !(index == 1 && widget.tradeReplyAllowed)
                     ? null
                     : () {
@@ -5028,6 +5072,8 @@ class _Painter extends CustomPainter {
     required this.roadCelebration,
     required this.highlightedRoads,
     required this.numberPulse,
+    required this.banditBlock,
+    this.humiliatedBanditTile,
     this.showTargets = true,
     this.hoverBuilds = false,
     this.hoveredRoad,
@@ -5041,6 +5087,7 @@ class _Painter extends CustomPainter {
            roadReveal,
            roadCelebration,
            numberPulse,
+           banditBlock,
            resourceIconStyle,
            resourceIconsRevision,
          ]),
@@ -5058,6 +5105,8 @@ class _Painter extends CustomPainter {
   final Animation<double> roadCelebration;
   final List<int> highlightedRoads;
   final Animation<double> numberPulse;
+  final Animation<double> banditBlock;
+  final int? humiliatedBanditTile;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -5190,13 +5239,72 @@ class _Painter extends CustomPainter {
           );
         }
       }
+    }
+    // Paint the Bandit above every hex, including its humiliation stamp.
+    {
+      final i = state.banditTile;
+      final c = g.tile(state.board.tiles[i].position);
+      final radius = g.radius;
       if (i == state.banditTile) {
+        // Keep the production number unobscured; shame the robber whenever
+        // the blocked number rolls or a knight stops a robbery.
+        final bandit = c + Offset(radius * .51, -radius * .29);
+        final progress = banditBlock.value;
+        final humiliation = humiliatedBanditTile == i && progress < 1
+            ? math.sin(progress * math.pi).abs()
+            : 0.0;
+        canvas.save();
+        canvas.translate(
+          bandit.dx +
+              math.sin(progress * math.pi * 12) * radius * .12 * humiliation,
+          bandit.dy + radius * .08 * humiliation,
+        );
+        canvas.rotate(math.sin(progress * math.pi * 7) * .24 * humiliation);
+        canvas.scale(1 + .23 * humiliation, 1 - .32 * humiliation);
         canvas.drawCircle(
-          c,
-          radius * .25,
+          Offset.zero,
+          radius * .22,
           Paint()..color = const Color(0xff262d37),
         );
-        _label(canvas, 'B', c, radius * .23, Colors.white);
+        _label(canvas, 'B', Offset.zero, radius * .22, Colors.white);
+        canvas.restore();
+        if (humiliation > .03) {
+          canvas.drawCircle(
+            bandit,
+            radius * (.25 + humiliation * .18),
+            Paint()
+              ..color = const Color(0xffff6565).withValues(alpha: humiliation)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 3.5,
+          );
+          final stamp = Rect.fromCenter(
+            center:
+                bandit +
+                Offset(-radius * .20, -radius * (.34 + .08 * humiliation)),
+            width: radius * 1.22,
+            height: radius * .37,
+          );
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(stamp, const Radius.circular(6)),
+            Paint()
+              ..color = const Color(0xff9a292c)
+                  .withValues(alpha: .95 * humiliation),
+          );
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(stamp, const Radius.circular(6)),
+            Paint()
+              ..color = const Color(0xffffefbf).withValues(alpha: humiliation)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.5,
+          );
+          _label(
+            canvas,
+            'NOPE!',
+            stamp.center,
+            radius * .27,
+            Colors.white.withValues(alpha: humiliation),
+          );
+        }
       }
     }
     // Only preview the edge under the pointer; previews are not built roads.
@@ -5738,5 +5846,7 @@ class _Painter extends CustomPainter {
       !_sameTargets(old.cardTileTargets, cardTileTargets) ||
       old.selectedKnight != selectedKnight ||
       old.animatedRoad != animatedRoad ||
-      old.roadReveal != roadReveal;
+      old.roadReveal != roadReveal ||
+      old.banditBlock != banditBlock ||
+      old.humiliatedBanditTile != humiliatedBanditTile;
 }

@@ -37,8 +37,10 @@ void main() {
         await tester.pumpAndSettle();
         expect(
           find.text('Player trade'),
-          findsNothing,
-          reason: 'Tabs do not navigate while it is another player’s turn',
+          mobile ? findsNothing : findsOneWidget,
+          reason: mobile
+              ? 'Mobile tabs stay inert outside the player’s turn'
+              : 'Desktop tabs stay navigable outside the player’s turn',
         );
         expect(events, isEmpty);
         await tester.pumpWidget(view(false));
