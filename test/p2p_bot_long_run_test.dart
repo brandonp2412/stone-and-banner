@@ -112,6 +112,49 @@ void main() {
     );
   });
 
+  test(
+    'broadcast batch authorizes each bot responder, not the first seat',
+    () async {
+      final room = P2pRoom(botMoveDelay: Duration.zero);
+      addTearDown(room.dispose);
+      room.host('Host', 3, 71244);
+      room.setBotCount(2);
+      room.start();
+      room.replaceHostStateForTest((current) {
+        final players = current.players.toList();
+        players[0] = players[0].copyWith(stores: {Resource.wood: 3});
+        players[1] = players[1].copyWith(stores: {Resource.wheat: 1});
+        players[2] = players[2].copyWith(stores: const {});
+        return MatchEngine.apply(
+          current.copyWith(
+            phase: MatchPhase.actions,
+            active: 0,
+            players: players,
+          ),
+          const ProposeTrade(-1, Resource.wood, 3, Resource.wheat, 1),
+        );
+      });
+      await room.aiSettled.timeout(const Duration(seconds: 8));
+      expect(room.aiError, isNull);
+      final replies = room.authoritativeStateForTest!.events
+          .whereType<RespondTrade>()
+          .toList();
+      expect(replies.map((r) => (r.player, r.accept)).toList(), [
+        (2, false),
+        (1, true),
+      ], reason: 'Declining bot replies first even when a lower seat accepts');
+      expect(room.authoritativeStateForTest!.offers, isEmpty);
+      expect(
+        room.authoritativeStateForTest!.players[0].stores[Resource.wheat],
+        1,
+      );
+      expect(
+        room.authoritativeStateForTest!.players[1].stores[Resource.wood],
+        3,
+      );
+    },
+  );
+
   test('human trade decline releases waiting bot immediately', () async {
     final room = P2pRoom(
       botMoveDelay: Duration.zero,

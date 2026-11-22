@@ -168,9 +168,43 @@ class HostedRoom {
           (event is RespondTrade && event.player != seat)) {
         throw StateError('This is another player’s turn.');
       }
-      state = MatchEngine.apply(current, event); // Final legality authority.
-      _record(event, seat);
-      reply = {'op': 'ack', 'id': id, 'ok': true, 'version': version};
+      // Standing trades do not reserve goods. An otherwise valid acceptance
+      // must not fail the whole multiplayer turn if either player spent the
+      // goods since the offer was posted. Record a decline instead, so both
+      // peers replay the same authoritative event without inventing stock.
+      var offerUnavailable = false;
+      MatchEvent committedEvent = event;
+      if (event is RespondTrade && event.accept) {
+        final response = event;
+        final matching = current.offers
+            .where(
+              (o) =>
+                  o.canRespond(seat) &&
+                  (response.offerId == null || o.id == response.offerId),
+            )
+            .firstOrNull;
+        if (matching != null &&
+            (!canPayTrade(
+                  current.players[matching.proposer].stores,
+                  matching.gives,
+                ) ||
+                !canPayTrade(current.players[seat].stores, matching.wants))) {
+          committedEvent = RespondTrade(seat, false, offerId: matching.id);
+          offerUnavailable = true;
+        }
+      }
+      state = MatchEngine.apply(
+        current,
+        committedEvent,
+      ); // Final legality authority.
+      _record(committedEvent, seat);
+      reply = {
+        'op': 'ack',
+        'id': id,
+        'ok': true,
+        'version': version,
+        if (offerUnavailable) 'offerUnavailable': true,
+      };
     } on Object catch (error) {
       reply = {
         'op': 'ack',

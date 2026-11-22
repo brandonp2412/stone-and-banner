@@ -661,17 +661,23 @@ class P2pRoom extends ChangeNotifier {
         next.events.length != expected.events.length + 1) {
       return false;
     }
-    final bot = AiTurnCoordinator.actingSeat(expected, botSeats.contains);
+    final event = next.events.last;
+    // Broadcast responses are evaluated in one batch: declines are committed
+    // before a possible acceptance. Their order may differ from the first
+    // eligible bot in actingSeat(), so authorize the actual responder seat.
+    final bot = event is RespondTrade
+        ? event.player
+        : AiTurnCoordinator.actingSeat(expected, botSeats.contains);
     if (!botSeats.contains(bot)) return false;
-    final result = room!.move(
-      bot,
-      _randomId(16),
-      room.version,
-      next.events.last.toJson(),
-    );
+    final result = room!.move(bot, _randomId(16), room.version, event.toJson());
     if (result['ok'] != true) {
       _handleBotFailure(
-        StateError(result['error'] as String? ?? 'Computer move rejected.'),
+        StateError(
+          '${result['error'] ?? 'Computer move rejected.'}; '
+          'seat=$bot active=${expected.active} acting=${expected.actingSeat} '
+          'phase=${expected.phase.name} event=${next.events.last.toJson()['type']} '
+          'offers=${expected.offers.map((o) => '${o.id}:${o.proposer}->${o.target}').join(',')}',
+        ),
       );
       return false;
     }

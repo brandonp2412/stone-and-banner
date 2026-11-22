@@ -145,6 +145,65 @@ void main() {
     expect(room.state!.bank[Resource.wool], 17);
   });
 
+  test(
+    'accepting a spent broadcast offer safely declines and preserves replay',
+    () {
+      final room = openRoom(4);
+      final initial = room.state!;
+      final players = initial.players.toList();
+      players[0] = players[0].copyWith(stores: {Resource.wood: 1});
+      players[1] = players[1].copyWith(stores: {Resource.wheat: 1});
+      players[2] = players[2].copyWith(stores: {Resource.wheat: 1});
+      room.state = initial.copyWith(
+        phase: MatchPhase.actions,
+        players: players,
+      );
+      const offer = ProposeTrade(-1, Resource.wood, 1, Resource.wheat, 1);
+      expect(room.move(0, 'offer', room.version, offer.toJson())['ok'], true);
+      final offerId = room.state!.offers.single.id;
+      final originalStores = room.state!.players[1].stores;
+
+      // A legitimate local purchase used the proposer's available wood after
+      // advertising it. A remote human's accept must not crash or mint goods.
+      final spent = room.state!.players.toList();
+      spent[0] = spent[0].copyWith(stores: const {});
+      room.state = room.state!.copyWith(players: spent);
+      final accept = RespondTrade(1, true, offerId: offerId);
+      final base = room.version;
+      final reply = room.move(1, 'accept-stale', base, accept.toJson());
+      expect(reply['ok'], true);
+      expect(reply['offerUnavailable'], true);
+      expect(room.move(1, 'accept-stale', base, accept.toJson()), reply);
+      expect(room.state!.events.last, isA<RespondTrade>());
+      expect((room.state!.events.last as RespondTrade).accept, false);
+      expect(room.state!.players[1].stores, originalStores);
+      expect(room.state!.offers.single.declinedBy, {1});
+      expect(room.state!.offers.single.canRespond(2), true);
+      expect(room.historyAfter(base).last['kind'], 'answer');
+
+      final second = room.move(
+        2,
+        'accept-stale-2',
+        room.version,
+        RespondTrade(2, true, offerId: offerId).toJson(),
+      );
+      expect(second['ok'], true);
+      expect(second['offerUnavailable'], true);
+      expect(room.state!.offers.single.declinedBy, {1, 2});
+      expect(room.state!.players[2].stores[Resource.wheat], 1);
+      // Four seats means three invitees; the final reply closes the broadcast.
+      final third = room.move(
+        3,
+        'accept-stale-3',
+        room.version,
+        RespondTrade(3, true, offerId: offerId).toJson(),
+      );
+      expect(third['ok'], true);
+      expect(third['offerUnavailable'], true);
+      expect(room.state!.offers, isEmpty);
+    },
+  );
+
   test('server-only tactical deadline passes and records exactly once', () {
     final room = openRoom();
     final state = room.state!;
