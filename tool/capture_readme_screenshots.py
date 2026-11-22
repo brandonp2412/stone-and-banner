@@ -93,7 +93,8 @@ async def main(args):
         await page.mouse.click(340, 292)
         await page.get_by_text("1 human · 2 computers", exact=True).wait_for(timeout=10000)
         await page.get_by_text("Start match", exact=True).click()
-        await page.get_by_text("Realm Realm", exact=True).wait_for(timeout=30000)
+        # Wait for playable setup controls, not a presentation-specific tab label.
+        # Introductory tips can obscure the tab until dismissed.
         # Set up a genuine three-seat match. The AI chooses its own moves; all
         # settlements and roads for the human are legal actions through the UI.
         for round_number in range(2):
