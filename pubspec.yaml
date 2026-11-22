@@ -1,5 +1,5 @@
 name: stone_and_banner
-description: "Original turn-based strategy game Stone & Banner."
+description: "Turn-based strategy game of settlements, trading, knights, raids and multiplayer."
 publish_to: none
 version: 0.8.4+2022
 environment:
