@@ -233,6 +233,39 @@ abstract final class AiCardStrategy {
 
   /// A bounded public bundle offer. The rival may decline; never assume their
   /// private stores. Keep one outstanding offer per proposer as per reducer.
+  /// A conservative estimate of whether the *recipient* benefits. Only
+  /// publicly visible build requirements and production are considered;
+  /// another player's hidden hand is never inspected.
+  static double _recipientAppeal(AiTurnView view, ProposeTrade offer) {
+    final goal = view.publicGoals[offer.target];
+    final production = view.publicProduction[offer.target];
+    // Asking for multiple copies of one good is particularly likely to fail:
+    // even a producing player may not have that much in hand.
+    if (offer.wants.values.any((amount) => amount > 1)) return -1000;
+
+    double value(Resource good) {
+      final usefulForBuild = (goal[good] ?? 0) > 0;
+      final produces = production[good] ?? false;
+      // Roads are useful even when the next settlement upgrade needs ore.
+      final usefulForExpansion = good == Resource.wood || good == Resource.brick
+          ? 0.7
+          : 0.0;
+      return (usefulForBuild ? 2.4 : 0.6) +
+          (produces ? 0 : 0.85) +
+          usefulForExpansion;
+    }
+
+    var received = 0.0;
+    for (final entry in offer.gives.entries) {
+      received += value(entry.key) * entry.value;
+    }
+    var paid = 0.0;
+    for (final entry in offer.wants.entries) {
+      paid += value(entry.key) * entry.value;
+    }
+    return received - paid;
+  }
+
   static MatchEvent? propose(AiTurnView view) {
     if (view.phase != MatchPhase.actions ||
         view.actionsSinceRoll > 3 ||
@@ -242,17 +275,26 @@ abstract final class AiCardStrategy {
     final candidates = view.legalActions
         .whereType<ProposeTrade>()
         .where(
-          (a) =>
-              a.counterOf == null && _bundleGain(view, a.gives, a.wants) > 0.5,
+          (offer) =>
+              offer.counterOf == null &&
+              _bundleGain(view, offer.gives, offer.wants) > 0.5 &&
+              _recipientAppeal(view, offer) > 0.75,
         )
         .toList();
-    if (candidates.isEmpty) return null;
-    // Prefer modest asks; bundles must justify their extra cost and friction.
-    double value(ProposeTrade offer) =>
-        _bundleGain(view, offer.gives, offer.wants) /
-        (offer.gives.values.fold<int>(0, (a, b) => a + b) +
-            offer.wants.values.fold<int>(0, (a, b) => a + b));
-    // Trade with the player furthest behind, not the current leader.
+    if (candidates.isEmpty) return null; // Better no offer than a bad offer.
+
+    // Rank mutually useful exchanges, rather than maximizing only our gain.
+    // Reward modest generosity: a 2-for-1 of useful goods is more likely to
+    // be accepted than a 1-for-1 that only benefits the proposer.
+    double value(ProposeTrade offer) {
+      final count =
+          offer.gives.values.fold<int>(0, (a, b) => a + b) +
+          offer.wants.values.fold<int>(0, (a, b) => a + b);
+      return _bundleGain(view, offer.gives, offer.wants) / count +
+          1.25 * _recipientAppeal(view, offer);
+    }
+
+    // Within comparably fair offers, avoid feeding the current leader.
     final next = List.generate(view.publicScores.length, (i) => i)
         .where((seat) => seat != view.seat)
         .reduce((a, b) => view.publicScores[a] <= view.publicScores[b] ? a : b);

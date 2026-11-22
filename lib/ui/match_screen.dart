@@ -2527,20 +2527,37 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   Widget _playerBar() => LayoutBuilder(
     builder: (context, bounds) {
       final winner = MatchEngine.winner(s);
-      final height = math.max(
-        bounds.maxWidth < 900
-            ? 44.0
-            : _compact
-            ? 48.0
-            : 52.0,
-        MediaQuery.textScalerOf(context).scale(12) * 1.2 +
-            MediaQuery.textScalerOf(context).scale(10) * 1.2 +
-            18,
-      );
-      final width = math.max(
-        124.0 * MediaQuery.textScalerOf(context).scale(12) / 12,
-        (bounds.maxWidth - 50) / s.players.length - 6,
-      );
+      final size = MediaQuery.sizeOf(context);
+      final portrait = size.height > size.width && bounds.maxWidth < 600;
+      final height = portrait
+          ? 104.0
+          : math.max(
+              bounds.maxWidth < 900
+                  ? 44.0
+                  : _compact
+                  ? 48.0
+                  : 52.0,
+              MediaQuery.textScalerOf(context).scale(12) * 1.2 +
+                  MediaQuery.textScalerOf(context).scale(10) * 1.2 +
+                  18,
+            );
+      // Large accessibility text needs full-width cards rather than a
+      // squeezed two-column grid. The portrait list can scroll vertically.
+      final singleColumn =
+          portrait &&
+          (bounds.maxWidth < 340 ||
+              MediaQuery.textScalerOf(context).scale(12) > 15);
+      final width = portrait
+          ? singleColumn
+                ? bounds.maxWidth - 62 - (widget.onLeaveRoom != null ? 48 : 0)
+                : (bounds.maxWidth -
+                          68 -
+                          (widget.onLeaveRoom != null ? 48 : 0)) /
+                      2
+          : math.max(
+              124.0 * MediaQuery.textScalerOf(context).scale(12) / 12,
+              (bounds.maxWidth - 50) / s.players.length - 6,
+            );
       return Container(
         height: height,
         padding: const EdgeInsets.fromLTRB(8, 3, 42, 3),
@@ -2559,8 +2576,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               ),
             Expanded(
               child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+                scrollDirection: portrait ? Axis.vertical : Axis.horizontal,
+                child: Wrap(
+                  runSpacing: portrait ? 2 : 0,
                   children: [
                     for (final i in [
                       viewerSeat,

@@ -396,6 +396,7 @@ class MatchState {
     Set<int> reactionsUsed = const {},
     this.invasionAid = 0,
     this.invasionInvitesFromEvent = 0,
+    this.raidPledgeFixFromEvent = 0,
     Map<int, int> pendingDiscards = const {},
     List<MatchEvent> events = const [],
   }) : pendingDiscards = Map.unmodifiable(pendingDiscards),
@@ -445,6 +446,9 @@ class MatchState {
 
   /// Earlier replays retain their original invasion response order.
   final int invasionInvitesFromEvent;
+
+  /// Pre-fix replays may include now-unnecessary raid-response events.
+  final int raidPledgeFixFromEvent;
   final int? firstCapitalOwner;
   final String lastInvasion;
   final Map<Resource, int> bank;
@@ -508,6 +512,7 @@ class MatchState {
     Set<int>? reactionsUsed,
     int? invasionAid,
     int? invasionInvitesFromEvent,
+    int? raidPledgeFixFromEvent,
     Map<int, int>? pendingDiscards,
     List<MatchEvent>? events,
   }) => MatchState(
@@ -556,6 +561,8 @@ class MatchState {
     invasionAid: invasionAid ?? this.invasionAid,
     invasionInvitesFromEvent:
         invasionInvitesFromEvent ?? this.invasionInvitesFromEvent,
+    raidPledgeFixFromEvent:
+        raidPledgeFixFromEvent ?? this.raidPledgeFixFromEvent,
     pendingDiscards: pendingDiscards ?? this.pendingDiscards,
     events: events ?? this.events,
   );
@@ -600,6 +607,7 @@ class MatchEngine {
     int? boardSeed,
     MatchBalance balance = MatchBalance.baseline,
     int invasionInvitesFromEvent = 0,
+    int raidPledgeFixFromEvent = 0,
     int cardDeckVersion = 1,
     int raidInterval = 6,
     List<int>? turnOrder,
@@ -624,6 +632,7 @@ class MatchEngine {
       balance: balance,
       raidInterval: raidInterval,
       invasionInvitesFromEvent: invasionInvitesFromEvent,
+      raidPledgeFixFromEvent: raidPledgeFixFromEvent,
       board: board,
       topology: BoardTopology(board),
       players: [for (final n in names) PlayerState(id: n)],
@@ -652,6 +661,7 @@ class MatchEngine {
     int? boardSeed,
     MatchBalance balance = MatchBalance.baseline,
     int invasionInvitesFromEvent = 0,
+    int raidPledgeFixFromEvent = 0,
     int cardDeckVersion = 1,
     int raidInterval = 6,
     List<int>? turnOrder,
@@ -662,6 +672,7 @@ class MatchEngine {
       boardSeed: boardSeed,
       balance: balance,
       invasionInvitesFromEvent: invasionInvitesFromEvent,
+      raidPledgeFixFromEvent: raidPledgeFixFromEvent,
       cardDeckVersion: cardDeckVersion,
       raidInterval: raidInterval,
       turnOrder: turnOrder,
@@ -675,6 +686,7 @@ class MatchEngine {
   static String exportReplay(MatchState s) => jsonEncode({
     'format': 'stone-and-banner-replay-v1',
     'invasionInvitesFromEvent': s.invasionInvitesFromEvent,
+    'raidPledgeFixFromEvent': s.raidPledgeFixFromEvent,
     'cardDeckVersion': s.cardDeckVersion,
     'raidInterval': s.raidInterval,
     'turnOrder': s.turnOrder,
@@ -773,6 +785,9 @@ class MatchEngine {
       balance: MatchBalance.fromJson(value['balance'] as Map<String, dynamic>?),
       invasionInvitesFromEvent:
           value['invasionInvitesFromEvent'] as int? ?? events.length,
+      // Preserve old recorded pledge responses; apply the fix after import.
+      raidPledgeFixFromEvent:
+          value['raidPledgeFixFromEvent'] as int? ?? events.length,
       cardDeckVersion: value['cardDeckVersion'] as int? ?? 1,
       // Missing on older replays: retain their original three-round rule.
       raidInterval: value['raidInterval'] as int? ?? 3,
@@ -2129,6 +2144,12 @@ class MatchEngine {
       return blocked ? s : _playStrategyCard(s, w.card!);
     }
     final remaining = w.responders.skip(1).toList();
+    // Once the defenders can win, never solicit further resource pledges.
+    if (w.kind == TacticalKind.invasion &&
+        s.events.length >= s.raidPledgeFixFromEvent &&
+        defenceStrength(s) + s.invasionAid >= invasionStrength(s)) {
+      return s;
+    }
     return remaining.isEmpty
         ? s
         : s.copyWith(
@@ -2699,7 +2720,9 @@ class MatchEngine {
             ? {}
             : s.reliefUsed,
       );
-      if (s.phase == MatchPhase.invasion) {
+      if (s.phase == MatchPhase.invasion &&
+          (s.events.length < s.raidPledgeFixFromEvent ||
+              defenceStrength(s) + s.invasionAid < invasionStrength(s))) {
         // Include the current/human seat. No resources? They may pass.
         // Preserve the original response order for imported replay events.
         final inclusive = s.events.length >= s.invasionInvitesFromEvent;

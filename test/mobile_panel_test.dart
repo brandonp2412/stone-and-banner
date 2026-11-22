@@ -100,6 +100,21 @@ void main() {
     }
   }
 
+  testWidgets('portrait wraps player cards into two readable rows', (
+    tester,
+  ) async {
+    await showMobileMatch(tester, const Size(393, 852));
+    final first = tester.getRect(find.byKey(const ValueKey('activity-seat-0')));
+    final second = tester.getRect(
+      find.byKey(const ValueKey('activity-seat-1')),
+    );
+    final third = tester.getRect(find.byKey(const ValueKey('activity-seat-2')));
+    expect(second.top, closeTo(first.top, 1));
+    expect(third.top, greaterThan(first.top + 30));
+    expect(third.right, lessThanOrEqualTo(393));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('choosing a build piece returns immediately to the map', (
     tester,
   ) async {
@@ -109,7 +124,8 @@ void main() {
     await tester.tap(find.text('Road'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
-    expect(find.text('Build a road'), findsOneWidget);
+    // No centre-screen instruction banner blocking map interactions.
+    expect(find.text('Build a road'), findsNothing);
     expect(find.byTooltip('Cancel selection'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

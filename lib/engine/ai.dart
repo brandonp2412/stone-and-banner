@@ -21,6 +21,8 @@ class AiTurnView {
     required this.round,
     required this.eventOrdinal,
     required this.publicScores,
+    required this.publicGoals,
+    required this.publicProduction,
     required this.ownGoods,
     required this.ownCards,
     required this.publicOffers,
@@ -32,6 +34,10 @@ class AiTurnView {
   final int seat, activeSeat, round, eventOrdinal, actionsSinceRoll;
   final MatchPhase phase;
   final List<int> publicScores;
+
+  /// Public build costs and resource access, never opponents' private hands.
+  final List<Map<Resource, int>> publicGoals;
+  final List<Map<Resource, bool>> publicProduction;
   final Map<Resource, int> ownGoods;
   final List<HeldCard> ownCards;
 
@@ -197,6 +203,17 @@ abstract final class AiActionAdapter {
         for (var i = 0; i < state.players.length; i++)
           MatchEngine.score(state, i),
       ]),
+      publicGoals: List.unmodifiable([
+        for (var i = 0; i < state.players.length; i++)
+          Map<Resource, int>.unmodifiable(_publicGoal(state, i)),
+      ]),
+      publicProduction: List.unmodifiable([
+        for (var i = 0; i < state.players.length; i++)
+          Map<Resource, bool>.unmodifiable({
+            for (final good in Resource.values)
+              good: recipientCanProduce(state, i, good),
+          }),
+      ]),
       ownGoods: Map.unmodifiable(player.stores),
       ownCards: List.unmodifiable(player.cards),
       publicOffers: List.unmodifiable(state.offers),
@@ -208,6 +225,17 @@ abstract final class AiActionAdapter {
 
   /// Use only public settlements, surrounding tiles and visible developments.
   /// Never ask a rival for a resource they have no normal way of producing.
+  /// Public site upgrades reveal which construction goods each seat needs.
+  /// No opposing inventory is inspected.
+  static Map<Resource, int> _publicGoal(MatchState state, int seat) {
+    final sites = state.sites.values
+        .where((site) => site.owner == seat)
+        .map((site) => site.structure);
+    if (sites.contains(Structure.village)) return MatchEngine.townCost;
+    if (sites.contains(Structure.town)) return MatchEngine.capitalCost;
+    return MatchEngine.villageCost;
+  }
+
   static bool recipientCanProduce(MatchState s, int recipient, Resource good) {
     if (recipient < 0 || recipient >= s.players.length) return false;
     for (final entry in s.sites.entries) {

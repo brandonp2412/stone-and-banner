@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/ai.dart';
 import 'package:stone_and_banner/engine/ai_cards.dart';
 import 'package:stone_and_banner/engine/board.dart';
+import 'package:stone_and_banner/engine/game.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/network/room_protocol.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
@@ -155,14 +156,30 @@ void main() {
     }
   });
 
-  test('AI retains bundles but prefers a useful single trade', () {
-    final s = stocked();
+  test('AI retains bundles but prefers a recipient-friendly trade', () {
+    final base = stocked();
+    // Stock is private; candidates may only ask for goods an opponent's
+    // visible settlements could actually produce.
+    final sites = <int, Site>{};
+    for (final good in [Resource.wood, Resource.wool]) {
+      final vertex = base.topology.vertices.firstWhere(
+        (vertex) =>
+            !sites.containsKey(vertex.id) &&
+            vertex.tiles.any(
+              (tile) => base.board.tiles[tile].land.produces == good,
+            ),
+      );
+      sites[vertex.id] = const Site(1, Structure.village);
+    }
+    final s = base.copyWith(sites: sites);
     final view = AiActionAdapter.observe(s, 0);
     final offers = view.legalActions.whereType<ProposeTrade>();
     expect(offers.any((o) => o.gives.length > 1 && o.wants.length > 1), isTrue);
     expect(offers.any((o) => o.gives.values.any((n) => n > 1)), isTrue);
     final chosen = AiCardStrategy.propose(view) as ProposeTrade;
-    expect(chosen.wants.length, 1);
+    // A balanced two-resource offer is fine; demanding multiple copies of
+    // one scarce resource is what the AI must avoid.
+    expect(chosen.wants.values.every((count) => count == 1), isTrue);
     expect(canPayTrade(s.current.stores, chosen.gives), isTrue);
     MatchEngine.apply(s, chosen);
   });

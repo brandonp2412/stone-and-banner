@@ -194,6 +194,14 @@ void main() {
   test('Invasion aid proceeds clockwise, then active seat resolves', () {
     var s = fixture().copyWith(
       phase: MatchPhase.invasion,
+      // The fleet needs four aid; otherwise a successful defence now skips
+      // the rest of the pledge requests.
+      sites: {
+        0: const Site(0, Structure.town),
+        2: const Site(0, Structure.town),
+        4: const Site(1, Structure.town),
+        6: const Site(2, Structure.town),
+      },
       tactical: TacticalWindow(9, TacticalKind.invasion, 0, [1, 2]),
     );
     s = stock(stock(s, 1, {Resource.ore: 1}), 2, {Resource.ore: 1});
@@ -296,6 +304,7 @@ void main() {
 
     var invasion = fixture().copyWith(
       phase: MatchPhase.invasion,
+      sites: {0: const Site(0, Structure.town)},
       tactical: TacticalWindow(12, TacticalKind.invasion, 0, [1, 2]),
     );
     invasion = stock(stock(invasion, 1, {Resource.wheat: 1}), 2, {
@@ -352,6 +361,42 @@ void main() {
       conserve(state);
     });
   }
+
+  test('bot trades reward recipients instead of making one-sided asks', () {
+    var state = fixture().copyWith(
+      sites: {0: const Site(0, Structure.village)},
+    );
+    state = stock(state, 0, {Resource.wood: 2});
+    state = showProduction(state, 1, [Resource.wheat, Resource.ore]);
+    final view = AiActionAdapter.observe(state, 0);
+    final offer = AiCardStrategy.propose(view);
+    expect(offer, isA<ProposeTrade>());
+    final trade = offer! as ProposeTrade;
+    expect(trade.target, 1);
+    expect(trade.give, Resource.wood);
+    expect(
+      trade.giveCount,
+      2,
+      reason: 'One wood for a required ore/wheat is not enticing.',
+    );
+    expect(trade.wantCount, 1);
+
+    // Private enemy stock and strategy cards must never change our offer.
+    final players = state.players.toList();
+    players[1] = players[1].copyWith(
+      stores: {Resource.ore: 12},
+      cards: [held(StrategyDeck.governance, 'defection')],
+    );
+    final changed = AiActionAdapter.observe(
+      state.copyWith(players: players),
+      0,
+    );
+    expect(AiCardStrategy.propose(changed)?.toJson(), trade.toJson());
+
+    // Without a surplus, don't pester the same opponent with poor trades.
+    final scarce = stock(state, 0, {Resource.wood: 1});
+    expect(AiCardStrategy.propose(AiActionAdapter.observe(scarce, 0)), isNull);
+  });
 
   test('bot offers surplus once and accepts a useful open trade', () {
     var proposing = fixture().copyWith(

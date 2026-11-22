@@ -28,12 +28,9 @@ MatchEvent? _chooseComputerEvent(MatchState state) =>
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Browser tabs cannot be forced into immersive landscape mode.
+  // Follow the device's orientation, including portrait on phones.
   if (!kIsWeb) {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    await SystemChrome.setPreferredOrientations([]);
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
   registerResourceIconLicenses();
