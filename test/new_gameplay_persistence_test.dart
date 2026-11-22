@@ -119,11 +119,14 @@ void main() {
     expect(result.knights[far]!.active, isTrue);
   });
 
-  test('invasion asks the active human and every bot, even without aid', () {
-    final state = MatchEngine.newGame(
-      ['Human', 'Bot1', 'Bot2'],
-      20261121,
-    ).copyWith(phase: MatchPhase.actions, active: 2, reaverPressure: 5);
+  test('undefended invasion offers aid to the active human and bots', () {
+    final state = MatchEngine.newGame(['Human', 'Bot1', 'Bot2'], 20261121)
+        .copyWith(
+          phase: MatchPhase.actions,
+          active: 2,
+          reaverPressure: 5,
+          sites: {0: const Site(0, Structure.town)},
+        );
     final invasion = MatchEngine.apply(state, const EndTurn());
     expect(invasion.phase, MatchPhase.invasion);
     expect(invasion.tactical?.responders, [0, 1, 2]);

@@ -28,7 +28,10 @@ void main() {
         fail('The AI took more than 65 seconds to reach round 8');
       }
       final s = room.authoritativeStateForTest!;
-      if (s.actingSeat == 0 && !room.botSeats.contains(s.active)) {
+      // The host must answer out-of-turn Bandit discards and raid reactions
+      // even when a bot owns the active turn; otherwise gameplay waits for
+      // an unmodelled human response and appears stuck.
+      if (s.actingSeat == 0) {
         final view = AiActionAdapter.observe(s, 0);
         final event = AiActionAdapter.decide(view);
         expect(event, isNotNull);

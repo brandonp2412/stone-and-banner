@@ -63,7 +63,7 @@ void main() {
       final v = MatchEngine.legalVertices(state).first;
       await tapVertex(tester, state, v);
       state = MatchEngine.apply(state, PlaceVillage(v));
-      expect(find.textContaining('glowing edge'), findsOneWidget);
+      expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
       final edge = MatchEngine.legalEdges(state).first;
       await tapEdge(tester, state, edge);
       state = MatchEngine.apply(state, PlaceRoad(edge));

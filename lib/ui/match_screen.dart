@@ -2392,7 +2392,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     );
   }
 
-  Widget _hintSetting() => Column(
+  Widget _hintSetting({bool dismissPopup = false}) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       SwitchListTile(
@@ -2404,7 +2404,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         value: _hintsEnabled,
         onChanged: _hintsLoaded
             ? (value) {
-                Navigator.of(context).pop();
+                if (dismissPopup) Navigator.of(context).pop();
                 _setHintsEnabled(value);
               }
             : null,
@@ -2412,7 +2412,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       if (_seenHints.isNotEmpty)
         TextButton.icon(
           onPressed: () async {
-            Navigator.of(context).pop();
+            if (dismissPopup) Navigator.of(context).pop();
             final prefs = await SharedPreferences.getInstance();
             await prefs.remove('gameplay_hints_seen_v1');
             if (!mounted) return;
@@ -2438,7 +2438,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           widget.onLeaveRoom?.call();
         },
       ),
-    _hintSetting(),
+    _hintSetting(dismissPopup: true),
     if (widget.onSettings != null)
       ListTile(
         leading: const Icon(Icons.settings),
@@ -2477,6 +2477,24 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         ? const EdgeInsets.fromLTRB(10, 6, 10, 8)
         : const EdgeInsets.fromLTRB(16, 12, 16, 16),
     children: [
+      // The countdown must remain visible while browsing action tabs, not
+      // only on the player card when the board is showing.
+      Visibility(
+        visible: s.phase != MatchPhase.finished && !widget.observing,
+        maintainSize: true,
+        maintainAnimation: true,
+        maintainState: true,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Text(
+              'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}',
+              style: const TextStyle(fontSize: 11, color: Color(0xffa8bfc0)),
+            ),
+          ),
+        ),
+      ),
       if (s.tactical != null && !widget.observing)
         SizedBox(
           height: 450,
@@ -2776,7 +2794,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: ListView(children: [_hintSetting()])),
+                        Expanded(
+                          child: ListView(
+                            children: [_hintSetting(dismissPopup: true)],
+                          ),
+                        ),
                         const VerticalDivider(width: 1),
                         Expanded(
                           child: ListView(

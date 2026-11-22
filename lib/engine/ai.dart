@@ -695,6 +695,26 @@ abstract final class AiActionAdapter {
     return view.legalActions[key % view.legalActions.length];
   }
 
+  /// Offers are non-binding. An AI must not crash or accept an impossible
+  /// trade when the proposer's stock changed after making the offer. This
+  /// validation happens in the trusted reducer adapter, not in the AI view,
+  /// so private inventories remain hidden from policy decisions.
+  static MatchEvent settleTradeResponse(MatchState state, MatchEvent event) {
+    if (event is! RespondTrade || !event.accept) return event;
+    final offers = state.offers.where(
+      (offer) =>
+          offer.canRespond(event.player) &&
+          (event.offerId == null || offer.id == event.offerId),
+    );
+    if (offers.isEmpty) return event;
+    final offer = offers.first;
+    if (!canPayTrade(state.players[offer.proposer].stores, offer.gives) ||
+        !canPayTrade(state.players[event.player].stores, offer.wants)) {
+      return RespondTrade(event.player, false, offerId: offer.id);
+    }
+    return event;
+  }
+
   /// Rechecks observation freshness and whitelist membership at dispatch.
   static MatchState applySelected(
     MatchState state,
@@ -712,6 +732,6 @@ abstract final class AiActionAdapter {
     if (!view.legalActions.any((e) => jsonEncode(e.toJson()) == key)) {
       throw StateError('AI selected an action outside its legal options.');
     }
-    return MatchEngine.apply(state, action);
+    return MatchEngine.apply(state, settleTradeResponse(state, action));
   }
 }

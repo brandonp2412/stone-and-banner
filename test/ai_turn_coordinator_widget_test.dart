@@ -7,10 +7,14 @@ import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/main.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(
+    () => SharedPreferences.setMockInitialValues({
+      'gameplay_hints_enabled': false,
+    }),
+  );
 
   Future<void> startAi(WidgetTester tester) async {
-    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
@@ -29,9 +33,7 @@ void main() {
 
   Future<void> humanSetup(WidgetTester tester) async {
     for (var i = 0; i < 2; i++) {
-      await tester.ensureVisible(
-        find.byTooltip('Choose target'),
-      );
+      await tester.ensureVisible(find.byTooltip('Choose target'));
       await tester.tap(find.byTooltip('Choose target'));
       await tester.pumpAndSettle();
       await tester.tap(find.byType(ListTile).first);
@@ -81,7 +83,7 @@ void main() {
     expect(snapshot.events.length, greaterThanOrEqualTo(4));
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
-    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
     await tester.pumpAndSettle();
     expect(find.text('Computer turn'), findsNothing);
     expect(find.text('Pass the device'), findsNothing);

@@ -6,7 +6,11 @@ import 'package:stone_and_banner/main.dart';
 import 'package:stone_and_banner/ui/resource_icon.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(
+    () => SharedPreferences.setMockInitialValues({
+      'gameplay_hints_enabled': false,
+    }),
+  );
   testWidgets('home, playable board and rules golden snapshots', (
     tester,
   ) async {
@@ -21,12 +25,27 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(StoneBannerApp(worldSeedFactory: () => 20261027));
+    await tester.pumpWidget(
+      StoneBannerApp(
+        worldSeedFactory: () => 20261027,
+        randomizeTurnOrder: false,
+      ),
+    );
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(Scaffold),
       matchesGoldenFile('goldens/home.png'),
     );
+    // Rules live on the home page; the action hub intentionally has no
+    // duplicate Rules tab on compact landscape.
+    await tester.tap(find.text('Learn the rules'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(Scaffold),
+      matchesGoldenFile('goldens/rules.png'),
+    );
+    await tester.tap(find.byTooltip('Back to Home'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
     await expectLater(
@@ -43,28 +62,12 @@ void main() {
       find.byType(Scaffold),
       matchesGoldenFile('goldens/board.png'),
     );
-    await tester.tap(find.text('Actions'));
+    await tester.tap(find.byKey(const ValueKey('mobile-open-actions')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('mobile-action-hub')), findsOneWidget);
     await expectLater(
       find.byType(Scaffold),
       matchesGoldenFile('goldens/actions.png'),
-    );
-    await tester.scrollUntilVisible(
-      find.text('Rules'),
-      250,
-      scrollable: find
-          .descendant(
-            of: find.byKey(const ValueKey('mobile-action-hub')),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rules').last);
-    await tester.pumpAndSettle();
-    await expectLater(
-      find.byType(Scaffold),
-      matchesGoldenFile('goldens/rules.png'),
     );
   });
 }

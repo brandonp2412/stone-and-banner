@@ -113,6 +113,8 @@ void main() {
     );
     expect(decline, findsOneWidget);
     await tester.ensureVisible(decline);
+    await tester.pumpAndSettle();
+    expect(decline.hitTestable(), findsOneWidget);
     await tester.tap(decline);
     expect(events, hasLength(1));
     expect(events.single, isA<RespondTrade>());

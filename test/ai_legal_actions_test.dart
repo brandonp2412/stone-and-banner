@@ -46,6 +46,36 @@ void main() {
     expect(first.ownCards, isNot(same(initial.players[1].cards)));
   });
 
+  test(
+    'AI safely declines stale non-binding offers without reading rival hands',
+    () {
+      final initial = newMatch(413).copyWith(phase: MatchPhase.actions);
+      final players = initial.players.toList();
+      players[0] = players[0].copyWith(stores: {Resource.wood: 1});
+      players[1] = players[1].copyWith(stores: {Resource.ore: 1});
+      var state = initial.copyWith(players: players);
+      state = MatchEngine.apply(
+        state,
+        const ProposeTrade(1, Resource.wood, 1, Resource.ore, 1),
+      );
+      final funded = state.copyWith(active: 1);
+      final depletedPlayers = state.players.toList();
+      depletedPlayers[0] = depletedPlayers[0].copyWith(stores: {});
+      state = funded.copyWith(players: depletedPlayers);
+      final fundedView = AiActionAdapter.observe(funded, 1);
+      final view = AiActionAdapter.observe(state, 1);
+      expect(actionKeys(view), actionKeys(fundedView));
+      final accept = view.legalActions.whereType<RespondTrade>().firstWhere(
+        (response) => response.accept,
+      );
+      final result = AiActionAdapter.applySelected(state, view, accept);
+      expect(result.events.last, isA<RespondTrade>());
+      expect((result.events.last as RespondTrade).accept, isFalse);
+      expect(result.players[1].stores[Resource.ore], 1);
+      expect(result.offers, isEmpty);
+    },
+  );
+
   test('setup and dice emit only accepted engine events', () {
     var state = newMatch(13);
     for (var i = 0; i < 13; i++) {

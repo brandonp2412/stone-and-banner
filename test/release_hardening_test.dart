@@ -5,7 +5,11 @@ import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/main.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(
+    () => SharedPreferences.setMockInitialValues({
+      'gameplay_hints_enabled': false,
+    }),
+  );
 
   testWidgets(
     'accessible legal target list places and restores a private match',
@@ -15,7 +19,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(const StoneBannerApp());
+      await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
       await tester.pumpAndSettle();
       await tester.tap(find.text('New local match'));
       await tester.pumpAndSettle();
@@ -26,16 +30,14 @@ void main() {
       await tester.tap(find.text("I'm ready"));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(
-        find.byTooltip('Choose target'),
-      );
+      await tester.ensureVisible(find.byTooltip('Choose target'));
       await tester.tap(find.byTooltip('Choose target'));
       await tester.pumpAndSettle();
       expect(find.text('Choose legal board target'), findsOneWidget);
       expect(find.textContaining('Junction 1:'), findsWidgets);
       await tester.tap(find.byType(ListTile).first);
       await tester.pumpAndSettle();
-      expect(find.textContaining('glowing edge'), findsOneWidget);
+      expect(find.byTooltip('Choose target'), findsOneWidget);
 
       final prefs = await SharedPreferences.getInstance();
       final replay = prefs.getString('stone_banner_local_replay_v1');
@@ -47,18 +49,16 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
-      await tester.pumpWidget(const StoneBannerApp());
+      await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
       await tester.pumpAndSettle();
       expect(find.text('Raise a town.\nShape a realm.'), findsNothing);
       expect(find.text('Pass the device'), findsOneWidget);
-      expect(find.textContaining('glowing edge'), findsNothing);
+      expect(find.byKey(const ValueKey('realm-map')), findsNothing);
       await tester.tap(find.text("I'm ready"));
       await tester.pumpAndSettle();
-      expect(find.textContaining('glowing edge'), findsOneWidget);
+      expect(find.byTooltip('Choose target'), findsOneWidget);
 
-      await tester.ensureVisible(
-        find.byTooltip('Choose target'),
-      );
+      await tester.ensureVisible(find.byTooltip('Choose target'));
       await tester.tap(find.byTooltip('Choose target'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Road '), findsWidgets);
@@ -88,7 +88,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'stone_banner_local_replay_v1': 'untrusted replay',
     });
-    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
     await tester.pumpAndSettle();
     expect(find.textContaining('Saved replay is invalid'), findsOneWidget);
     expect(find.text('Pass the device'), findsNothing);

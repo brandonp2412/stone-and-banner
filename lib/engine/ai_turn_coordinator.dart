@@ -197,7 +197,10 @@ class AiTurnCoordinator {
                   !identical(expected, read())) {
                 return;
               }
-              final next = MatchEngine.apply(expected, reply);
+              final next = MatchEngine.apply(
+                expected,
+                AiActionAdapter.settleTradeResponse(expected, reply),
+              );
               if (!commit(expected, next)) return;
               onProgress?.call(++events);
               // Network hosts re-run the reducer when recording a move, so
@@ -252,7 +255,10 @@ class AiTurnCoordinator {
           final preferred = results.first as MatchEvent?;
           if (preferred == null) throw StateError('No computer decision.');
           next = immediateReply
-              ? MatchEngine.apply(current, preferred)
+              ? MatchEngine.apply(
+                  current,
+                  AiActionAdapter.settleTradeResponse(current, preferred),
+                )
               : AiActionAdapter.applySelected(current, view, preferred);
         } on StateError {
           final safe = immediateReply

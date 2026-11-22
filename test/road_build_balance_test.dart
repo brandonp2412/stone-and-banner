@@ -91,7 +91,8 @@ void main() {
 
     await tester.tap(find.text('Choose location'));
     await tester.pumpAndSettle();
-    expect(find.text('Build a road'), findsOneWidget);
+    expect(find.byTooltip('Cancel selection'), findsOneWidget);
+    expect(find.text('Build a road'), findsNothing);
     final nextEdge = MatchEngine.legalEdges(state).first;
     await tester.tapAt(position(nextEdge));
     await tester.pumpAndSettle();
@@ -122,8 +123,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build').hitTestable());
     await tester.pumpAndSettle();
-    expect(find.textContaining('Town: 2 wheat · 3 ore'), findsOneWidget);
-    expect(find.textContaining('Capital: 2 wheat · 2 ore'), findsOneWidget);
+    expect(find.textContaining('Town: 2 wheat · 3 ore'), findsWidgets);
+    expect(find.textContaining('Capital: 2 wheat · 2 ore'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }

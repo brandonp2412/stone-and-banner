@@ -12,16 +12,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('New local match'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('LAN multiplayer'),
+      find.text('Host / join multiplayer'),
       260,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.text('LAN multiplayer'));
+    await tester.tap(find.text('Host / join multiplayer'));
     await tester.pumpAndSettle();
-    expect(find.text('Create LAN room'), findsOneWidget);
-    expect(find.text('Join room'), findsOneWidget);
-    expect(find.text('Host WebSocket URL'), findsOneWidget);
-    await tester.pageBack();
+    expect(find.text('Direct P2P multiplayer'), findsOneWidget);
+    expect(find.text('Join from invitation'), findsOneWidget);
+    expect(find.textContaining('Host game'), findsWidgets);
+    await tester.tap(find.text('Back').first);
     await tester.pumpAndSettle();
     expect(find.text('New local match'), findsOneWidget);
   });

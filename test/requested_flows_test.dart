@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/advanced.dart';
 import 'package:stone_and_banner/engine/ai_turn_coordinator.dart';
@@ -141,6 +142,7 @@ void main() {
   testWidgets('turn reminder counts down in actions and resets next turn', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues({'gameplay_hints_enabled': false});
     var state = tableWithSupplies();
     late StateSetter refresh;
     await tester.pumpWidget(
@@ -157,12 +159,12 @@ void main() {
     );
     await tester.tap(find.text('Actions'));
     await tester.pump();
-    expect(find.text('1:30'), findsOneWidget);
+    expect(find.textContaining('1:30'), findsOneWidget);
     await tester.pump(const Duration(seconds: 2));
-    expect(find.text('1:28'), findsOneWidget);
+    expect(find.textContaining('1:28'), findsOneWidget);
     refresh(() => state = MatchEngine.apply(state, const EndTurn()));
     await tester.pump();
-    expect(find.text('1:30'), findsOneWidget);
+    expect(find.textContaining('1:30'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

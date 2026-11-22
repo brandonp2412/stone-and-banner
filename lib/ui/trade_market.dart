@@ -79,7 +79,10 @@ class TradeMarket extends StatelessWidget {
       children: [
         // Primary actions must stay on the first visible row even in
         // 320px-high landscape and with large accessibility text.
-        if (onlyIncomingOfferId == null)
+        // On compact screens an out-of-turn recipient only needs to
+        // respond. Omit two disabled trade buttons so the reply actions
+        // are not pushed underneath the fixed inventory tray.
+        if (onlyIncomingOfferId == null && (allowOffers || !compactLandscape))
           Row(
             children: [
               Expanded(

@@ -2,6 +2,7 @@ import 'action_helpers.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/engine/advanced.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/match.dart';
@@ -55,6 +56,11 @@ Future<void> showMatch(
 }
 
 void main() {
+  setUp(
+    () => SharedPreferences.setMockInitialValues({
+      'gameplay_hints_enabled': false,
+    }),
+  );
   testWidgets('bank exchange uses focused route, conserves stock and returns', (
     tester,
   ) async {
@@ -126,7 +132,7 @@ void main() {
     await tester.tap(find.text('Player trade'));
     await tester.pumpAndSettle();
     expect(find.text('Standing offer'), findsOneWidget);
-    expect(find.text('To everyone'), findsOneWidget);
+    expect(find.text('Everyone'), findsWidgets);
     await tester.tap(find.byType(DropdownButton<Resource>).first);
     await tester.pumpAndSettle();
     await tester.tap(
@@ -163,7 +169,8 @@ void main() {
         (v) => v != s.banditTile,
       );
       final nearby = s.topology.tileVertices[tile].firstWhere(
-          (vertex) => !s.sites.containsKey(vertex));
+        (vertex) => !s.sites.containsKey(vertex),
+      );
       s = s.copyWith(
         builders: {...s.builders, 1},
         knights: {nearby: const KnightPiece(1, KnightRank.sentinel, true, -1)},
@@ -232,10 +239,11 @@ void main() {
     expect(updated.tactical, isNull);
     expect(find.text('Resolve'), findsOneWidget);
     expect(find.textContaining('Defence 2 /'), findsWidgets);
-    expect(find.textContaining('Emergency aid +2'), findsOneWidget);
+    // The new raid HUD shows the combined defence, not a redundant aid toast.
+    expect(updated.invasionAid, 2);
   });
 
-  testWidgets('standing offer on another turn can be accepted in widget UI', (
+  testWidgets('standing offer on another turn opens a reply modal', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(844, 390);
@@ -262,20 +270,16 @@ void main() {
     }
     var updated = s;
     await showMatch(tester, s, (v) => updated = v);
-    await tester.tap(find.text('Actions'));
-    await tester.pumpAndSettle();
-    await scrollToAction(tester, 'Player trade');
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Accept'),
-      100,
-      scrollable: find.byType(Scrollable).last,
-    );
-    await tester.pumpAndSettle();
+    // Incoming trades now open immediately instead of requiring a Trade tab.
+    expect(find.text('Trade offer'), findsOneWidget);
+    expect(find.text('From Ada'), findsOneWidget);
     expect(find.text('Counter'), findsOneWidget);
+    expect(find.text('Accept').hitTestable(), findsOneWidget);
     await tester.tap(find.text('Accept'));
     await tester.pumpAndSettle();
     expect(updated.offers, isEmpty);
     expect(updated.players[1].stores[Resource.wood], greaterThanOrEqualTo(1));
+    expect(find.text('Trade offer'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

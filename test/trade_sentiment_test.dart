@@ -107,10 +107,9 @@ void main() {
       view.legalActions.whereType<ProposeTrade>().where((a) => a.target == 0),
       isEmpty,
     );
-    expect(
-      view.legalActions.whereType<ProposeTrade>().where((a) => a.target == 2),
-      isNotEmpty,
-    );
+    // The bot may abstain if the other recipient has no fair exchange.
+    // Declining one player's offer must never force a bad offer on another.
+    expect(view.legalActions.whereType<EndTurn>(), isNotEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

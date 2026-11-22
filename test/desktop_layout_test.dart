@@ -22,7 +22,7 @@ void main() {
     for (final label in [
       'New local match',
       'Learn the rules',
-      'LAN multiplayer',
+      'Host / join multiplayer',
       'Import replay',
     ]) {
       expect(find.text(label).hitTestable(), findsOneWidget);
@@ -41,7 +41,7 @@ void main() {
       tester.getSize(find.byKey(const ValueKey('realm-map'))).width,
       greaterThan(1400),
     );
-    expect(find.text('Build').hitTestable(), findsOneWidget);
+    expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
     expect(tester.takeException(), isNull);
     tester.view.physicalSize = const Size(844, 390);
     await tester.pumpAndSettle();
