@@ -2,6 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 
+// A board's ports do not move during animation frames. Cache the layout to
+// avoid re-running collision packing every time the board repaints.
+final _dockLayoutCache = <String, List<Offset>>{};
+
 /// Positions coastal dock text outside the hex board with room for a leader.
 /// All coordinates are in the painter's (unscaled) canvas space.
 Offset dockLabelPosition({
@@ -68,8 +72,9 @@ class DockLabelRequest {
   final Size labelSize;
 }
 
-/// Uses the *side* gutters on landscape boards. Unlike positioning badges one
-/// at a time, this packs neighbouring port labels without hiding any text.
+/// Fit labels as close to their ports as possible. Only move a badge around a
+/// corner when that coast has no spare room: the playable board keeps its full
+/// horizontal and vertical extent regardless of where its ports are labelled.
 List<Offset> layoutDockLabels({
   required Size size,
   required Rect boardBounds,
@@ -77,163 +82,331 @@ List<Offset> layoutDockLabels({
   required List<DockLabelRequest> requests,
 }) {
   if (requests.isEmpty) return const [];
-  final widestBadge = requests
-      .map((request) => request.labelSize.width + 12)
-      .reduce(math.max);
-  final hasSideGutters =
-      size.width > size.height * 1.25 &&
-      boardBounds.left >= widestBadge + 26 &&
-      size.width - boardBounds.right >= widestBadge + 26;
-  if (!hasSideGutters && size.width > size.height * 1.25) {
-    // On narrower desktop windows the board nearly touches both sides.
-    // Place the ports in the reserved top/bottom strips instead of putting
-    // side labels over playable hexes.
-    final positions = List<Offset>.filled(requests.length, Offset.zero);
-    for (final isTop in [true, false]) {
-      final indices =
-          [
-            for (var i = 0; i < requests.length; i++)
-              if ((requests[i].edgeMidpoint.dy < size.height / 2) == isTop) i,
-          ]..sort(
-            (a, b) => requests[a].edgeMidpoint.dx.compareTo(
-              requests[b].edgeMidpoint.dx,
-            ),
-          );
-      if (indices.isEmpty) continue;
-      final topHudClearance = isTop ? math.min(155.0, size.width * .23) : 5.0;
-      final rightBound = size.width - 5;
-      final sumWidths = indices.fold<double>(
-        0,
-        (sum, index) => sum + requests[index].labelSize.width + 12,
-      );
-      final gap = indices.length > 1
-          ? math.min(
-              8.0,
-              math.max(
-                0,
-                (rightBound - topHudClearance - sumWidths) /
-                    (indices.length - 1),
-              ),
-            )
-          : 0.0;
-      final xs = <double>[];
-      var nextLeft = topHudClearance;
-      for (final index in indices) {
-        final width = requests[index].labelSize.width + 12;
-        final desiredLeft = requests[index].edgeMidpoint.dx - width / 2;
-        final left = math.max(nextLeft, desiredLeft);
-        xs.add(left + width / 2);
-        nextLeft = left + width + gap;
+  final signature = StringBuffer()
+    ..write(
+      '${size.width}/${size.height}/${boardBounds.left}/'
+      '${boardBounds.top}/${boardBounds.right}/${boardBounds.bottom}/$radius',
+    );
+  for (final request in requests) {
+    signature.write(
+      '/${request.edgeMidpoint.dx}/${request.edgeMidpoint.dy}/'
+      '${request.labelSize.width}/${request.labelSize.height}',
+    );
+  }
+  final key = signature.toString();
+  final cached = _dockLayoutCache[key];
+  if (cached != null) return cached;
+
+  List<Offset> cache(List<Offset> labels) {
+    if (_dockLayoutCache.length >= 24) {
+      _dockLayoutCache.remove(_dockLayoutCache.keys.first);
+    }
+    _dockLayoutCache[key] = labels;
+    return labels;
+  }
+
+  const edgeGap = 6.0;
+  const badgeGap = 4.0;
+  final canvas = Offset.zero & size;
+  final compact = size.width > size.height * 1.25;
+  // Overlay coordinates are relative to the Board painter, not the entire
+  // screen. The mobile Actions/turn buttons occupy the lower corners.
+  final overlays = compact
+      ? <Rect>[
+          Rect.fromLTWH(6, 5, math.min(150, size.width * .24), 55),
+          Rect.fromLTWH(8, size.height - 62, 143, 57),
+          Rect.fromLTWH(size.width - 150, size.height - 62, 142, 57),
+          if (size.height < 500) Rect.fromLTWH(size.width - 82, 65, 76, 100),
+        ]
+      : <Rect>[];
+
+  Rect badge(int index, Offset center) => Rect.fromCenter(
+    center: center,
+    width: requests[index].labelSize.width + 12,
+    height: requests[index].labelSize.height + 8,
+  );
+
+  bool clearStatic(int index, Offset center) {
+    final rect = badge(index, center);
+    // Keep badges away from both the playable terrain and HUD touch targets.
+    if (!canvas.contains(rect.topLeft) ||
+        !canvas.contains(rect.bottomRight) ||
+        rect.overlaps(boardBounds.inflate(1))) {
+      return false;
+    }
+    return !overlays.any((overlay) => rect.inflate(2).overlaps(overlay));
+  }
+
+  // Candidate badges remain adjacent to an actual coast, never in the terrain.
+  // Sample short shifts first, but retain room to pack densely on small phones.
+  List<Offset> candidates(int index) {
+    final request = requests[index];
+    final edge = request.edgeMidpoint;
+    final halfW = (request.labelSize.width + 12) / 2;
+    final halfH = (request.labelSize.height + 8) / 2;
+    final left = boardBounds.left - halfW - edgeGap;
+    final right = boardBounds.right + halfW + edgeGap;
+    final top = boardBounds.top - halfH - edgeGap;
+    final bottom = boardBounds.bottom + halfH + edgeGap;
+    final positions = <Offset>[];
+    void offer(Offset position) {
+      if (clearStatic(index, position)) positions.add(position);
+    }
+
+    for (final x in [left, right]) {
+      offer(Offset(x, edge.dy));
+      for (var y = halfH; y <= size.height - halfH; y += 4) {
+        offer(Offset(x, y));
       }
-      if (nextLeft - gap > rightBound) {
-        var maxRight = rightBound;
-        for (var n = indices.length - 1; n >= 0; n--) {
-          final width = requests[indices[n]].labelSize.width + 12;
-          xs[n] = math.min(xs[n], maxRight - width / 2);
-          maxRight = xs[n] - width / 2 - gap;
+    }
+    for (final y in [top, bottom]) {
+      offer(Offset(edge.dx, y));
+      for (var x = halfW; x <= size.width - halfW; x += 4) {
+        offer(Offset(x, y));
+      }
+    }
+    positions.sort(
+      (a, b) =>
+          (a - edge).distanceSquared.compareTo((b - edge).distanceSquared),
+    );
+    return positions;
+  }
+
+  final possibilities = [
+    for (var i = 0; i < requests.length; i++) candidates(i),
+  ];
+  final order = List<int>.generate(requests.length, (i) => i)
+    ..sort((a, b) {
+      // Place the widest, most constrained badges first; small generic ports
+      // can fill the remaining gaps around them.
+      final count = possibilities[a].length.compareTo(possibilities[b].length);
+      if (count != 0) return count;
+      return requests[b].labelSize.width.compareTo(requests[a].labelSize.width);
+    });
+
+  // Beam search keeps several non-overlapping arrangements alive. Greedy
+  // placement could strand a late label between two already placed badges,
+  // even though moving an earlier badge a few pixels solves the whole row.
+  List<Offset>? solve(int choices, int width) {
+    var beam = <({List<Offset?> values, List<Rect> badges, double cost})>[
+      (
+        values: List<Offset?>.filled(requests.length, null),
+        badges: <Rect>[],
+        cost: 0.0,
+      ),
+    ];
+    for (final index in order) {
+      final next = <({List<Offset?> values, List<Rect> badges, double cost})>[];
+      for (final state in beam) {
+        var accepted = 0;
+        for (final center in possibilities[index]) {
+          final rect = badge(index, center).inflate(badgeGap / 2);
+          if (state.badges.any(rect.overlaps)) continue;
+          final values = List<Offset?>.of(state.values);
+          values[index] = center;
+          next.add((
+            values: values,
+            badges: [...state.badges, rect],
+            cost: state.cost + (center - requests[index].edgeMidpoint).distance,
+          ));
+          if (++accepted >= choices) break;
         }
       }
-      for (var n = 0; n < indices.length; n++) {
-        final index = indices[n];
-        final height = requests[index].labelSize.height + 8;
-        positions[index] = Offset(
-          xs[n],
-          isTop
-              ? math.max(height / 2 + 2, boardBounds.top - height / 2 - 6)
-              : math.min(
-                  size.height - height / 2 - 2,
-                  boardBounds.bottom + height / 2 + 6,
-                ),
-        );
+      if (next.isEmpty) return null;
+      next.sort((a, b) => a.cost.compareTo(b.cost));
+      beam = next.take(width).toList();
+    }
+    return [for (final position in beam.first.values) position!];
+  }
+
+  for (final settings in [(16, 32), (40, 80), (100, 180)]) {
+    final solution = solve(settings.$1, settings.$2);
+    if (solution != null) return cache(solution);
+  }
+  // On compact maps several wide port names may compete for the same thin
+  // strip. Try assigning them to other coasts and packing each strip as a
+  // one-dimensional sequence; this prevents even very wide fonts overlapping.
+  final sideOptions = <List<List<Offset>>>[];
+  for (var i = 0; i < requests.length; i++) {
+    final halfW = (requests[i].labelSize.width + 12) / 2;
+    final halfH = (requests[i].labelSize.height + 8) / 2;
+    final edgeX = [
+      boardBounds.left - halfW - edgeGap,
+      boardBounds.right + halfW + edgeGap,
+    ];
+    final edgeY = [
+      boardBounds.top - halfH - edgeGap,
+      boardBounds.bottom + halfH + edgeGap,
+    ];
+    sideOptions.add([
+      for (var side = 0; side < 4; side++)
+        [
+          for (final point in possibilities[i])
+            if (side < 2
+                ? (point.dx - edgeX[side]).abs() < .01
+                : (point.dy - edgeY[side - 2]).abs() < .01)
+              point,
+        ]..sort(
+          (a, b) => side < 2 ? a.dy.compareTo(b.dy) : a.dx.compareTo(b.dx),
+        ),
+    ]);
+  }
+
+  double coordinate(Offset point, int side) => side < 2 ? point.dy : point.dx;
+  double halfLength(int i, int side) => side < 2
+      ? (requests[i].labelSize.height + 8) / 2
+      : (requests[i].labelSize.width + 12) / 2;
+
+  List<(int, Offset)>? packSide(List<int> indices, int side) {
+    if (indices.isEmpty) return [];
+    indices.sort(
+      (a, b) => coordinate(
+        requests[a].edgeMidpoint,
+        side,
+      ).compareTo(coordinate(requests[b].edgeMidpoint, side)),
+    );
+    final candidates = [for (final i in indices) sideOptions[i][side]];
+    if (candidates.any((c) => c.isEmpty)) return null;
+    final costs = <List<double>>[];
+    final previous = <List<int>>[];
+    for (var row = 0; row < candidates.length; row++) {
+      final rowCosts = <double>[];
+      final rowPrevious = <int>[];
+      var cheapest = double.infinity;
+      var bestIndex = -1;
+      var cursor = 0;
+      for (final point in candidates[row]) {
+        final position = coordinate(point, side);
+        final start = position - halfLength(indices[row], side);
+        if (row > 0) {
+          final earlier = candidates[row - 1];
+          while (cursor < earlier.length &&
+              coordinate(earlier[cursor], side) +
+                      halfLength(indices[row - 1], side) +
+                      badgeGap <=
+                  start) {
+            if (costs[row - 1][cursor] < cheapest) {
+              cheapest = costs[row - 1][cursor];
+              bestIndex = cursor;
+            }
+            cursor++;
+          }
+        } else {
+          cheapest = 0;
+        }
+        final distance = (point - requests[indices[row]].edgeMidpoint).distance;
+        rowCosts.add(cheapest + distance);
+        rowPrevious.add(bestIndex);
       }
+      costs.add(rowCosts);
+      previous.add(rowPrevious);
+    }
+    var last = -1;
+    var minCost = double.infinity;
+    for (var i = 0; i < costs.last.length; i++) {
+      if (costs.last[i] < minCost) {
+        minCost = costs.last[i];
+        last = i;
+      }
+    }
+    if (last < 0 || !minCost.isFinite) return null;
+    final positions = <(int, Offset)>[];
+    for (var row = indices.length - 1; row >= 0; row--) {
+      positions.add((indices[row], candidates[row][last]));
+      last = previous[row][last];
     }
     return positions;
   }
-  if (!hasSideGutters) {
-    return [
-      for (final request in requests)
-        dockLabelPosition(
-          size: size,
-          edgeMidpoint: request.edgeMidpoint,
-          boardBounds: boardBounds,
-          labelSize: request.labelSize,
-          radius: radius,
-        ),
-    ];
-  }
 
-  final positions = List<Offset>.filled(requests.length, Offset.zero);
-  for (final isLeft in [true, false]) {
-    final indices =
-        [
-          for (var i = 0; i < requests.length; i++)
-            if ((requests[i].edgeMidpoint.dx < size.width / 2) == isLeft) i,
-        ]..sort(
-          (a, b) => requests[a].edgeMidpoint.dy.compareTo(
-            requests[b].edgeMidpoint.dy,
-          ),
-        );
-    if (indices.isEmpty) continue;
-
-    // On especially short phone screens, a fifth label cannot fit between
-    // the raid HUD and the bottom Actions button. Place its northernmost port
-    // in the otherwise empty top gutter, clear of the HUD and terrain.
-    if (isLeft && size.height < 260 && indices.length > 4) {
-      final first = indices.removeAt(0);
-      final labelSize = requests[first].labelSize;
-      positions[first] = Offset(
-        boardBounds.left + 8 + labelSize.width / 2 + 6,
-        boardBounds.top - (labelSize.height + 8) / 2 - 5,
-      );
-    }
-
-    // The top-left raid panel and bottom action controls need breathing room.
-    final top = math.min(84.0, size.height * .28);
-    final bottom = math.max(
-      top + 12,
-      size.height - (size.height < 260 ? 66 : 70),
-    );
-    final totalBadgeHeight = indices.fold<double>(
-      0,
-      (sum, index) => sum + requests[index].labelSize.height + 8,
-    );
-    final gap = indices.length > 1
-        ? math.min(
-            8.0,
-            math.max(
-              0,
-              (bottom - top - totalBadgeHeight) / (indices.length - 1),
+  final sideGroups = List.generate(4, (_) => <int>[]);
+  final sideLengths = List.filled(4, 0.0);
+  final choices = [
+    for (var i = 0; i < requests.length; i++)
+      [
+        for (var side = 0; side < 4; side++)
+          if (sideOptions[i][side].isNotEmpty)
+            (
+              side: side,
+              distance:
+                  (sideOptions[i][side].reduce(
+                            (a, b) =>
+                                (a - requests[i].edgeMidpoint)
+                                        .distanceSquared <=
+                                    (b - requests[i].edgeMidpoint)
+                                        .distanceSquared
+                                ? a
+                                : b,
+                          ) -
+                          requests[i].edgeMidpoint)
+                      .distance,
             ),
-          )
-        : 0.0;
-    final ys = <double>[];
-    var nextTop = top;
-    for (final index in indices) {
-      final height = requests[index].labelSize.height + 8;
-      final wanted = requests[index].edgeMidpoint.dy - height / 2;
-      final placed = math.max(nextTop, wanted);
-      ys.add(placed + height / 2);
-      nextTop = placed + height + gap;
-    }
-    // Shift upward if the last port would otherwise descend into the tray.
-    if (nextTop - gap > bottom) {
-      var maxBottom = bottom;
-      for (var n = indices.length - 1; n >= 0; n--) {
-        final height = requests[indices[n]].labelSize.height + 8;
-        ys[n] = math.min(ys[n], maxBottom - height / 2);
-        maxBottom = ys[n] - height / 2 - gap;
+      ]..sort((a, b) => a.distance.compareTo(b.distance)),
+  ];
+  final byConstraint = List<int>.generate(requests.length, (i) => i)
+    ..sort((a, b) {
+      final choice = choices[a].length.compareTo(choices[b].length);
+      if (choice != 0) return choice;
+      return requests[b].labelSize.width.compareTo(requests[a].labelSize.width);
+    });
+
+  List<Offset>? packedResult;
+  var attempts = 0;
+  bool assign(int depth) {
+    if (++attempts > 30000) return false;
+    if (depth == byConstraint.length) {
+      final resolved = List<Offset?>.filled(requests.length, null);
+      for (var side = 0; side < 4; side++) {
+        final fitted = packSide([...sideGroups[side]], side);
+        if (fitted == null) return false;
+        for (final (index, position) in fitted) {
+          resolved[index] = position;
+        }
       }
+      final rects = [
+        for (var i = 0; i < requests.length; i++)
+          badge(i, resolved[i]!).inflate(badgeGap / 2),
+      ];
+      for (var i = 0; i < rects.length; i++) {
+        for (var j = i + 1; j < rects.length; j++) {
+          if (rects[i].overlaps(rects[j])) return false;
+        }
+      }
+      packedResult = [for (final position in resolved) position!];
+      return true;
     }
-    for (var n = 0; n < indices.length; n++) {
-      final index = indices[n];
-      final width = requests[index].labelSize.width + 12;
-      positions[index] = Offset(
-        isLeft
-            ? boardBounds.left - 14 - width / 2
-            : boardBounds.right + 14 + width / 2,
-        ys[n],
-      );
+    final i = byConstraint[depth];
+    for (final choice in choices[i]) {
+      final side = choice.side;
+      final length = halfLength(i, side) * 2;
+      final occupied =
+          sideLengths[side] +
+          (sideGroups[side].isEmpty ? 0 : badgeGap) +
+          length;
+      final available = side < 2 ? size.height : size.width;
+      if (occupied > available) continue;
+      sideLengths[side] = occupied;
+      sideGroups[side].add(i);
+      if (assign(depth + 1)) return true;
+      sideGroups[side].removeLast();
+      sideLengths[side] -= (sideGroups[side].isEmpty ? 0 : badgeGap) + length;
     }
+    return false;
   }
-  return positions;
+
+  if (assign(0)) return cache(packedResult!);
+
+  // Extremes smaller than the available label perimeter are not solvable
+  // without reducing map size; preserve the previous fallback in that case.
+  return cache([
+    for (var i = 0; i < requests.length; i++)
+      possibilities[i].isNotEmpty
+          ? possibilities[i].first
+          : dockLabelPosition(
+              size: size,
+              edgeMidpoint: requests[i].edgeMidpoint,
+              boardBounds: boardBounds,
+              labelSize: requests[i].labelSize,
+              radius: radius,
+            ),
+  ]);
 }

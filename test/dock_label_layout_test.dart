@@ -15,6 +15,10 @@ void main() {
       const Size(640, 220),
       const Size(844, 280),
       const Size(844, 290),
+      const Size(580, 300),
+      const Size(580, 250),
+      const Size(580, 275),
+      const Size(575, 260),
       const Size(1024, 550),
       const Size(1530, 800),
     ]) {
@@ -82,6 +86,10 @@ void main() {
       const Size(640, 220),
       const Size(844, 280),
       const Size(844, 290),
+      const Size(580, 300),
+      const Size(580, 250),
+      const Size(580, 275),
+      const Size(575, 260),
       const Size(1024, 550),
       const Size(1536, 508),
       const Size(1530, 800),
@@ -159,6 +167,58 @@ void main() {
             badge.overlaps(badges[j]),
             isFalse,
             reason: 'Dock $i covers dock $j at $size',
+          );
+        }
+      }
+    }
+  });
+
+  test('wide glyphs do not stack over other port badges', () {
+    final topology = tableWithSupplies().topology;
+    for (final size in [
+      const Size(580, 260),
+      const Size(580, 300),
+      const Size(640, 220),
+      const Size(844, 290),
+      const Size(1536, 508),
+    ]) {
+      final geometry = BoardGeometry(size);
+      final vertices = topology.vertices.map(geometry.vertex).toList();
+      final boardBounds = Rect.fromLTRB(
+        vertices.map((p) => p.dx).reduce(math.min),
+        vertices.map((p) => p.dy).reduce(math.min),
+        vertices.map((p) => p.dx).reduce(math.max),
+        vertices.map((p) => p.dy).reduce(math.max),
+      );
+      final requests = [
+        for (final dock in topology.docks)
+          DockLabelRequest(
+            (geometry.vertex(topology.vertices[dock.edge.a]) +
+                    geometry.vertex(topology.vertices[dock.edge.b])) /
+                2,
+            Size(dock.label.length * 12, 16),
+          ),
+      ];
+      final centers = layoutDockLabels(
+        size: size,
+        boardBounds: boardBounds,
+        radius: geometry.radius,
+        requests: requests,
+      );
+      final badges = [
+        for (var i = 0; i < centers.length; i++)
+          Rect.fromCenter(
+            center: centers[i],
+            width: requests[i].labelSize.width + 12,
+            height: requests[i].labelSize.height + 8,
+          ),
+      ];
+      for (var i = 0; i < badges.length; i++) {
+        for (var j = i + 1; j < badges.length; j++) {
+          expect(
+            badges[i].overlaps(badges[j]),
+            isFalse,
+            reason: 'Dock $i overlaps $j at $size',
           );
         }
       }
