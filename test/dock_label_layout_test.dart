@@ -12,6 +12,8 @@ void main() {
     final topology = tableWithSupplies().topology;
     for (final size in [
       const Size(640, 320),
+      const Size(640, 220),
+      const Size(844, 280),
       const Size(844, 290),
       const Size(1024, 550),
       const Size(1530, 800),
@@ -72,5 +74,101 @@ void main() {
       }
       expect(verticalLabels, greaterThan(0));
     }
+  });
+
+  test('all landscape port badges remain distinct and clear of terrain', () {
+    final topology = tableWithSupplies().topology;
+    for (final size in [
+      const Size(640, 220),
+      const Size(844, 280),
+      const Size(844, 290),
+      const Size(1024, 550),
+      const Size(1536, 508),
+      const Size(1530, 800),
+    ]) {
+      final geometry = BoardGeometry(size);
+      final vertices = topology.vertices.map(geometry.vertex).toList();
+      final boardBounds = Rect.fromLTRB(
+        vertices.map((p) => p.dx).reduce(math.min),
+        vertices.map((p) => p.dy).reduce(math.min),
+        vertices.map((p) => p.dx).reduce(math.max),
+        vertices.map((p) => p.dy).reduce(math.max),
+      );
+      final requests = [
+        for (final dock in topology.docks)
+          DockLabelRequest(
+            (geometry.vertex(topology.vertices[dock.edge.a]) +
+                    geometry.vertex(topology.vertices[dock.edge.b])) /
+                2,
+            Size(dock.label.length * 7.2, 16),
+          ),
+      ];
+      final labels = layoutDockLabels(
+        size: size,
+        boardBounds: boardBounds,
+        radius: geometry.radius,
+        requests: requests,
+      );
+      expect(labels, hasLength(topology.docks.length));
+      final badges = [
+        for (var i = 0; i < labels.length; i++)
+          Rect.fromCenter(
+            center: labels[i],
+            width: requests[i].labelSize.width + 12,
+            height: requests[i].labelSize.height + 8,
+          ),
+      ];
+      for (var i = 0; i < badges.length; i++) {
+        final badge = badges[i];
+        expect(badge.left, greaterThanOrEqualTo(0), reason: '$size $i');
+        expect(badge.top, greaterThanOrEqualTo(0), reason: '$size $i');
+        expect(badge.right, lessThanOrEqualTo(size.width), reason: '$size $i');
+        expect(
+          badge.bottom,
+          lessThanOrEqualTo(size.height),
+          reason: '$size $i',
+        );
+        expect(
+          badge.overlaps(boardBounds),
+          isFalse,
+          reason: 'Dock $i covers board at $size',
+        );
+        // In the compact fullscreen view, the raid HUD sits at top-left
+        // while Actions / End Turn occupy the two bottom corners.
+        if (size.height <= 290) {
+          expect(
+            badge.overlaps(const Rect.fromLTWH(10, 8, 135, 48)),
+            isFalse,
+            reason: 'Dock $i obscures raid HUD at $size',
+          );
+          expect(
+            badge.overlaps(Rect.fromLTWH(10, size.height - 52, 130, 44)),
+            isFalse,
+            reason: 'Dock $i obscures Actions at $size',
+          );
+          expect(
+            badge.overlaps(
+              Rect.fromLTWH(size.width - 140, size.height - 52, 130, 44),
+            ),
+            isFalse,
+            reason: 'Dock $i obscures End Turn at $size',
+          );
+        }
+        for (var j = i + 1; j < badges.length; j++) {
+          expect(
+            badge.overlaps(badges[j]),
+            isFalse,
+            reason: 'Dock $i covers dock $j at $size',
+          );
+        }
+      }
+    }
+  });
+
+  test('landscape board reclaims the vertical dock-label gutter', () {
+    const size = Size(1536, 508);
+    final previousRadius =
+        (size.height - 64) / (8 * BoardGeometry.verticalScale);
+    expect(BoardGeometry(size).radius, greaterThan(previousRadius));
   });
 }

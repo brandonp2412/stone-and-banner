@@ -5076,12 +5076,23 @@ class BoardGeometry {
   final Size size;
   static const horizontalScale = 1.28;
   static const verticalScale = .72;
-  // Reserve top/bottom gutters for coastal dock labels and leader lines.
-  // The standard board spans 8 lattice units vertically.
-  double get radius => math.min(
-    size.width / (9.2 * horizontalScale),
-    math.max(1, size.height - 64) / (8 * verticalScale),
-  );
+  // Wide boards can expand vertically once the dock badges fit beside them.
+  // Across this fixed 19-hex topology the extreme coast is 5.54 radii
+  // from centre horizontally. Reserve enough room for a 2:1 resource badge.
+  double get radius {
+    const sideBadgeGutter = 130.0;
+    final fullHeightRadius =
+        math.max(1, size.height - 16) / (8 * verticalScale);
+    final sideBadgesFit =
+        size.width > size.height * 1.25 &&
+        size.width / 2 - fullHeightRadius * 5.54 > sideBadgeGutter;
+    return math.min(
+      size.width / (9.2 * horizontalScale),
+      math.max(1, size.height - (sideBadgesFit ? 16 : 64)) /
+          (8 * verticalScale),
+    );
+  }
+
   Offset get center => Offset(size.width / 2, size.height / 2);
   Offset vertex(BoardVertex p) =>
       center +
@@ -5778,44 +5789,66 @@ class _Painter extends CustomPainter {
       vertices.map((p) => p.dx).reduce(math.max),
       vertices.map((p) => p.dy).reduce(math.max),
     );
-    for (final dock in state.topology.docks) {
-      final a = g.vertex(state.topology.vertices[dock.edge.a]);
-      final b = g.vertex(state.topology.vertices[dock.edge.b]);
-      final middle = (a + b) / 2;
-      final text = TextPainter(
-        text: TextSpan(
-          text: dock.label,
-          style: const TextStyle(
-            fontFamily: 'NotoSans',
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: Color(0xffffe5b2),
-            backgroundColor: Color(0xff182a31),
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final label = dockLabelPosition(
-        size: size,
-        edgeMidpoint: middle,
-        boardBounds: boardBounds,
-        labelSize: text.size,
-        radius: g.radius,
-      );
-      // Highlight the exact dock edge and end the leader at the label frame.
-      final shore = Paint()
-        ..color = const Color(0xffffd68a)
-        ..strokeWidth = 3.4
-        ..strokeCap = StrokeCap.round;
-      canvas.drawLine(a, b, shore);
-      canvas.drawCircle(middle, 4.4, Paint()..color = const Color(0xff182a31));
-      canvas.drawCircle(middle, 2.8, Paint()..color = const Color(0xffffefba));
+    final docks = [
+      for (final dock in state.topology.docks)
+        () {
+          final a = g.vertex(state.topology.vertices[dock.edge.a]);
+          final b = g.vertex(state.topology.vertices[dock.edge.b]);
+          final text = TextPainter(
+            text: TextSpan(
+              text: dock.label,
+              style: const TextStyle(
+                fontFamily: 'NotoSans',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xffffe5b2),
+                backgroundColor: Color(0xff182a31),
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          return (a: a, b: b, midpoint: (a + b) / 2, text: text);
+        }(),
+    ];
+    final labels = layoutDockLabels(
+      size: size,
+      boardBounds: boardBounds,
+      radius: g.radius,
+      requests: [
+        for (final dock in docks)
+          DockLabelRequest(dock.midpoint, dock.text.size),
+      ],
+    );
+
+    // Paint all shore markers and leaders first. Painting each badge in the
+    // same loop lets the next dock's leader overwrite an earlier badge.
+    for (var i = 0; i < docks.length; i++) {
+      final dock = docks[i];
+      final label = labels[i];
       final badge = Rect.fromCenter(
         center: label,
-        width: text.width + 12,
-        height: text.height + 8,
+        width: dock.text.width + 12,
+        height: dock.text.height + 8,
       );
-      final delta = label - middle;
+      canvas.drawLine(
+        dock.a,
+        dock.b,
+        Paint()
+          ..color = const Color(0xffffd68a)
+          ..strokeWidth = 3.4
+          ..strokeCap = StrokeCap.round,
+      );
+      canvas.drawCircle(
+        dock.midpoint,
+        4.4,
+        Paint()..color = const Color(0xff182a31),
+      );
+      canvas.drawCircle(
+        dock.midpoint,
+        2.8,
+        Paint()..color = const Color(0xffffefba),
+      );
+      final delta = label - dock.midpoint;
       final xFraction = delta.dx.abs() < .001
           ? double.infinity
           : (badge.width / 2) / delta.dx.abs();
@@ -5824,7 +5857,7 @@ class _Painter extends CustomPainter {
           : (badge.height / 2) / delta.dy.abs();
       final boundary = label - delta * math.min(xFraction, yFraction);
       canvas.drawLine(
-        middle,
+        dock.midpoint,
         boundary,
         Paint()
           ..color = const Color(0xff101c24)
@@ -5832,12 +5865,21 @@ class _Painter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
       canvas.drawLine(
-        middle,
+        dock.midpoint,
         boundary,
         Paint()
           ..color = const Color(0xffffe1a0)
           ..strokeWidth = 2.3
           ..strokeCap = StrokeCap.round,
+      );
+    }
+    for (var i = 0; i < docks.length; i++) {
+      final text = docks[i].text;
+      final label = labels[i];
+      final badge = Rect.fromCenter(
+        center: label,
+        width: text.width + 12,
+        height: text.height + 8,
       );
       canvas.drawRRect(
         RRect.fromRectAndRadius(badge, const Radius.circular(5)),
