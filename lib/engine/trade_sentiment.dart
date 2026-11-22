@@ -20,7 +20,11 @@ abstract final class TradeSentiment {
     var active = state.active;
     for (final event in state.events) {
       if (event is EndTurn) {
-        active = (active - 1 + state.players.length) % state.players.length;
+        active =
+            state.turnOrder[(state.turnOrder.indexOf(active) -
+                    1 +
+                    state.players.length) %
+                state.players.length];
       }
     }
     final offers = <int, (int, int)>{};
@@ -28,7 +32,9 @@ abstract final class TradeSentiment {
     for (var i = 0; i < state.events.length; i++) {
       final event = state.events[i];
       if (event is EndTurn) {
-        active = (active + 1) % state.players.length;
+        active =
+            state.turnOrder[(state.turnOrder.indexOf(active) + 1) %
+                state.players.length];
       } else if (event is ProposeTrade) {
         final original = event.counterOf == null
             ? null

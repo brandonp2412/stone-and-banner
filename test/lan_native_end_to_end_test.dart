@@ -49,6 +49,7 @@ void main() {
     final server = await LanHostServer.start(
       bindAddress: '127.0.0.1',
       advertise: false,
+      shuffleTurns: false,
     );
     final host = LanRoomClient();
     addTearDown(() async {

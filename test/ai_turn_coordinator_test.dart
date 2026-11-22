@@ -212,10 +212,15 @@ void main() {
         expect(ai.isRunning, isFalse);
         expect(AiTurnCoordinator.actingSeat(s, (seat) => seat != 0), 0);
         if (s.active != 0 && s.tactical == null) {
-          final offer = s.offers.firstWhere(
-            (o) => o.proposer == s.active && o.target == 0,
-          );
-          s = MatchEngine.apply(s, RespondTrade(0, false, offerId: offer.id));
+          final offer = s.offers
+              .where((o) => o.proposer == s.active && o.canRespond(0))
+              .firstOrNull;
+          if (offer != null) {
+            s = MatchEngine.apply(s, RespondTrade(0, false, offerId: offer.id));
+          } else if (s.pendingDiscards.containsKey(0)) {
+            // A seven can interrupt a bot round with a human discard.
+            s = MatchEngine.apply(s, MatchEngine.idleEvent(s)!);
+          }
         }
         final replay = MatchEngine.importReplay(MatchEngine.exportReplay(s));
         expect(replay.events.length, s.events.length);

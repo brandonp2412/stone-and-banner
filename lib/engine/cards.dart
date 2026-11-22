@@ -272,7 +272,7 @@ abstract final class StrategyCards {
       'Road to Nowhere',
       StrategyDeck.innovation,
       CardPower.freeRoad,
-      'A bafflingly expensive government project. Your road is free.',
+      'Build one connected road on a glowing map edge for free. A government project, somehow under budget.',
       copies: 1,
     ),
     StrategyCard(
@@ -280,7 +280,7 @@ abstract final class StrategyCards {
       'Spite Castle',
       StrategyDeck.innovation,
       CardPower.freeFort,
-      'Fortify a town purely because your rivals hate the view.',
+      'Fortify one of your Towns or Capitals for free. Your rivals will hate the view.',
       copies: 1,
     ),
     StrategyCard(
@@ -288,7 +288,7 @@ abstract final class StrategyCards {
       'Hostile Takeover',
       StrategyDeck.commerce,
       CardPower.seizeGood,
-      'Announce a merger. Take one chosen good from an unfortunate rival.',
+      'Choose a rival and steal one good of your choice from their stores.',
       copies: 1,
     ),
     StrategyCard(
@@ -304,7 +304,7 @@ abstract final class StrategyCards {
       'Mass Suspension',
       StrategyDeck.governance,
       CardPower.massExhaust,
-      'Pick a hex. Every rival Knight on its corners is sent home in disgrace.',
+      'Choose a map hex to exhaust every opposing Knight on its corners.',
       copies: 1,
     ),
     StrategyCard(
@@ -312,7 +312,7 @@ abstract final class StrategyCards {
       'The Great Sheep-Napping',
       StrategyDeck.governance,
       CardPower.seizeGood,
-      'Stage a woolly conspiracy and swipe a good from a rival.',
+      'Choose a rival and one resource to steal from them. Sheep may be involved.',
       copies: 1,
     ),
   ];

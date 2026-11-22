@@ -30,6 +30,7 @@ class P2pRoom extends ChangeNotifier {
   P2pRoom({
     Duration botMoveDelay = const Duration(milliseconds: 2400),
     this._humanTradeGrace = const Duration(seconds: 12),
+    this.shuffleTurns = false,
     @visibleForTesting AiDecision? botDecisionForTest,
   }) {
     _ai = AiTurnCoordinator(
@@ -62,6 +63,7 @@ class P2pRoom extends ChangeNotifier {
   late final P2pTransport _rtc;
   late final AiTurnCoordinator _ai;
   final Duration _humanTradeGrace;
+  final bool shuffleTurns;
 
   /// Bot seats run exclusively on the host with the local-game AI strategy.
   final Set<int> botSeats = {};
@@ -225,7 +227,12 @@ class P2pRoom extends ChangeNotifier {
     if (_room != null || guestPeer != null) {
       throw StateError('Already in a room.');
     }
-    _room = LanRoomRegistry().create(seats, seed, name);
+    _room = LanRoomRegistry().create(
+      seats,
+      seed,
+      name,
+      shuffleTurns: shuffleTurns,
+    );
     _room!.seats[0].connected = true;
     isHost = true;
     _recordDiagnostic('host lobby created');
@@ -1028,13 +1035,7 @@ class P2pRoom extends ChangeNotifier {
         'Connect friends or fill the remaining seats with bots.',
       );
     }
-    const botNames = [
-      'Mira Stoneward',
-      'Oswin the Bold',
-      'Tamsin Oakbanner',
-      'Alden of Greyford',
-      'Briar the Merchant',
-    ];
+    const botNames = ['Mira', 'Oswin', 'Tamsin', 'Alden', 'Briar'];
     for (final index in botSeats.toList()..sort()) {
       if (index != room.seats.length) {
         throw StateError('A guest joined while assigning bot seats.');

@@ -1,5 +1,33 @@
 package nz.stone_and_banner
 
+import android.content.Intent
+import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity()
+class MainActivity : FlutterActivity() {
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "stone_and_banner/multiplayer")
+            .setMethodCallHandler { call, result ->
+                try {
+                    when (call.method) {
+                        "start" -> {
+                            val intent = Intent(this, MultiplayerService::class.java)
+                            if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent)
+                            else startService(intent)
+                            result.success(null)
+                        }
+                        "stop" -> {
+                            stopService(Intent(this, MultiplayerService::class.java))
+                            result.success(null)
+                        }
+                        else -> result.notImplemented()
+                    }
+                } catch (error: Exception) {
+                    result.error("MULTIPLAYER_SERVICE", error.message, null)
+                }
+            }
+    }
+}

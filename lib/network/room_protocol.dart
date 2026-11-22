@@ -204,6 +204,7 @@ abstract final class RoomProtocol {
       },
       phase: MatchPhase.values.byName(data['phase'] as String),
       active: number('active'),
+      turnOrder: (data['turnOrder'] as List?)?.cast<int>(),
       setupStep: number('step'),
       pendingVillage: data['pending'] as int?,
       dice: data['dice'] as int?,

@@ -188,7 +188,8 @@ abstract final class AiCardStrategy {
       case CardPower.exhaust:
         final knight = view.strategy.publicKnights[play.vertex];
         return knight != null && knight.owner != view.seat
-            ? knight.rank.strength * (danger ? 2.0 : 1.0)
+            ? knight.rank.strength * (danger ? 2.0 : 1.0) +
+                  view.publicScores[knight.owner] * 0.8
             : -100;
       case CardPower.moveBandit:
         return 1; // Cannot infer a hidden victim's inventory.
@@ -251,7 +252,10 @@ abstract final class AiCardStrategy {
         _bundleGain(view, offer.gives, offer.wants) /
         (offer.gives.values.fold<int>(0, (a, b) => a + b) +
             offer.wants.values.fold<int>(0, (a, b) => a + b));
-    final next = (view.seat + 1) % view.publicScores.length;
+    // Trade with the player furthest behind, not the current leader.
+    final next = List.generate(view.publicScores.length, (i) => i)
+        .where((seat) => seat != view.seat)
+        .reduce((a, b) => view.publicScores[a] <= view.publicScores[b] ? a : b);
     candidates.sort((a, b) {
       final score = value(b).compareTo(value(a));
       if (score != 0) return score;

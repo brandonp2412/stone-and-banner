@@ -36,6 +36,27 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
   bool forwardingResponse = false;
   bool _leaveApproved = false;
   bool _leavePromptOpen = false;
+  bool _serviceStarted = false;
+  static const _service = MethodChannel('stone_and_banner/multiplayer');
+
+  void _syncBackgroundService() {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    final shouldRun = room.roomId != null;
+    if (shouldRun == _serviceStarted) return;
+    _serviceStarted = shouldRun;
+    unawaited(
+      _service.invokeMethod<void>(shouldRun ? 'start' : 'stop').catchError((
+        Object error,
+      ) {
+        if (mounted && shouldRun) {
+          room.message =
+              'Android could not protect the background connection: $error';
+          setState(() {});
+        }
+      }),
+    );
+  }
+
   String? receivedResponseLink;
 
   Future<void> _deliverResponse(String link) async {
@@ -56,7 +77,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    room = P2pRoom()..addListener(_refresh);
+    room = P2pRoom(shuffleTurns: true)..addListener(_refresh);
     final incomingLink = P2pTransport.initialLink();
     if (incomingLink != null) {
       try {
@@ -93,7 +114,9 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
   }
 
   void _refresh() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _syncBackgroundService();
+    setState(() {});
   }
 
   void _exitRoom() {
@@ -156,6 +179,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     room.removeListener(_refresh);
+    if (_serviceStarted) {
+      _serviceStarted = false;
+      unawaited(_service.invokeMethod<void>('stop').catchError((Object _) {}));
+    }
     room.dispose();
     name.dispose();
     answerField.dispose();

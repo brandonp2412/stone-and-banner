@@ -83,7 +83,7 @@ void main() {
     await tester.pumpWidget(app(pending));
     await tester.pumpWidget(app(answered));
     await tester.pump();
-    expect(find.byKey(const ValueKey('match-activity-notice')), findsOneWidget);
+    expect(find.byKey(const ValueKey('activity-seat-1')), findsOneWidget);
     await tester.pumpAndSettle(const Duration(seconds: 5));
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();

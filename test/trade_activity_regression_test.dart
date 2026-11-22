@@ -119,7 +119,7 @@ void main() {
     expect((events.single as RespondTrade).accept, isFalse);
   });
 
-  testWidgets('AI robbery produces a cheeky notice instead of a trade popup', (
+  testWidgets('AI robbery uses board animation without a duplicate toast', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(750, 450);
@@ -145,8 +145,9 @@ void main() {
     await tester.pumpWidget(app(before));
     await tester.pumpWidget(app(after));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('CHEEKY MOVE'), findsOneWidget);
-    expect(find.textContaining('eyes your goods'), findsOneWidget);
+    expect(find.text('CHEEKY MOVE'), findsNothing);
+    expect(find.textContaining('eyes your goods'), findsNothing);
+    expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
     expect(tester.takeException(), isNull);
   });

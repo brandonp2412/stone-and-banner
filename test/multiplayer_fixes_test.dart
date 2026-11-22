@@ -159,6 +159,7 @@ void main() {
       home: MatchActivity(
         state: state,
         viewerSeat: 0,
+        targetSeat: 1,
         emote: '👏',
         emoteSeat: 1,
         emoteSerial: serial,
@@ -167,7 +168,11 @@ void main() {
     await tester.pumpWidget(view(0));
     await tester.pumpWidget(view(1));
     await tester.pump(const Duration(milliseconds: 650));
-    expect(find.text('Guest'), findsOneWidget);
+    expect(
+      find.text('Guest'),
+      findsNothing,
+      reason: 'Reactions sit below the sender avatar without a name',
+    );
     expect(find.text('👏'), findsOneWidget);
     expect(state.events, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());

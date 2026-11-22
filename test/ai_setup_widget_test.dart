@@ -18,7 +18,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
@@ -63,7 +63,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(const StoneBannerApp());
+      await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
       await tester.pumpAndSettle();
       await tester.tap(find.text('New local match'));
       await tester.pumpAndSettle();
@@ -104,7 +104,10 @@ void main() {
       final match = MatchEngine.importReplay(session['replay'] as String);
       expect(match.players.first.id, 'Presley');
       expect(match.players.map((p) => p.id).toSet(), hasLength(4));
-      expect(match.players.skip(1).every((p) => !p.id.startsWith('Computer')), isTrue);
+      expect(
+        match.players.skip(1).every((p) => !p.id.startsWith('Computer')),
+        isTrue,
+      );
     },
   );
 
@@ -121,7 +124,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'stone_banner_local_replay_v1': replay,
     });
-    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
     await tester.pumpAndSettle();
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -148,7 +151,7 @@ void main() {
   testWidgets('hot-seat remains all human with private first turn', (
     tester,
   ) async {
-    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
@@ -173,7 +176,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
     await tester.pumpAndSettle();
     expect(find.text('New local match'), findsOneWidget);
     expect(find.text('Hot-seat'), findsNothing);
@@ -216,7 +219,7 @@ void main() {
   testWidgets('blank name never leaves automatically seeded setup', (
     tester,
   ) async {
-    await tester.pumpWidget(const StoneBannerApp());
+    await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();

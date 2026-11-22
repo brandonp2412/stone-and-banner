@@ -59,7 +59,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Forecast'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Study the next harvest'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.textContaining('Study the next harvest'),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Collect 1 wood'));
     await tester.pumpAndSettle();
     expect(state.current.cards, hasLength(1), reason: 'Selection is not play');

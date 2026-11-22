@@ -362,6 +362,7 @@ class MatchState {
     required this.board,
     required this.topology,
     required List<PlayerState> players,
+    List<int>? turnOrder,
     Map<int, Site> sites = const {},
     Map<int, int> roads = const {},
     Map<Resource, int> bank = const {},
@@ -399,6 +400,9 @@ class MatchState {
     List<MatchEvent> events = const [],
   }) : pendingDiscards = Map.unmodifiable(pendingDiscards),
        players = List.unmodifiable(players),
+       turnOrder = List.unmodifiable(
+         turnOrder ?? List.generate(players.length, (i) => i),
+       ),
        sites = Map.unmodifiable(sites),
        roads = Map.unmodifiable(roads),
        knights = Map.unmodifiable(knights),
@@ -429,6 +433,9 @@ class MatchState {
   final Board board;
   final BoardTopology topology;
   final List<PlayerState> players;
+
+  /// Seat IDs in their actual playing sequence; stable across networking/replays.
+  final List<int> turnOrder;
   final Map<int, Site> sites;
   final Map<int, int> roads;
   final Map<int, KnightPiece> knights;
@@ -510,6 +517,7 @@ class MatchState {
     board: board,
     topology: topology,
     players: players ?? this.players,
+    turnOrder: turnOrder,
     sites: sites ?? this.sites,
     roads: roads ?? this.roads,
     knights: knights ?? this.knights,
@@ -594,12 +602,20 @@ class MatchEngine {
     int invasionInvitesFromEvent = 0,
     int cardDeckVersion = 1,
     int raidInterval = 6,
+    List<int>? turnOrder,
   }) {
     _require(names.length >= 3 && names.length <= 4, 'Choose 3 or 4 players.');
     _require(
       names.every((n) => n.trim().isNotEmpty) &&
           names.toSet().length == names.length,
       'Use distinct player names.',
+    );
+    final order = turnOrder ?? List.generate(names.length, (i) => i);
+    _require(
+      order.length == names.length &&
+          order.toSet().length == names.length &&
+          order.every((seat) => seat >= 0 && seat < names.length),
+      'Invalid player order.',
     );
     final board = BoardGenerator.generate(boardSeed ?? seed);
     return MatchState(
@@ -611,6 +627,8 @@ class MatchEngine {
       board: board,
       topology: BoardTopology(board),
       players: [for (final n in names) PlayerState(id: n)],
+      turnOrder: order,
+      active: order.first,
       bank: {for (final r in Resource.values) r: bankSupply},
       drawPiles: {
         for (final track in StrategyDeck.values)
@@ -636,6 +654,7 @@ class MatchEngine {
     int invasionInvitesFromEvent = 0,
     int cardDeckVersion = 1,
     int raidInterval = 6,
+    List<int>? turnOrder,
   }) {
     var state = newGame(
       names,
@@ -645,6 +664,7 @@ class MatchEngine {
       invasionInvitesFromEvent: invasionInvitesFromEvent,
       cardDeckVersion: cardDeckVersion,
       raidInterval: raidInterval,
+      turnOrder: turnOrder,
     );
     for (final event in events) {
       state = _apply(state, event, replaying: true);
@@ -657,6 +677,7 @@ class MatchEngine {
     'invasionInvitesFromEvent': s.invasionInvitesFromEvent,
     'cardDeckVersion': s.cardDeckVersion,
     'raidInterval': s.raidInterval,
+    'turnOrder': s.turnOrder,
     'seed': s.seed,
     'boardSeed': s.board.seed,
     'balance': s.balance.toJson(),
@@ -755,6 +776,7 @@ class MatchEngine {
       cardDeckVersion: value['cardDeckVersion'] as int? ?? 1,
       // Missing on older replays: retain their original three-round rule.
       raidInterval: value['raidInterval'] as int? ?? 3,
+      turnOrder: (value['turnOrder'] as List?)?.cast<int>(),
     );
   }
 
@@ -767,6 +789,7 @@ class MatchEngine {
     'balance': s.balance.toJson(),
     'phase': s.phase.name,
     'active': s.active,
+    'turnOrder': s.turnOrder,
     'round': s.round,
     'step': s.setupStep,
     'pending': s.pendingVillage,
@@ -2222,11 +2245,12 @@ class MatchEngine {
       s = _recalculateRoads(s);
       if (setup) {
         final next = s.setupStep + 1, count = s.players.length;
-        final player = next >= count * 2
-            ? 0
-            : next < count
-            ? next
-            : count * 2 - 1 - next;
+        final player =
+            s.turnOrder[next >= count * 2
+                ? 0
+                : next < count
+                ? next
+                : count * 2 - 1 - next];
         s = s.copyWith(
           setupStep: next,
           active: player,
@@ -2651,26 +2675,29 @@ class MatchEngine {
       s = _consumeCard(s, event.handIndex);
     } else if (event is EndTurn) {
       _require(s.phase == MatchPhase.actions, 'Roll and resolve Bandit first.');
-      final next = (s.active + 1) % s.players.length;
+      final next =
+          s.turnOrder[(s.turnOrder.indexOf(s.active) + 1) % s.players.length];
       // Expire any offer when its proposer next receives the action turn.
       // Its target has necessarily had a full opportunity to accept.
       s = s.copyWith(
         offers: s.offers.where((o) => o.proposer != next).toList(),
       );
-      final newRound = s.round + (next == 0 ? 1 : 0);
-      final pressure = s.reaverPressure + (next == 0 ? 1 : 0);
+      final newRound = s.round + (next == s.turnOrder.first ? 1 : 0);
+      final pressure = s.reaverPressure + (next == s.turnOrder.first ? 1 : 0);
       s = s.copyWith(
         active: next,
         round: newRound,
         turnSerial: s.turnSerial + 1,
         reaverPressure: pressure,
-        phase: next == 0 && pressure >= s.raidInterval
+        phase: next == s.turnOrder.first && pressure >= s.raidInterval
             ? MatchPhase.invasion
             : MatchPhase.roll,
         clearDice: true,
-        reactionsUsed: next == 0 ? {} : s.reactionsUsed,
-        catchupUsed: next == 0 ? {} : s.catchupUsed,
-        reliefUsed: next == 0 && (newRound - 1) % 3 == 0 ? {} : s.reliefUsed,
+        reactionsUsed: next == s.turnOrder.first ? {} : s.reactionsUsed,
+        catchupUsed: next == s.turnOrder.first ? {} : s.catchupUsed,
+        reliefUsed: next == s.turnOrder.first && (newRound - 1) % 3 == 0
+            ? {}
+            : s.reliefUsed,
       );
       if (s.phase == MatchPhase.invasion) {
         // Include the current/human seat. No resources? They may pass.

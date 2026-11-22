@@ -70,6 +70,7 @@ void main() {
       home: MatchActivity(
         state: state,
         viewerSeat: 0,
+        targetSeat: 0,
         emote: '👏',
         emoteSerial: serial,
       ),
@@ -78,7 +79,7 @@ void main() {
     await tester.pumpWidget(app(1));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('👏'), findsOneWidget);
-    expect(find.text(state.players[0].id), findsOneWidget);
+    expect(find.text(state.players[0].id), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

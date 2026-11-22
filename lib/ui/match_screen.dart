@@ -1417,16 +1417,19 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   int? _mobilePage;
 
   void _openMobileCategory(int tab) {
+    if (widget.observing && !(tab == 1 && widget.tradeReplyAllowed)) return;
     setState(() {
       _tab = tab;
       _mobilePage = -1;
     });
   }
 
-  void _openMobileActions() => setState(() {
-    _tab = 0;
-    _mobilePage = -1;
-  });
+  void _openMobileActions() {
+    setState(() {
+      _tab = 0;
+      _mobilePage = -1;
+    });
+  }
 
   void _backMobile() => setState(() => _mobilePage = null);
 
@@ -1837,30 +1840,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 right: 1,
                 child: _emoteButton(),
               ),
-            // Center activity notices below the top controls on every screen.
-            Positioned(
-              top:
-                  MediaQuery.paddingOf(context).top +
-                  (mobile ? (_mobilePage == null ? 118 : 72) : 74),
-              left: 12,
-              right: 12,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: mobile ? 190 : 260),
-                  child: MatchActivity(
-                    state: s,
-                    viewerSeat: viewerSeat,
-                    computerSeats: widget.computerSeats,
-                    emote: widget.networkEmote ?? _emote,
-                    emoteSerial: widget.online && widget.onEmote != null
-                        ? widget.networkEmoteSerial
-                        : _emoteSerial,
-                    emoteSeat: widget.networkEmoteSeat,
-                  ),
-                ),
-              ),
-            ),
             if (_choosingCardTarget)
               Positioned(
                 top: MediaQuery.paddingOf(context).top + (mobile ? 94 : 65),
@@ -2559,7 +2538,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             18,
       );
       final width = math.max(
-        128.0 * MediaQuery.textScalerOf(context).scale(12) / 12,
+        124.0 * MediaQuery.textScalerOf(context).scale(12) / 12,
         (bounds.maxWidth - 50) / s.players.length - 6,
       );
       return Container(
@@ -2605,7 +2584,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                               width: width,
                               margin: const EdgeInsets.symmetric(horizontal: 3),
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
+                                horizontal: 5,
                                 vertical: 3,
                               ),
                               decoration: BoxDecoration(
@@ -2619,75 +2598,106 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                       : const Color(0xff30434a),
                                 ),
                               ),
-                              child: Row(
+                              child: Stack(
                                 children: [
-                                  Icon(
-                                    i == s.active
-                                        ? Icons.flag_rounded
-                                        : Icons.shield_outlined,
-                                    size: 20,
-                                    color: seatColors[i],
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          s.players[i].id,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            height: 1.2,
-                                            fontWeight: FontWeight.w700,
-                                          ),
+                                  Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 29,
+                                        height: 40,
+                                        child: Stack(
+                                          children: [
+                                            Align(
+                                              alignment: Alignment.center,
+                                              child: Icon(
+                                                i == s.active
+                                                    ? Icons.flag_rounded
+                                                    : Icons.shield_outlined,
+                                                size: 20,
+                                                color: seatColors[i],
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        Text(
-                                          i == winner
-                                              ? 'Winner'
-                                              : i == s.active
-                                              ? 'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.longestRoadHolder == i ? ' · Road +2' : ''}'
-                                              : s.longestRoadHolder == i
-                                              ? 'Longest road · +2 VP'
-                                              : 'Realm ${i + 1}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            height: 1.2,
-                                            color: i == s.active
-                                                ? seatColors[i]
-                                                : const Color(0xffa6b6ba),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width:
-                                        MediaQuery.textScalerOf(context)
-                                            .scale(20) *
-                                        1.4,
-                                    child: Text(
-                                      '${MatchEngine.score(s, i)}',
-                                      textAlign: TextAlign.right,
-                                      style: TextStyle(
-                                        color: seatColors[i],
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w800,
                                       ),
-                                    ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              s.players[i].id,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                height: 1.2,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            Text(
+                                              i == winner
+                                                  ? 'Winner'
+                                                  : i == s.active
+                                                  ? 'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.longestRoadHolder == i ? ' · Road +2' : ''}'
+                                                  : s.longestRoadHolder == i
+                                                  ? 'Longest road · +2 VP'
+                                                  : 'Realm ${i + 1}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                height: 1.2,
+                                                color: i == s.active
+                                                    ? seatColors[i]
+                                                    : const Color(0xffa6b6ba),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width:
+                                            MediaQuery.textScalerOf(context)
+                                                .scale(20) *
+                                            1.4,
+                                        child: Text(
+                                          '${MatchEngine.score(s, i)}',
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(
+                                            color: seatColors[i],
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                      const Text(
+                                        ' /15',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          height: 1.2,
+                                          color: Color(0xffa6b6ba),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const Text(
-                                    ' /15',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      height: 1.2,
-                                      color: Color(0xffa6b6ba),
+                                  Positioned.fill(
+                                    child: MatchActivity(
+                                      key: ValueKey('activity-seat-$i'),
+                                      state: s,
+                                      viewerSeat: viewerSeat,
+                                      targetSeat: i,
+                                      computerSeats: widget.computerSeats,
+                                      emote: widget.networkEmote ?? _emote,
+                                      emoteSerial:
+                                          widget.online &&
+                                              widget.onEmote != null
+                                          ? widget.networkEmoteSerial
+                                          : _emoteSerial,
+                                      emoteSeat: widget.networkEmoteSeat,
                                     ),
                                   ),
                                 ],
@@ -3173,16 +3183,20 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               key: index == 3 ? _realmHintTarget : _tabHintTargets[index],
               message: label,
               child: InkWell(
-                onTap: () {
-                  setState(() {
-                    _tab = index;
-                    if (index == 2) _unseenCard = false;
-                    if (index != 0) {
-                      choice = _Move.inspect;
-                      selectedKnight = null;
-                    }
-                  });
-                },
+                onTap:
+                    widget.observing &&
+                        !(index == 1 && widget.tradeReplyAllowed)
+                    ? null
+                    : () {
+                        setState(() {
+                          _tab = index;
+                          if (index == 2) _unseenCard = false;
+                          if (index != 0) {
+                            choice = _Move.inspect;
+                            selectedKnight = null;
+                          }
+                        });
+                      },
                 child: Container(
                   constraints: BoxConstraints(
                     minHeight:
@@ -3440,9 +3454,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
     return [
       for (final child in contents)
-        ExcludeFocus(
-          child: AbsorbPointer(child: Opacity(opacity: .5, child: child)),
-        ),
+        ExcludeFocus(child: AbsorbPointer(child: child)),
     ];
   }
 
@@ -3493,7 +3505,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 _Move.road,
                 Icons.route,
                 'Road',
-                _costLabel(MatchEngine.effectiveRoadCost(s)),
+                s.roads.values.where((seat) => seat == viewerSeat).length >=
+                        MatchEngine.roadLimit
+                    ? 'No roads left (${MatchEngine.roadLimit}/${MatchEngine.roadLimit} built)'
+                    : '${_costLabel(MatchEngine.effectiveRoadCost(s))} · ${MatchEngine.roadLimit - s.roads.values.where((seat) => seat == viewerSeat).length} roads left',
                 MatchEngine.legalEdges(s).isNotEmpty,
               ),
               _buildAction(

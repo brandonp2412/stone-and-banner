@@ -127,6 +127,15 @@ void main() {
     await tester.tap(find.text('Surveyor').last);
     await tester.pump(const Duration(milliseconds: 250));
     expect(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.textContaining('Lay one connected road'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Choose on map'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(
       find.byKey(const ValueKey('choose-card-target-on-map')),
       findsOneWidget,
     );
@@ -214,9 +223,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),
-        builder: (context, child) => RepaintBoundary(
-          key: const ValueKey('capture'), child: child!,
-        ),
+        builder: (context, child) =>
+            RepaintBoundary(key: const ValueKey('capture'), child: child!),
         home: Scaffold(
           body: MatchView(state: state, visibleSeat: 0, onEvent: (_) {}),
         ),

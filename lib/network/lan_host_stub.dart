@@ -5,6 +5,7 @@ class LanHostServer {
     String bindAddress = '0.0.0.0',
     int port = 0,
     bool advertise = true,
+    bool shuffleTurns = true,
   }) => Future.error(
     UnsupportedError('Host LAN games from the Android or Linux app.'),
   );

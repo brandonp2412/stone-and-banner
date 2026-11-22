@@ -36,7 +36,13 @@ void main() {
       expect(tester.getRect(find.text('Forecast')), cardRect);
       await tester.tap(find.text('Forecast'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Study the next harvest'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.textContaining('Study the next harvest'),
+        ),
+        findsOneWidget,
+      );
       final discard = tester.widget<TextButton>(
         find.widgetWithText(TextButton, 'Discard this card'),
       );
@@ -85,10 +91,15 @@ void main() {
     expect(find.byKey(const PageStorageKey('panel-2')), findsOneWidget);
     await tester.tap(find.text('Realm'));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const PageStorageKey('panel-2')),
+      findsOneWidget,
+      reason: 'Off-turn tab taps stay on the current panel',
+    );
     for (var seat = 0; seat < initial.players.length; seat++) {
       expect(find.byKey(ValueKey('public-realm-$seat')), findsNothing);
     }
-    expect(find.text('Town Developments'), findsOneWidget);
+    expect(find.text('Town Developments'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

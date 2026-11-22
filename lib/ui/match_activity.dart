@@ -18,6 +18,7 @@ class MatchActivity extends StatefulWidget {
     required this.state,
     required this.viewerSeat,
     this.computerSeats = const <int>{},
+    this.targetSeat,
     this.emote,
     this.emoteSerial = 0,
     this.emoteSeat,
@@ -26,6 +27,7 @@ class MatchActivity extends StatefulWidget {
   final MatchState state;
   final int viewerSeat;
   final Set<int> computerSeats;
+  final int? targetSeat;
   final String? emote;
   final int emoteSerial;
   final int? emoteSeat;
@@ -41,10 +43,13 @@ class _ActivityCue {
     required this.title,
     required this.detail,
     required this.color,
+    required this.seat,
+    this.isEmote = false,
     this.cheeky = false,
   });
 
-  final int index;
+  final int index, seat;
+  final bool isEmote;
   final String emoji, title, detail;
   final Color color;
   final bool cheeky;
@@ -57,12 +62,15 @@ class _MatchActivityState extends State<MatchActivity> {
   final _random = math.Random();
 
   void _showEmote(String emoji, int seat) {
+    if (widget.targetSeat != null && widget.targetSeat != seat) return;
     _dismiss?.cancel();
     setState(
       () => _cue = _ActivityCue(
         index: -DateTime.now().microsecondsSinceEpoch,
         emoji: emoji,
-        title: widget.state.players[seat].id,
+        title: '',
+        seat: seat,
+        isEmote: true,
         detail: '',
         color: const Color(0xff67dbbf),
       ),
@@ -79,7 +87,7 @@ class _MatchActivityState extends State<MatchActivity> {
       _reply?.cancel();
       _showEmote(widget.emote!, widget.emoteSeat ?? widget.viewerSeat);
       // Bot replies are cosmetic and only belong to local reactions.
-      final replies = widget.emoteSeat != null
+      final replies = widget.emoteSeat != null || widget.targetSeat != null
           ? <int>[]
           : widget.computerSeats
                 .where(
@@ -110,7 +118,10 @@ class _MatchActivityState extends State<MatchActivity> {
         _tradeDeclineReaction(oldWidget.state, state, event) ??
         _cutOffReaction(oldWidget.state, state, event, actor) ??
         _describe(state, event, actor, oldWidget.state);
-    if (cue == null) return;
+    if (cue == null ||
+        (widget.targetSeat != null && cue.seat != widget.targetSeat)) {
+      return;
+    }
     _dismiss?.cancel();
     setState(() => _cue = cue);
     _dismiss = Timer(
@@ -152,6 +163,7 @@ class _MatchActivityState extends State<MatchActivity> {
     return _ActivityCue(
       index: after.events.length,
       emoji: '😤',
+      seat: offer.proposer,
       title: '${after.players[offer.proposer].id}: Fine, keep your goods!',
       detail: 'They’ll offer you fewer trades from now on.',
       color: const Color(0xffffa28e),
@@ -196,6 +208,7 @@ class _MatchActivityState extends State<MatchActivity> {
       return _ActivityCue(
         index: after.events.length,
         emoji: '😏',
+        seat: actor,
         title: '${after.players[actor].id}: Beat you to it!',
         detail: 'That route is mine.',
         color: const Color(0xffffd449),
@@ -208,6 +221,7 @@ class _MatchActivityState extends State<MatchActivity> {
     return _ActivityCue(
       index: after.events.length,
       emoji: '😤',
+      seat: cutOff.first,
       title: '$names: Hey! You cut me off!',
       detail:
           'Your move blocks ${cutOff.length == 1 ? "their route" : "their routes"}',
@@ -239,6 +253,7 @@ class _MatchActivityState extends State<MatchActivity> {
       bool cheeky = false,
     }) => _ActivityCue(
       index: index,
+      seat: actor,
       emoji: cheeky ? '😏' : emoji,
       title: title,
       detail: detail,
@@ -297,17 +312,8 @@ class _MatchActivityState extends State<MatchActivity> {
       case MoveKnight():
         return null;
       case MoveBandit():
-        final victim = event.victim;
-        final targeted = isAi && victim == widget.viewerSeat;
-        return cue(
-          '🦹',
-          targeted ? '$player eyes your goods!' : '$prefix moves the bandit',
-          victim == null
-              ? 'The bandit prowls a new hex'
-              : 'A raid on ${state.players[victim].id} — can they stop it?',
-          color: coral,
-          cheeky: targeted,
-        );
+        // Bandit movement and robbery are already animated on the board.
+        return null;
       case RespondTactical():
         if (event.choice == TacticalChoice.intercept) {
           return cue(
@@ -410,7 +416,21 @@ class _MatchActivityState extends State<MatchActivity> {
           color: violet,
         );
       case PlayStrategyCard():
-        final hand = previous.players[actor].cards;
+        final playedHand = previous.players[actor].cards;
+        if (event.handIndex >= 0 &&
+            event.handIndex < playedHand.length &&
+            {
+              CardPower.freeRoad,
+              CardPower.freeFort,
+              CardPower.activate,
+              CardPower.promote,
+              CardPower.exhaust,
+              CardPower.moveBandit,
+              CardPower.massExhaust,
+            }.contains(playedHand[event.handIndex].definition.power)) {
+          return null; // Board effects are already visible in situ.
+        }
+        final hand = playedHand;
         final card = event.handIndex >= 0 && event.handIndex < hand.length
             ? hand[event.handIndex].definition
             : null;
@@ -477,6 +497,78 @@ class _MatchActivityState extends State<MatchActivity> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.targetSeat != null) {
+      final cue = _cue;
+      final name = cue == null ? '' : widget.state.players[cue.seat].id;
+      final description = cue == null
+          ? ''
+          : cue.title
+                .replaceFirst(name, '')
+                .replaceFirst(RegExp(r'^[:\s]+'), '')
+                .trim();
+      return IgnorePointer(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: cue == null
+              ? const SizedBox.shrink(key: ValueKey('player-cue-empty'))
+              : Align(
+                  key: ValueKey('player-cue-${cue.index}'),
+                  alignment: cue.isEmote
+                      ? Alignment.bottomLeft
+                      : Alignment.centerLeft,
+                  child: Semantics(
+                    label: cue.isEmote
+                        ? '$name reacts ${cue.emoji}'
+                        : cue.title,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xff172a33),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: cue.color),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 3,
+                          vertical: 2,
+                        ),
+                        child: cue.isEmote
+                            ? Text(
+                                cue.emoji,
+                                style: const TextStyle(fontSize: 17, height: 1),
+                              )
+                            : SizedBox(
+                                width: 110,
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      cue.emoji,
+                                      style: const TextStyle(fontSize: 18),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Expanded(
+                                      child: Text(
+                                        description.isNotEmpty
+                                            ? description
+                                            : cue.detail,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          height: 1.05,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+      );
+    }
     return IgnorePointer(
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 380),

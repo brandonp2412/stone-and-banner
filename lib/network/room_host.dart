@@ -20,19 +20,25 @@ class RoomSeat {
 
 /// One single-isolate, authoritative room. No client is allowed to mutate state.
 class HostedRoom {
-  HostedRoom(this.id, this.capacity, this.boardSeed)
-    : assert(capacity == 3 || capacity == 4),
-      // 52 random bits: safe as a JS integer on Flutter web as well as native.
-      // JavaScript bit shifts truncate to 32 bits, so do not use << 32.
-      secretSeed =
-          Random.secure().nextInt(1 << 30) +
-          Random.secure().nextInt(1 << 22) * (1 << 30);
+  HostedRoom(
+    this.id,
+    this.capacity,
+    this.boardSeed, {
+    this.shuffleTurns = false,
+  }) : assert(capacity == 3 || capacity == 4),
+       // 52 random bits: safe as a JS integer on Flutter web as well as native.
+       // JavaScript bit shifts truncate to 32 bits, so do not use << 32.
+       secretSeed =
+           Random.secure().nextInt(1 << 30) +
+           Random.secure().nextInt(1 << 22) * (1 << 30);
 
   HostedRoom.restored(this.id, this.capacity, this.boardSeed, this.secretSeed)
-    : assert(capacity == 3 || capacity == 4);
+    : shuffleTurns = false,
+      assert(capacity == 3 || capacity == 4);
 
   final String id;
   final int capacity, boardSeed, secretSeed;
+  final bool shuffleTurns;
   final seats = <RoomSeat>[];
   MatchState? state;
   final _responses = <int, Map<String, (String, Map<String, Object?>)>>{};
@@ -77,6 +83,9 @@ class HostedRoom {
       secretSeed,
       boardSeed: boardSeed,
       cardDeckVersion: 2,
+      turnOrder: shuffleTurns
+          ? (List.generate(capacity, (i) => i)..shuffle(Random.secure()))
+          : null,
     );
   }
 
@@ -342,14 +351,24 @@ class LanRoomRegistry {
     rooms[room.id] = room;
   }
 
-  HostedRoom create(int capacity, int boardSeed, String name) {
+  HostedRoom create(
+    int capacity,
+    int boardSeed,
+    String name, {
+    bool shuffleTurns = false,
+  }) {
     if (capacity != 3 && capacity != 4) throw StateError('Use 3–4 seats.');
     if (rooms.length >= 64) throw StateError('Host is at room capacity.');
     String code;
     do {
       code = _secret(5).substring(0, 8).toUpperCase();
     } while (rooms.containsKey(code));
-    final room = HostedRoom(code, capacity, boardSeed);
+    final room = HostedRoom(
+      code,
+      capacity,
+      boardSeed,
+      shuffleTurns: shuffleTurns,
+    );
     room.join(name);
     rooms[code] = room;
     return room;

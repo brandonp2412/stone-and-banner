@@ -520,7 +520,7 @@ class StrategyHand extends StatelessWidget {
                       '${state.current.cards[i].definition.track.name} card: '
                       '${state.current.cards[i].definition.name}',
                   child: OutlinedButton(
-                    onPressed: () => _showCard(context, i),
+                    onPressed: () => _showCard(context, i, forceDetails: true),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -552,6 +552,15 @@ class StrategyHand extends StatelessWidget {
                                 state.current.cards[i].definition.name,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                state.current.cards[i].definition.description,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xffc2d2d2),
                                 ),
                               ),
                               Text(

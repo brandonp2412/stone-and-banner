@@ -233,7 +233,18 @@ class HeuristicAi {
   MoveBandit _bandit(MatchState state, AiLegalActions legal) =>
       _best<MoveBandit>(legal.banditMoves, (event) {
         final tile = state.board.tiles[event.tile];
+        final scores = [
+          for (var i = 0; i < state.players.length; i++)
+            if (i != state.active) MatchEngine.score(state, i),
+        ];
+        final leaderScore = scores.reduce(math.max);
         var value = 0.0;
+        // Bots pressure the leader, not whichever neighbour joined first.
+        if (event.victim != null && event.victim != state.active) {
+          final targetScore = MatchEngine.score(state, event.victim!);
+          value += targetScore == leaderScore ? 100 : targetScore * 3;
+        }
+
         for (final vertex in state.topology.tileVertices[event.tile]) {
           final site = state.sites[vertex];
           if (site == null) continue;
@@ -241,7 +252,7 @@ class HeuristicAi {
               (site.structure.points + 1) * (_pips[tile.productionNumber] ?? 0);
           value += site.owner == state.active
               ? -weight * 2.2
-              : weight * (1 + MatchEngine.score(state, site.owner) / 15);
+              : weight * (1 + MatchEngine.score(state, site.owner) / 8);
         }
         return value;
       }, (event) => event.tile * 4 + (event.victim ?? 0));

@@ -44,10 +44,17 @@ Future<void> main() async {
 enum Page { home, board, rules, setup }
 
 class StoneBannerApp extends StatefulWidget {
-  const StoneBannerApp({super.key, this.worldSeedFactory = randomWorldSeed});
+  const StoneBannerApp({
+    super.key,
+    this.worldSeedFactory = randomWorldSeed,
+    this.randomizeTurnOrder = true,
+  });
 
   /// Production games get a fresh seed; tests may supply a fixed seed.
   final int Function() worldSeedFactory;
+
+  /// Disable for deterministic widget fixtures; live games randomize seats.
+  final bool randomizeTurnOrder;
 
   @override
   State<StoneBannerApp> createState() => _StoneBannerAppState();
@@ -502,14 +509,14 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       _archiveReplacedMatch();
       final firstComputer = humanSeats;
       final botNames = [
-        "Rowan the Mason",
-        "Elara of Ashvale",
-        "Cedric Ironwood",
-        "Mira Stoneward",
-        "Oswin the Bold",
-        "Tamsin Oakbanner",
-        "Alden of Greyford",
-        "Briar the Merchant",
+        "Rowan",
+        "Elara",
+        "Cedric",
+        "Mira",
+        "Oswin",
+        "Tamsin",
+        "Alden",
+        "Briar",
         "Bob",
         "Alice",
         "Dave",
@@ -526,6 +533,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         ],
         widget.worldSeedFactory(),
         cardDeckVersion: 2,
+        turnOrder: widget.randomizeTurnOrder
+            ? (List.generate(seats, (i) => i)..shuffle(math.Random()))
+            : null,
       );
       ai.pause();
       setState(() {

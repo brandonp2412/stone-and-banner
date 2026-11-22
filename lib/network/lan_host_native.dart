@@ -22,9 +22,10 @@ class LanHostServer {
     String bindAddress = '0.0.0.0',
     int port = 0,
     bool advertise = true,
+    bool shuffleTurns = true,
   }) async {
     final http = await HttpServer.bind(InternetAddress(bindAddress), port);
-    final protocol = _LanServerProtocol();
+    final protocol = _LanServerProtocol(shuffleTurns: shuffleTurns);
     RawDatagramSocket? discovery;
     try {
       if (advertise) {
@@ -222,17 +223,13 @@ class _Connection {
 }
 
 class _LanServerProtocol {
+  _LanServerProtocol({required this.shuffleTurns});
+  final bool shuffleTurns;
   final registry = LanRoomRegistry();
   final botCounts = <HostedRoom, int>{};
   final botSeats = <HostedRoom, Set<int>>{};
   final botBrains = <HostedRoom, AiTurnCoordinator>{};
-  static const botNames = [
-    'Mira Stoneward',
-    'Oswin the Bold',
-    'Tamsin Oakbanner',
-    'Alden of Greyford',
-    'Briar the Merchant',
-  ];
+  static const botNames = ['Mira', 'Oswin', 'Tamsin', 'Alden', 'Briar'];
 
   void close() {
     for (final brain in botBrains.values) {
@@ -290,6 +287,7 @@ class _LanServerProtocol {
           msg['capacity'] as int,
           msg['boardSeed'] as int,
           msg['name'] as String,
+          shuffleTurns: shuffleTurns,
         );
         seat = 0;
       } else {

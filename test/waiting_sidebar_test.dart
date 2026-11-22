@@ -35,31 +35,20 @@ void main() {
         expect(find.text('Trade'), findsOneWidget);
         await tester.tap(find.text('Trade'));
         await tester.pumpAndSettle();
-        expect(find.text('Player trade'), findsOneWidget);
-        final trade = find.byKey(const ValueKey('create-player-offer'));
         expect(
-          find.ancestor(
-            of: trade,
-            matching: find.byWidgetPredicate(
-              (w) => w is AbsorbPointer && w.absorbing,
-            ),
-          ),
-          findsWidgets,
+          find.text('Player trade'),
+          findsNothing,
+          reason: 'Tabs do not navigate while it is another player’s turn',
         );
-        await tester.tap(trade, warnIfMissed: false);
-        await tester.pump();
         expect(events, isEmpty);
-        expect(find.byType(Dialog), findsNothing);
         await tester.pumpWidget(view(false));
         await tester.pumpAndSettle();
+        await tester.tap(find.text('Trade'));
+        await tester.pumpAndSettle();
+        expect(find.text('Player trade'), findsOneWidget);
         expect(
-          find.ancestor(
-            of: find.byKey(const ValueKey('create-player-offer')),
-            matching: find.byWidgetPredicate(
-              (w) => w is AbsorbPointer && w.absorbing,
-            ),
-          ),
-          findsNothing,
+          find.byKey(const ValueKey('create-player-offer')),
+          findsOneWidget,
         );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
