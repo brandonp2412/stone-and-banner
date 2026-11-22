@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
-import 'package:stone_and_banner/ui/invasion_meter.dart';
 
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
 
@@ -42,7 +41,9 @@ void main() {
 
       await show(original);
       final map = tester.getRect(find.byKey(const ValueKey('realm-map')));
-      final fleet = tester.getRect(find.byType(InvasionMeter));
+      final fleet = tester.getRect(
+        find.byKey(const ValueKey('raid-defense-hud')),
+      );
       if (size.width < 900) {
         await tester.tap(find.byKey(const ValueKey('mobile-open-actions')));
         await tester.pumpAndSettle();
@@ -76,7 +77,10 @@ void main() {
       }
       await show(original.copyWith(reaverPressure: 2));
       expect(tester.getRect(find.byKey(const ValueKey('realm-map'))), map);
-      expect(tester.getRect(find.byType(InvasionMeter)), fleet);
+      expect(
+        tester.getRect(find.byKey(const ValueKey('raid-defense-hud'))),
+        fleet,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });

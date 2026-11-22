@@ -47,7 +47,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('landscape map raid HUD displays just its compact title', (
+  testWidgets('landscape raid HUD shows countdown and defence ratios', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({'gameplay_hints_enabled': false});
@@ -56,17 +56,25 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final state = tableWithSupplies();
     await tester.pumpWidget(
       MaterialApp(
-        home: MatchView(state: tableWithSupplies(), onEvent: (_) {}),
+        home: MatchView(state: state, onEvent: (_) {}),
       ),
     );
     await tester.pumpAndSettle();
     final hud = find.byKey(const ValueKey('mobile-raid-defense-hud'));
     expect(hud, findsOneWidget);
     expect(find.text('Raid Defense'), findsOneWidget);
-    expect(tester.getSize(hud).height, lessThan(35));
-    expect(tester.getSize(hud).width, lessThanOrEqualTo(170));
+    expect(tester.getSize(hud).height, lessThan(100));
+    expect(tester.getSize(hud).width, lessThanOrEqualTo(145));
+    expect(
+      find.text(
+        'Raid ${state.raidInterval - state.reaverPressure.clamp(0, state.raidInterval)} / ${state.raidInterval} rounds',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Defence '), findsOneWidget);
     expect(find.textContaining('ROUND'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });

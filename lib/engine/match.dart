@@ -1568,6 +1568,46 @@ class MatchEngine {
     return best;
   }
 
+  /// The exact continuous route awarded by longestRoad, in traversal order.
+  /// Uses the same rival-site / knight blockers as the scoring algorithm.
+  static List<int> longestRoadPath(MatchState s, int player) {
+    final owned = {
+      for (final edge in s.roads.keys)
+        if (s.roads[edge] == player) edge,
+    };
+    var best = <int>[];
+    void walk(int vertex, Set<int> used, List<int> path) {
+      if (path.length > best.length) best = List<int>.of(path);
+      if (path.isNotEmpty &&
+          s.sites[vertex] != null &&
+          s.sites[vertex]!.owner != player) {
+        return;
+      }
+      if (path.isNotEmpty &&
+          s.events.length >= s.invasionInvitesFromEvent &&
+          s.knights[vertex] != null &&
+          s.knights[vertex]!.owner != player) {
+        return;
+      }
+      for (final edge in s.topology.vertices[vertex].edges) {
+        if (!owned.contains(edge) || used.contains(edge)) continue;
+        final link = s.topology.edges[edge];
+        used.add(edge);
+        path.add(edge);
+        walk(link.a == vertex ? link.b : link.a, used, path);
+        path.removeLast();
+        used.remove(edge);
+      }
+    }
+
+    for (final edge in owned) {
+      final link = s.topology.edges[edge];
+      walk(link.a, {}, []);
+      walk(link.b, {}, []);
+    }
+    return best;
+  }
+
   static MatchState _recalculateRoads(MatchState s) {
     final lengths = [
       for (var i = 0; i < s.players.length; i++) longestRoad(s, i),

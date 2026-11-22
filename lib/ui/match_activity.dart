@@ -361,6 +361,8 @@ class _MatchActivityState extends State<MatchActivity> {
           color: gold,
         );
       case ProposeTrade():
+        // The incoming-trade dialog already announces computer proposals.
+        if (isAi) return null;
         if (actor != widget.viewerSeat &&
             event.target != -1 &&
             event.target != widget.viewerSeat) {

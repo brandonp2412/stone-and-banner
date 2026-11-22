@@ -306,6 +306,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   late final AnimationController _numberPulseController;
   late final AnimationController _cardsTabController;
   late final AnimationController _cityFallController;
+  late final AnimationController _longestRoadController;
+  int? _longestRoadWinner;
+  List<int> _longestRoadRoute = const [];
   bool _unseenCard = false;
   String? _newCardNotice;
   Timer? _newCardTimer;
@@ -419,6 +422,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         )..addStatusListener((status) {
           if (status == AnimationStatus.completed && mounted) {
             setState(() => _fallenCityOwner = null);
+          }
+        });
+    _longestRoadController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 3200),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed && mounted) {
+            setState(() => _longestRoadWinner = null);
           }
         });
     _numberPulseController = AnimationController(
@@ -1426,6 +1438,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     _numberPulseController.dispose();
     _cardsTabController.dispose();
     _cityFallController.dispose();
+    _longestRoadController.dispose();
     for (final controller in _panelScroll) {
       controller.dispose();
     }
@@ -1520,6 +1533,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
     if (s.seed != oldWidget.state.seed ||
         s.events.length < oldWidget.state.events.length) {
+      _longestRoadWinner = null;
+      _longestRoadRoute = const [];
+      _longestRoadController.reset();
       _dismissedHintContext = null;
       _unseenCard = false;
       _newCardNotice = null;
@@ -1569,6 +1585,17 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           ? edge.b
           : edge.a;
       _roadController.forward(from: 0);
+    }
+    if (s.seed == oldWidget.state.seed &&
+        s.longestRoadHolder != null &&
+        s.longestRoadHolder != oldWidget.state.longestRoadHolder) {
+      _longestRoadWinner = s.longestRoadHolder;
+      _longestRoadRoute = MatchEngine.longestRoadPath(s, s.longestRoadHolder!);
+      if (!MediaQuery.disableAnimationsOf(context)) {
+        _longestRoadController.forward(from: 0);
+      } else {
+        _longestRoadWinner = null;
+      }
     }
     if (s.seed == oldWidget.state.seed &&
         s.invasions > oldWidget.state.invasions) {
@@ -1974,6 +2001,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               ),
             if (_fallenCityOwner != null)
               Positioned.fill(child: IgnorePointer(child: _cityFallOverlay())),
+            if (_longestRoadWinner != null)
+              Positioned.fill(
+                child: IgnorePointer(child: _longestRoadOverlay()),
+              ),
             if (gameplayHint != null)
               Positioned.fill(
                 child: BlockSemantics(
@@ -1998,6 +2029,66 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       ),
     );
   }
+
+  Widget _longestRoadOverlay() => AnimatedBuilder(
+    animation: _longestRoadController,
+    builder: (context, child) {
+      final t = _longestRoadController.value;
+      final opacity =
+          (t < .16
+                  ? t / .16
+                  : t > .78
+                  ? (1 - t) / .22
+                  : 1.0)
+              .clamp(0.0, 1.0);
+      return Opacity(
+        opacity: opacity,
+        child: Align(
+          alignment: const Alignment(0, -.45),
+          child: Transform.scale(
+            scale: .78 + .22 * Curves.elasticOut.transform(t.clamp(0.0, 1.0)),
+            child: DecoratedBox(
+              key: const ValueKey('longest-road-award-animation'),
+              decoration: BoxDecoration(
+                color: const Color(0xf5222b32),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xffffd680), width: 2),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x99000000), blurRadius: 24),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      '🏆 LONGEST ROAD!',
+                      style: TextStyle(
+                        color: Color(0xffffde93),
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '${s.players[_longestRoadWinner!].id} · +2 VP',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 
   Widget _cityFallOverlay() => AnimatedBuilder(
     animation: _cityFallController,
@@ -2804,6 +2895,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             animatedRoad: _animatedRoad,
                             animatedRoadStart: _animatedRoadStart,
                             roadReveal: _roadReveal,
+                            roadCelebration: _longestRoadController,
+                            highlightedRoads: _longestRoadRoute,
                             numberPulse: _numberPulseController,
                           ),
                           child: SizedBox.expand(
@@ -2878,16 +2971,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           },
         ),
       ),
-      // A minimal raid label leaves more of the mobile map unobscured.
-      // Desktop retains the detailed round and invasion status.
+      // Show countdown / raid interval and defence / bandit strength.
       Positioned(
         top: 8,
         left: 10,
         child: IgnorePointer(
           child: ConstrainedBox(
+            key: const ValueKey('raid-defense-hud'),
             constraints: BoxConstraints(
-              minWidth: mobileFullscreen ? 0 : 230,
-              maxWidth: mobileFullscreen ? 170 : 230,
+              minWidth: mobileFullscreen ? 0 : 145,
+              maxWidth: mobileFullscreen ? 145 : 180,
             ),
             child: Container(
               key: mobileFullscreen
@@ -2901,8 +2994,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xff365159)),
               ),
-              child: mobileFullscreen
-                  ? const Text(
+              child: Semantics(
+                label:
+                    'Raid defence. ${s.raidInterval - s.reaverPressure.clamp(0, s.raidInterval)} of ${s.raidInterval} rounds until attack. ${MatchEngine.defenceStrength(s) + s.invasionAid} defence versus ${MatchEngine.invasionStrength(s)} bandit strength.',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
                       'Raid Defense',
                       style: TextStyle(
                         color: Color(0xffefd6a3),
@@ -2910,22 +3009,19 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                         fontWeight: FontWeight.w800,
                         height: 1.1,
                       ),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'ROUND ${s.round}',
-                          style: const TextStyle(
-                            color: Color(0xffc4d2cf),
-                            fontSize: 10,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        InvasionMeter(state: s),
-                      ],
                     ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Raid ${s.raidInterval - s.reaverPressure.clamp(0, s.raidInterval)} / ${s.raidInterval} rounds',
+                      style: const TextStyle(fontSize: 11, height: 1.15),
+                    ),
+                    Text(
+                      'Defence ${MatchEngine.defenceStrength(s) + s.invasionAid} / ${MatchEngine.invasionStrength(s)}',
+                      style: const TextStyle(fontSize: 11, height: 1.15),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -4874,6 +4970,8 @@ class _Painter extends CustomPainter {
     this.mode,
     this.selectedKnight, {
     required this.roadReveal,
+    required this.roadCelebration,
+    required this.highlightedRoads,
     required this.numberPulse,
     this.showTargets = true,
     this.hoverBuilds = false,
@@ -4886,6 +4984,7 @@ class _Painter extends CustomPainter {
   }) : super(
          repaint: Listenable.merge([
            roadReveal,
+           roadCelebration,
            numberPulse,
            resourceIconStyle,
            resourceIconsRevision,
@@ -4901,6 +5000,8 @@ class _Painter extends CustomPainter {
   final int? animatedRoad;
   final int? animatedRoadStart;
   final Animation<double> roadReveal;
+  final Animation<double> roadCelebration;
+  final List<int> highlightedRoads;
   final Animation<double> numberPulse;
 
   @override
@@ -5109,6 +5210,26 @@ class _Painter extends CustomPainter {
         );
       }
     }
+    // Reveal the awarded continuous route in sequence, without game events.
+    if (roadCelebration.value > 0 && roadCelebration.value < .80) {
+      final route = highlightedRoads;
+      for (var index = 0; index < route.length; index++) {
+        final edge = state.topology.edges[route[index]];
+        final a = g.vertex(state.topology.vertices[edge.a]);
+        final b = g.vertex(state.topology.vertices[edge.b]);
+        final progress = ((roadCelebration.value * 1.8 * route.length) - index)
+            .clamp(0.0, 1.0);
+        if (progress <= 0) continue;
+        canvas.drawLine(
+          a,
+          Offset.lerp(a, b, progress)!,
+          Paint()
+            ..color = const Color(0xffffe8a7).withValues(alpha: .75)
+            ..strokeWidth = 9
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+    }
     final legal = <int>{
       if (hoverBuilds) ...MatchEngine.legalVertices(state),
       if (hoverBuilds) ...MatchEngine.legalUpgrades(state),
@@ -5188,6 +5309,13 @@ class _Painter extends CustomPainter {
       }
       final site = state.sites[v.id];
       if (site == null) continue;
+      // Capitals remain taller than towns without obscuring nearby junctions.
+      if (site.structure == Structure.capital) {
+        canvas.save();
+        canvas.translate(c.dx, c.dy);
+        canvas.scale(.73);
+        canvas.translate(-c.dx, -c.dy);
+      }
       if (site.structure == Structure.capital) {
         final halo = Rect.fromCircle(
           center: c + const Offset(0, -7),
@@ -5321,6 +5449,7 @@ class _Painter extends CustomPainter {
           );
         }
       }
+      if (site.structure == Structure.capital) canvas.restore();
       if (state.fortified.contains(v.id)) {
         _label(
           canvas,
@@ -5426,14 +5555,53 @@ class _Painter extends CustomPainter {
         labelSize: text.size,
         radius: g.radius,
       );
-      // One fine leader line points to the correct coastal edge.
+      // Highlight the exact dock edge and end the leader at the label frame.
+      final shore = Paint()
+        ..color = const Color(0xffffd68a)
+        ..strokeWidth = 3.4
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(a, b, shore);
+      canvas.drawCircle(middle, 4.4, Paint()..color = const Color(0xff182a31));
+      canvas.drawCircle(middle, 2.8, Paint()..color = const Color(0xffffefba));
+      final badge = Rect.fromCenter(
+        center: label,
+        width: text.width + 12,
+        height: text.height + 8,
+      );
+      final delta = label - middle;
+      final xFraction = delta.dx.abs() < .001
+          ? double.infinity
+          : (badge.width / 2) / delta.dx.abs();
+      final yFraction = delta.dy.abs() < .001
+          ? double.infinity
+          : (badge.height / 2) / delta.dy.abs();
+      final boundary = label - delta * math.min(xFraction, yFraction);
       canvas.drawLine(
         middle,
-        label,
+        boundary,
+        Paint()
+          ..color = const Color(0xff101c24)
+          ..strokeWidth = 4.6
+          ..strokeCap = StrokeCap.round,
+      );
+      canvas.drawLine(
+        middle,
+        boundary,
+        Paint()
+          ..color = const Color(0xffffe1a0)
+          ..strokeWidth = 2.3
+          ..strokeCap = StrokeCap.round,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(badge, const Radius.circular(5)),
+        Paint()..color = const Color(0xff182a31),
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(badge, const Radius.circular(5)),
         Paint()
           ..color = const Color(0xffc7ac78)
-          ..strokeWidth = 1.6
-          ..strokeCap = StrokeCap.round,
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = .9,
       );
       text.paint(canvas, label - Offset(text.width / 2, text.height / 2));
     }
