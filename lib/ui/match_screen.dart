@@ -1449,7 +1449,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   int? _mobilePage;
 
   void _openMobileCategory(int tab) {
-    if (widget.observing && !(tab == 1 && widget.tradeReplyAllowed)) return;
+    // Viewing any category is allowed, even while another player acts.
     setState(() {
       _tab = tab;
       _mobilePage = -1;
@@ -3305,21 +3305,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               key: index == 3 ? _realmHintTarget : _tabHintTargets[index],
               message: label,
               child: InkWell(
-                onTap:
-                    MediaQuery.sizeOf(context).width < 900 &&
-                        widget.observing &&
-                        !(index == 1 && widget.tradeReplyAllowed)
-                    ? null
-                    : () {
-                        setState(() {
-                          _tab = index;
-                          if (index == 2) _unseenCard = false;
-                          if (index != 0) {
-                            choice = _Move.inspect;
-                            selectedKnight = null;
-                          }
-                        });
-                      },
+                onTap: () {
+                  setState(() {
+                    _tab = index;
+                    if (index == 2) _unseenCard = false;
+                    if (index != 0) {
+                      choice = _Move.inspect;
+                      selectedKnight = null;
+                    }
+                  });
+                },
                 child: Container(
                   constraints: BoxConstraints(
                     minHeight:
@@ -3566,19 +3561,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   }
 
   List<Widget> _visiblePanelContents(MatchPhase phase) {
-    final contents = _panelContents(
+    // Keep the whole panel browseable off-turn (including card details,
+    // trades and realm information). Individual gameplay actions enforce
+    // turn ownership; incoming trade replies remain available when allowed.
+    return _panelContents(
       widget.observing ? MatchPhase.actions : phase,
       selectedTab: _tab,
     );
-    // An offer can be answered outside your turn, but this must not expose
-    // building, dice, End turn, bank trades or other turn-owner actions.
-    if (!widget.observing || (_tab == 1 && widget.tradeReplyAllowed)) {
-      return contents;
-    }
-    return [
-      for (final child in contents)
-        ExcludeFocus(child: AbsorbPointer(child: child)),
-    ];
   }
 
   List<Widget> _panelContents(MatchPhase phase, {int? selectedTab}) {
