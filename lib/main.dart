@@ -906,7 +906,14 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                 )
               : Column(
                   children: [
-                    Expanded(child: options),
+                    // Two option chips should not take half of a portrait screen.
+                    if (bounds.maxHeight > bounds.maxWidth)
+                      SizedBox(
+                        height: math.min(276, bounds.maxHeight * .39),
+                        child: options,
+                      )
+                    else
+                      Expanded(child: options),
                     Expanded(child: players),
                   ],
                 ),
@@ -1371,7 +1378,16 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                         maxWidth: 680,
                                       ),
                                       child: ListView(
-                                        padding: const EdgeInsets.all(20),
+                                        // Leave space for the floating mobile
+                                        // back button, including at large text scales.
+                                        padding: EdgeInsets.fromLTRB(
+                                          20,
+                                          MediaQuery.sizeOf(context).width < 900
+                                              ? 62
+                                              : 20,
+                                          20,
+                                          20,
+                                        ),
                                         children: [
                                           Text(
                                             'The founding rules',

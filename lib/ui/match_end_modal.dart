@@ -66,14 +66,208 @@ class _MatchEndModalState extends State<MatchEndModal>
     super.dispose();
   }
 
+  /// Portrait results use the phone's height instead of squeezing the
+  /// landscape trophy, scores, and actions into side-by-side columns.
+  Widget _portraitContent(Color accent, String winnerName, int points) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              key: const ValueKey('match-finale-portrait-scroll'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'STONE & BANNER  /  MATCH COMPLETE',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 10,
+                      letterSpacing: 1.25,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xffb5c9c8),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: accent.withValues(alpha: .6),
+                          width: 2,
+                        ),
+                        gradient: RadialGradient(
+                          colors: [
+                            accent.withValues(alpha: .24),
+                            accent.withValues(alpha: .02),
+                          ],
+                        ),
+                      ),
+                      child: Icon(
+                        widget.victory
+                            ? Icons.emoji_events_rounded
+                            : Icons.shield_moon_rounded,
+                        size: 64,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.victory ? 'VICTORY' : 'DEFEAT',
+                    key: const ValueKey('match-finale-outcome'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2,
+                      height: 1.1,
+                      color: accent,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$winnerName claims the realm',
+                    key: const ValueKey('match-finale-winner'),
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$points / 15 Victory Points  ·  Round ${widget.state.round}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xffb5c9c8),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  for (
+                    var index = 0;
+                    index < widget.state.players.length;
+                    index++
+                  )
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: index == widget.winner
+                              ? accent.withValues(alpha: .15)
+                              : const Color(0x9920313a),
+                          border: Border.all(
+                            color: index == widget.winner
+                                ? accent
+                                : const Color(0xff45616a),
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            if (index == widget.winner) ...[
+                              Icon(
+                                Icons.workspace_premium_rounded,
+                                size: 20,
+                                color: accent,
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(
+                              child: Text(
+                                widget.state.players[index].id,
+                                softWrap: true,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${MatchEngine.score(widget.state, index)} / 15',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                                color: index == widget.winner
+                                    ? accent
+                                    : const Color(0xffafc6c8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.victory ? 'THE CROWN IS YOURS' : 'A REALM FALLS',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: accent,
+                      letterSpacing: 1.4,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            key: const ValueKey('match-finale-review'),
+            onPressed: widget.onReview,
+            icon: const Icon(Icons.map_outlined, size: 20),
+            label: const Text('View board'),
+            style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: const Color(0xff17242b),
+              minimumSize: const Size.fromHeight(44),
+            ),
+          ),
+          if (widget.onHome != null) ...[
+            const SizedBox(height: 6),
+            FilledButton.tonalIcon(
+              key: const ValueKey('match-finale-home'),
+              onPressed: widget.onHome,
+              icon: const Icon(Icons.home_rounded, size: 20),
+              label: const Text('Home'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xff243b43),
+                foregroundColor: const Color(0xffe4eff0),
+                minimumSize: const Size.fromHeight(44),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final accent = widget.victory ? gold : dusk;
     final winnerName = widget.state.players[widget.winner].id;
     final points = MatchEngine.score(widget.state, widget.winner);
     final available = MediaQuery.sizeOf(context);
+    final portrait =
+        available.height > available.width && available.width < 700;
     final compact = available.height < 355;
-    final height = math.min(compact ? 283.0 : 310.0, available.height - 22);
+    final height = portrait
+        ? math.min(available.height * .76, available.height - 28)
+        : math.min(compact ? 283.0 : 310.0, available.height - 22);
     return Stack(
       children: [
         const ModalBarrier(
@@ -105,7 +299,10 @@ class _MatchEndModalState extends State<MatchEndModal>
               ),
               clipBehavior: Clip.antiAlias,
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 620, maxHeight: height),
+                constraints: BoxConstraints(
+                  maxWidth: portrait ? 440 : 620,
+                  maxHeight: height,
+                ),
                 child: Semantics(
                   label:
                       '${widget.victory ? 'Victory' : 'Defeat'}. '
@@ -153,343 +350,359 @@ class _MatchEndModalState extends State<MatchEndModal>
                           ),
                         ),
                       ),
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: compact ? 16 : 23,
-                          vertical: compact ? 12 : 18,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            SizedBox(
-                              width: compact ? 116 : 151,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    child: AnimatedBuilder(
-                                      animation: _celebration,
-                                      builder: (context, child) =>
-                                          Transform.translate(
-                                            offset: Offset(
-                                              0,
-                                              math.sin(
-                                                    _celebration.value *
-                                                        math.pi *
-                                                        2,
-                                                  ) *
-                                                  4,
+                      if (portrait)
+                        _portraitContent(accent, winnerName, points)
+                      else
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: compact ? 16 : 23,
+                            vertical: compact ? 12 : 18,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(
+                                width: compact ? 116 : 151,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Expanded(
+                                      child: AnimatedBuilder(
+                                        animation: _celebration,
+                                        builder: (context, child) =>
+                                            Transform.translate(
+                                              offset: Offset(
+                                                0,
+                                                math.sin(
+                                                      _celebration.value *
+                                                          math.pi *
+                                                          2,
+                                                    ) *
+                                                    4,
+                                              ),
+                                              child: child,
                                             ),
-                                            child: child,
-                                          ),
-                                      child: Stack(
-                                        alignment: Alignment.center,
-                                        children: [
-                                          Container(
-                                            width: compact ? 103 : 134,
-                                            height: compact ? 103 : 134,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                color: accent.withValues(
-                                                  alpha: .5,
-                                                ),
-                                                width: 2,
-                                              ),
-                                              gradient: RadialGradient(
-                                                colors: [
-                                                  accent.withValues(alpha: .18),
-                                                  accent.withValues(alpha: .02),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          Icon(
-                                            widget.victory
-                                                ? Icons.emoji_events_rounded
-                                                : Icons.shield_moon_rounded,
-                                            size: compact ? 70 : 91,
-                                            color: accent,
-                                            shadows: [
-                                              Shadow(
-                                                color: accent.withValues(
-                                                  alpha: .5,
-                                                ),
-                                                blurRadius: 28,
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    widget.victory
-                                        ? compact
-                                              ? 'YOUR CROWN'
-                                              : 'THE CROWN IS YOURS'
-                                        : compact
-                                        ? 'REALM LOST'
-                                        : 'A REALM FALLS',
-                                    maxLines: 1,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      letterSpacing: 1.15,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: compact ? 8 : 9,
-                                      color: accent,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                ],
-                              ),
-                            ),
-                            SizedBox(width: compact ? 13 : 22),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'STONE & BANNER  /  MATCH COMPLETE',
-                                    maxLines: 1,
-                                    style: const TextStyle(
-                                      color: Color(0xffaebfc0),
-                                      letterSpacing: 1.3,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      widget.victory ? 'VICTORY' : 'DEFEAT',
-                                      key: const ValueKey(
-                                        'match-finale-outcome',
-                                      ),
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: compact ? 36 : 49,
-                                        letterSpacing: 2,
-                                        height: 1,
-                                        color: accent,
-                                        shadows: [
-                                          Shadow(
-                                            color: accent.withValues(alpha: .3),
-                                            blurRadius: 15,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '$winnerName claims the realm',
-                                    key: const ValueKey('match-finale-winner'),
-                                    maxLines: 2,
-                                    softWrap: true,
-                                    overflow: TextOverflow.visible,
-                                    style: TextStyle(
-                                      fontSize: compact ? 13 : 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  Text(
-                                    '$points / 15 Victory Points  ·  Round ${widget.state.round}',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: Color(0xffb5c9c8),
-                                    ),
-                                    maxLines: 1,
-                                  ),
-                                  const SizedBox(height: 10),
-                                  SizedBox(
-                                    height: compact ? 64 : 80,
-                                    child: LayoutBuilder(
-                                      builder: (context, box) => SingleChildScrollView(
-                                        child: Wrap(
-                                          spacing: 6,
-                                          runSpacing: 5,
+                                        child: Stack(
+                                          alignment: Alignment.center,
                                           children: [
-                                            for (
-                                              var index = 0;
-                                              index <
-                                                  widget.state.players.length;
-                                              index++
-                                            )
-                                              Builder(
-                                                builder: (context) {
-                                                  final score =
-                                                      MatchEngine.score(
-                                                        widget.state,
-                                                        index,
-                                                      );
-                                                  final leading =
-                                                      index == widget.winner;
-                                                  return Container(
-                                                    width:
-                                                        (box.maxWidth - 6) / 2,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 9,
-                                                          vertical: 4,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: leading
-                                                          ? accent.withValues(
-                                                              alpha: .16,
-                                                            )
-                                                          : const Color(
-                                                              0x9920313a,
-                                                            ),
-                                                      border: Border.all(
-                                                        color: leading
-                                                            ? accent
-                                                            : const Color(
-                                                                0xff45616a,
-                                                              ),
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            9,
-                                                          ),
+                                            Container(
+                                              width: compact ? 103 : 134,
+                                              height: compact ? 103 : 134,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: accent.withValues(
+                                                    alpha: .5,
+                                                  ),
+                                                  width: 2,
+                                                ),
+                                                gradient: RadialGradient(
+                                                  colors: [
+                                                    accent.withValues(
+                                                      alpha: .18,
                                                     ),
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        if (leading) ...[
-                                                          Icon(
-                                                            Icons
-                                                                .workspace_premium_rounded,
-                                                            size: 14,
-                                                            color: accent,
-                                                          ),
-                                                          const SizedBox(
-                                                            width: 3,
-                                                          ),
-                                                        ],
-                                                        Expanded(
-                                                          child: Text(
-                                                            widget
-                                                                .state
-                                                                .players[index]
-                                                                .id,
-                                                            maxLines: 2,
-                                                            softWrap: true,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontSize: 10,
-                                                                  color: Colors
-                                                                      .white,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 5,
-                                                        ),
-                                                        Text(
-                                                          '$score',
-                                                          style: TextStyle(
-                                                            fontSize: 13,
-                                                            fontWeight:
-                                                                FontWeight.w900,
-                                                            color: leading
-                                                                ? accent
-                                                                : const Color(
-                                                                    0xffafc6c8,
-                                                                  ),
-                                                          ),
-                                                        ),
-                                                      ],
+                                                    accent.withValues(
+                                                      alpha: .02,
                                                     ),
-                                                  );
-                                                },
+                                                  ],
+                                                ),
                                               ),
+                                            ),
+                                            Icon(
+                                              widget.victory
+                                                  ? Icons.emoji_events_rounded
+                                                  : Icons.shield_moon_rounded,
+                                              size: compact ? 70 : 91,
+                                              color: accent,
+                                              shadows: [
+                                                Shadow(
+                                                  color: accent.withValues(
+                                                    alpha: .5,
+                                                  ),
+                                                  blurRadius: 28,
+                                                ),
+                                              ],
+                                            ),
                                           ],
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  const Spacer(),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: FilledButton.icon(
-                                          key: const ValueKey(
-                                            'match-finale-review',
-                                          ),
-                                          onPressed: widget.onReview,
-                                          icon: const Icon(
-                                            Icons.map_outlined,
-                                            size: 18,
-                                          ),
-                                          label: const Text('View board'),
-                                          style: FilledButton.styleFrom(
-                                            backgroundColor: accent,
-                                            foregroundColor: const Color(
-                                              0xff17242b,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      widget.victory
+                                          ? compact
+                                                ? 'YOUR CROWN'
+                                                : 'THE CROWN IS YOURS'
+                                          : compact
+                                          ? 'REALM LOST'
+                                          : 'A REALM FALLS',
+                                      maxLines: 1,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        letterSpacing: 1.15,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: compact ? 8 : 9,
+                                        color: accent,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(width: compact ? 13 : 22),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'STONE & BANNER  /  MATCH COMPLETE',
+                                      maxLines: 1,
+                                      style: const TextStyle(
+                                        color: Color(0xffaebfc0),
+                                        letterSpacing: 1.3,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        widget.victory ? 'VICTORY' : 'DEFEAT',
+                                        key: const ValueKey(
+                                          'match-finale-outcome',
+                                        ),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: compact ? 36 : 49,
+                                          letterSpacing: 2,
+                                          height: 1,
+                                          color: accent,
+                                          shadows: [
+                                            Shadow(
+                                              color: accent.withValues(
+                                                alpha: .3,
+                                              ),
+                                              blurRadius: 15,
                                             ),
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 9,
-                                            ),
-                                            minimumSize: Size.fromHeight(
-                                              compact ? 35 : 43,
-                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '$winnerName claims the realm',
+                                      key: const ValueKey(
+                                        'match-finale-winner',
+                                      ),
+                                      maxLines: 2,
+                                      softWrap: true,
+                                      overflow: TextOverflow.visible,
+                                      style: TextStyle(
+                                        fontSize: compact ? 13 : 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$points / 15 Victory Points  ·  Round ${widget.state.round}',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xffb5c9c8),
+                                      ),
+                                      maxLines: 1,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      height: compact ? 64 : 80,
+                                      child: LayoutBuilder(
+                                        builder: (context, box) => SingleChildScrollView(
+                                          child: Wrap(
+                                            spacing: 6,
+                                            runSpacing: 5,
+                                            children: [
+                                              for (
+                                                var index = 0;
+                                                index <
+                                                    widget.state.players.length;
+                                                index++
+                                              )
+                                                Builder(
+                                                  builder: (context) {
+                                                    final score =
+                                                        MatchEngine.score(
+                                                          widget.state,
+                                                          index,
+                                                        );
+                                                    final leading =
+                                                        index == widget.winner;
+                                                    return Container(
+                                                      width:
+                                                          (box.maxWidth - 6) /
+                                                          2,
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 9,
+                                                            vertical: 4,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: leading
+                                                            ? accent.withValues(
+                                                                alpha: .16,
+                                                              )
+                                                            : const Color(
+                                                                0x9920313a,
+                                                              ),
+                                                        border: Border.all(
+                                                          color: leading
+                                                              ? accent
+                                                              : const Color(
+                                                                  0xff45616a,
+                                                                ),
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              9,
+                                                            ),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          if (leading) ...[
+                                                            Icon(
+                                                              Icons
+                                                                  .workspace_premium_rounded,
+                                                              size: 14,
+                                                              color: accent,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 3,
+                                                            ),
+                                                          ],
+                                                          Expanded(
+                                                            child: Text(
+                                                              widget
+                                                                  .state
+                                                                  .players[index]
+                                                                  .id,
+                                                              maxLines: 2,
+                                                              softWrap: true,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                              style:
+                                                                  const TextStyle(
+                                                                    fontSize:
+                                                                        10,
+                                                                    color: Colors
+                                                                        .white,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 5,
+                                                          ),
+                                                          Text(
+                                                            '$score',
+                                                            style: TextStyle(
+                                                              fontSize: 13,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w900,
+                                                              color: leading
+                                                                  ? accent
+                                                                  : const Color(
+                                                                      0xffafc6c8,
+                                                                    ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                      if (widget.onHome != null) ...[
-                                        const SizedBox(width: 8),
-                                        FilledButton.tonalIcon(
-                                          key: const ValueKey(
-                                            'match-finale-home',
-                                          ),
-                                          onPressed: widget.onHome,
-                                          icon: const Icon(
-                                            Icons.home_rounded,
-                                            size: 18,
-                                          ),
-                                          label: const Text('Home'),
-                                          style: FilledButton.styleFrom(
-                                            backgroundColor: const Color(
-                                              0xff243b43,
+                                    ),
+                                    const Spacer(),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: FilledButton.icon(
+                                            key: const ValueKey(
+                                              'match-finale-review',
                                             ),
-                                            foregroundColor: const Color(
-                                              0xffe4eff0,
+                                            onPressed: widget.onReview,
+                                            icon: const Icon(
+                                              Icons.map_outlined,
+                                              size: 18,
                                             ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(14),
-                                              side: const BorderSide(
-                                                color: Color(0xff6b939a),
+                                            label: const Text('View board'),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor: accent,
+                                              foregroundColor: const Color(
+                                                0xff17242b,
                                               ),
-                                            ),
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                            ),
-                                            minimumSize: Size(
-                                              0,
-                                              compact ? 35 : 43,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 9,
+                                                  ),
+                                              minimumSize: Size.fromHeight(
+                                                compact ? 35 : 43,
+                                              ),
                                             ),
                                           ),
                                         ),
+                                        if (widget.onHome != null) ...[
+                                          const SizedBox(width: 8),
+                                          FilledButton.tonalIcon(
+                                            key: const ValueKey(
+                                              'match-finale-home',
+                                            ),
+                                            onPressed: widget.onHome,
+                                            icon: const Icon(
+                                              Icons.home_rounded,
+                                              size: 18,
+                                            ),
+                                            label: const Text('Home'),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor: const Color(
+                                                0xff243b43,
+                                              ),
+                                              foregroundColor: const Color(
+                                                0xffe4eff0,
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                                side: const BorderSide(
+                                                  color: Color(0xff6b939a),
+                                                ),
+                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                  ),
+                                              minimumSize: Size(
+                                                0,
+                                                compact ? 35 : 43,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ],
-                                    ],
-                                  ),
-                                ],
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
