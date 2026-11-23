@@ -678,14 +678,14 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
             ),
           ),
           IconButton(
-            tooltip: 'Remove AI opponent',
+            tooltip: 'Remove bot opponent',
             onPressed: room.botCount > 0 && !room.started
                 ? () => room.setBotCount(room.botCount - 1)
                 : null,
             icon: const Icon(Icons.remove_circle_outline),
           ),
           IconButton(
-            tooltip: 'Add AI opponent',
+            tooltip: 'Add bot opponent',
             onPressed: room.botCount < room.availableBotSeats && !room.started
                 ? () => room.setBotCount(room.botCount + 1)
                 : null,
@@ -694,7 +694,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
         ],
       ),
       Text(
-        'Fill any empty seats with the same AI as solo play. '
+        'Fill any empty seats with the same bots as solo play. '
         'Friends always keep their own seats.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
@@ -796,10 +796,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
         title: Text(
           i < room.players.length
               ? room.botSeats.contains(i)
-                    ? '${room.players[i]} · AI'
+                    ? '${room.players[i]} · Bot'
                     : room.players[i]
               : room.botSeats.contains(i)
-              ? 'AI opponent (reserved)'
+              ? 'Bot opponent (reserved)'
               : 'Waiting for player…',
         ),
         subtitle: Text('Seat ${i + 1}'),
@@ -819,7 +819,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
         label: Text(
           room.botCount == 0
               ? 'Start multiplayer match'
-              : 'Start with ${room.botCount} AI opponent${room.botCount == 1 ? '' : 's'}',
+              : 'Start with ${room.botCount} bot opponent${room.botCount == 1 ? '' : 's'}',
         ),
       ),
     const SizedBox(height: 12),
@@ -895,6 +895,9 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
                           viewingSeat: room.seat,
                           computerSeats: room.botSeats,
                           observing: !canPlayTurn,
+                          onFastForward: room.connected && room.botsActing
+                              ? room.fastForwardBots
+                              : null,
                           tradeReplyAllowed: canReplyToTrade,
                           waitingMessage: canPlayTurn
                               ? null

@@ -90,7 +90,9 @@ void main() {
     final confirm = find.widgetWithText(FilledButton, 'Discard 4 resources');
     expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
     for (var i = 0; i < 4; i++) {
-      await tester.tap(find.byTooltip('Discard one wheat'));
+      await tester.tap(
+        find.byKey(const ValueKey('transfer-DISCARD-add-wheat')),
+      );
       await tester.pump();
     }
     expect(find.text('4 / 4 selected'), findsOneWidget);

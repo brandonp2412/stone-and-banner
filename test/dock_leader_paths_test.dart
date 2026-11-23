@@ -38,6 +38,7 @@ void main() {
           ),
       ];
       final labels = layoutDockLabels(
+        boardVertices: vertices,
         size: size,
         boardBounds: board,
         radius: geometry.radius,

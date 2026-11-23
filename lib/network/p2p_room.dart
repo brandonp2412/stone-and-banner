@@ -582,7 +582,7 @@ class P2pRoom extends ChangeNotifier {
       _botTradeGraceTimer = Timer(_humanTradeGrace, () {
         if (_disposed) return;
         _botTradeGraceExpiredId = offer.id;
-        _recordDiagnostic('bot trade response window elapsed; AI continues');
+        _recordDiagnostic('bot trade response window elapsed; bot continues');
         _syncAi();
       });
     }
@@ -944,6 +944,8 @@ class P2pRoom extends ChangeNotifier {
         } else {
           _stateFor(peer, seat);
         }
+      case 'fastForwardBots':
+        fastForwardBots();
       case 'emote':
         if (msg['emoji'] is String) {
           // Identify the sender from the authenticated peer, never the payload.
@@ -1057,6 +1059,24 @@ class P2pRoom extends ChangeNotifier {
     message = null;
     _broadcast();
     _schedule();
+  }
+
+  bool get botsActing {
+    final state = game;
+    return state != null &&
+        state.phase != MatchPhase.finished &&
+        botSeats.contains(
+          AiTurnCoordinator.actingSeat(state, botSeats.contains),
+        );
+  }
+
+  void fastForwardBots() {
+    if (!connected || !botsActing) return;
+    if (isHost) {
+      _ai.fastForward();
+    } else if (guestPeer != null) {
+      _send(guestPeer!, {'op': 'fastForwardBots'});
+    }
   }
 
   void dispatch(MatchEvent event) {

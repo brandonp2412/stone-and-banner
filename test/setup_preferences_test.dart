@@ -26,15 +26,15 @@ void main() {
     for (var i = 0; i < 4; i++) {
       await tester.enterText(find.byType(TextField).at(i), 'Name $i');
     }
-    await tester.tap(find.text('Vs AI'));
+    await tester.tap(find.text('Vs bots'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('3 AI'));
+    await tester.tap(find.text('3 bots'));
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
     await openSetup();
     expect(
       tester
-          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Vs AI'))
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Vs bots'))
           .selected,
       isTrue,
     );
@@ -46,7 +46,7 @@ void main() {
     );
     expect(
       tester
-          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '3 AI'))
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '3 bots'))
           .selected,
       isTrue,
     );

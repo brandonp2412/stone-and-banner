@@ -69,7 +69,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   Set<int> aiSeats = <int>{};
   Set<int> savedAiSeats = <int>{};
   bool computerOpponents = false;
-  int aiOpponentCount = 2; // Solo play by default when Vs AI is chosen.
+  int aiOpponentCount = 2; // Solo play by default when Vs bots is chosen.
 
   int get humanSeats => seats - (computerOpponents ? aiOpponentCount : 0);
   bool get soloHumanVsAi => computerOpponents && humanSeats == 1;
@@ -316,7 +316,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           savedAiSeats = restoredAiSeats;
         });
         // Do not interrupt navigation if storage finishes loading late.
-        if (replay != null && page == Page.home) resume();
+        if (replay != null && page == Page.home) resume(automatic: true);
       }
     } on Object {
       if (mounted) fail('Could not load the saved local match.');
@@ -411,17 +411,23 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     );
   }
 
-  void resume() {
+  void resume({bool automatic = false}) {
     final replay = savedReplay;
     if (replay == null) return;
     try {
       final loaded = MatchEngine.importReplay(replay);
+      final computerSeats = savedAiSeats
+          .where((s) => s > 0 && s < loaded.players.length)
+          .toSet();
+      // Shared-device games need an explicit choice of who is resuming.
+      // Otherwise an old local save opens a privacy handoff on every launch.
+      if (automatic && computerSeats.length != loaded.players.length - 1) {
+        return;
+      }
       ai.pause();
       setState(() {
         match = loaded;
-        aiSeats = savedAiSeats
-            .where((s) => s > 0 && s < loaded.players.length)
-            .toSet();
+        aiSeats = computerSeats;
         aiMoveCount = 0;
         aiError = null;
         page = Page.board;
@@ -736,7 +742,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     _updateSetup(() => computerOpponents = false),
               ),
               ChoiceChip(
-                label: const Text('Vs AI'),
+                label: const Text('Vs bots'),
                 selected: computerOpponents,
                 onSelected: (_) => _updateSetup(() => computerOpponents = true),
               ),
@@ -812,7 +818,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     children: [
                       for (var i = 1; i < seats; i++)
                         ChoiceChip(
-                          label: Text('$i AI'),
+                          label: Text('$i ${i == 1 ? 'bot' : 'bots'}'),
                           selected: aiOpponentCount == i,
                           onSelected: (_) =>
                               _updateSetup(() => aiOpponentCount = i),
@@ -1359,6 +1365,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                         ? 0
                                         : current.actingSeat,
                                     observing: aiActing,
+                                    onFastForward: aiActing
+                                        ? ai.fastForward
+                                        : null,
                                     tradeReplyAllowed:
                                         oneHumanMatch &&
                                         match != null &&
@@ -1844,7 +1853,7 @@ class _LandingHall extends StatelessWidget {
                 if (!compactLandscape) ...[
                   const SizedBox(height: 12),
                   const Text(
-                    'OFFLINE PLAY  ·  LOCAL AI  ·  3–4 SEATS',
+                    'OFFLINE PLAY  ·  LOCAL BOTS  ·  3–4 SEATS',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 10,

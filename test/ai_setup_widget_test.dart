@@ -24,15 +24,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Hot-seat'), findsOneWidget);
-    expect(find.text('Vs AI'), findsOneWidget);
+    expect(find.text('Vs bots'), findsOneWidget);
     expect(find.text('Computer opponents'), findsNothing);
-    await tester.tap(find.text('Vs AI'));
+    await tester.tap(find.text('Vs bots'));
     await tester.pumpAndSettle();
-    expect(find.text('1 AI'), findsOneWidget);
-    expect(find.text('2 AI'), findsOneWidget);
-    expect(find.text('3 AI'), findsNothing);
+    expect(find.text('1 bot'), findsOneWidget);
+    expect(find.text('2 bots'), findsOneWidget);
+    expect(find.text('3 bots'), findsNothing);
     expect(find.textContaining('1 human · 2 computers'), findsOneWidget);
-    await tester.tap(find.text('1 AI'));
+    await tester.tap(find.text('1 bot'));
     await tester.pumpAndSettle();
     expect(find.textContaining('2 humans · 1 computer'), findsOneWidget);
 
@@ -67,16 +67,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('New local match'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Vs AI'));
+      await tester.tap(find.text('Vs bots'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('4 players'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('4 players'));
       await tester.pumpAndSettle();
-      expect(find.text('3 AI'), findsOneWidget);
-      await tester.ensureVisible(find.text('3 AI'));
+      expect(find.text('3 bots'), findsOneWidget);
+      await tester.ensureVisible(find.text('3 bots'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('3 AI'));
+      await tester.tap(find.text('3 bots'));
       await tester.pumpAndSettle();
       expect(find.textContaining('1 human · 3 computer'), findsOneWidget);
 

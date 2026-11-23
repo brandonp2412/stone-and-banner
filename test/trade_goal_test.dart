@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
 import 'package:stone_and_banner/ui/resource_icon.dart';
-import 'package:stone_and_banner/ui/trade_leg.dart';
+import 'package:stone_and_banner/ui/trade_picker.dart';
 import 'package:stone_and_banner/engine/board.dart';
 
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
@@ -40,9 +40,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Bank exchange'), findsOneWidget);
     expect(find.text('AIM FOR'), findsNothing);
-    final legs = tester.widgetList<TradeLeg>(find.byType(TradeLeg));
-    expect(legs.first.resource, Resource.wood);
-    expect(legs.last.resource, Resource.brick);
+    final picker = tester.widget<TradePicker>(find.byType(TradePicker));
+    expect(picker.gives, {Resource.wood: 4});
+    expect(picker.wants, {Resource.brick: 1});
     expect(
       find.widgetWithText(FilledButton, 'Exchange').evaluate().single.widget,
       isA<FilledButton>().having(

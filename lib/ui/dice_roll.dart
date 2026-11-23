@@ -62,19 +62,6 @@ class _DiceRollState extends State<DiceRoll>
       type: MaterialType.transparency,
       child: Container(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: const Color(0xf214242b),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xff79938e), width: 1.5),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0xb3000000),
-              blurRadius: 32,
-              spreadRadius: 8,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
@@ -129,17 +116,28 @@ class _DiceRollState extends State<DiceRoll>
                 const SizedBox(height: 24),
                 Semantics(
                   liveRegion: true,
-                  child: Text(
-                    landed
-                        ? widget.first == 0
-                              ? 'Awaiting the realm’s roll'
-                              : '${widget.first} + ${widget.second} = ${widget.first + widget.second}'
-                        : 'Rolling…',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Colors.white,
-                      shadows: const [
-                        Shadow(blurRadius: 8, color: Colors.black),
-                      ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0x9914242b),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      landed
+                          ? widget.first == 0
+                                ? 'Awaiting the realm’s roll'
+                                : '${widget.first} + ${widget.second} = ${widget.first + widget.second}'
+                          : 'Rolling…',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            color: Colors.white,
+                            shadows: const [
+                              Shadow(blurRadius: 4, color: Colors.black),
+                            ],
+                          ),
                     ),
                   ),
                 ),

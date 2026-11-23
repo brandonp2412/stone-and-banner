@@ -1,3 +1,4 @@
+import 'board_target_helpers.dart';
 import 'action_helpers.dart';
 
 import 'package:flutter/material.dart';
@@ -225,9 +226,7 @@ void main() {
     });
   }
 
-  testWidgets('setup button opens legal choices instead of being disabled', (
-    tester,
-  ) async {
+  testWidgets('setup uses direct board selection', (tester) async {
     final initial = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 804);
     MatchEvent? event;
     await display(
@@ -236,22 +235,13 @@ void main() {
       initial,
       onEvent: (value) => event = value,
     );
-    expect(find.text('Site').hitTestable(), findsOneWidget);
-    await tester.tap(find.text('Site'));
-    await tester.pumpAndSettle();
-    expect(find.text('Choose legal board target'), findsOneWidget);
-    final first = find
-        .descendant(
-          of: find.byType(BottomSheet),
-          matching: find.byType(ListTile),
-        )
-        .first;
-    tester.widget<ListTile>(first).onTap!();
-    await tester.pumpAndSettle();
+    expect(find.byTooltip('Choose target'), findsNothing);
+    expect(find.text('Site'), findsNothing);
+    await tapBoardTarget(tester, initial);
     expect(event, isA<PlaceVillage>());
   });
 
-  testWidgets('target list dispatches the selected junction with a fixed map', (
+  testWidgets('board tap dispatches the selected junction with a fixed map', (
     tester,
   ) async {
     final state = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 804);
@@ -264,10 +254,7 @@ void main() {
     );
     expect(find.byType(InteractiveViewer), findsNothing);
     expect(find.byTooltip('Reset map zoom'), findsNothing);
-    await tester.tap(find.byTooltip('Choose target'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(ListTile).first);
-    await tester.pumpAndSettle();
+    await tapBoardTarget(tester, state);
     expect(event, isA<PlaceVillage>());
     final updated = MatchEngine.apply(state, event!);
     expect(

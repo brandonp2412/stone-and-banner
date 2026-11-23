@@ -92,7 +92,7 @@ abstract final class AiActionAdapter {
     RangeError.checkValidIndex(seat, state.players, 'seat');
     final expected = state.actingSeat;
     if (seat != expected) {
-      throw StateError('AI may observe only the acting/responding seat.');
+      throw StateError('Bot may observe only the acting/responding seat.');
     }
 
     final actions = <MatchEvent>[];
@@ -737,11 +737,11 @@ abstract final class AiActionAdapter {
         state.active != view.activeSeat ||
         state.phase != view.phase ||
         (state.actingSeat) != view.seat) {
-      throw StateError('AI observation is stale or belongs to another seat.');
+      throw StateError('Bot observation is stale or belongs to another seat.');
     }
     final key = jsonEncode(action.toJson());
     if (!view.legalActions.any((e) => jsonEncode(e.toJson()) == key)) {
-      throw StateError('AI selected an action outside its legal options.');
+      throw StateError('Bot selected an action outside its legal options.');
     }
     return MatchEngine.apply(state, settleTradeResponse(state, action));
   }

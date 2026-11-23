@@ -37,12 +37,12 @@ void main() {
       expect(tester.takeException(), isNull, reason: 'Setup layout overflow');
 
       await tester.scrollUntilVisible(
-        find.text('Vs AI'),
+        find.text('Vs bots'),
         100,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Vs AI'));
+      await tester.tap(find.text('Vs bots'));
       await tester.pumpAndSettle();
       expect(find.text('Computer opponents'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'AI options overflow');

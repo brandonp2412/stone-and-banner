@@ -65,7 +65,7 @@ void main() {
     expect(find.byKey(const ValueKey('stone-setup-page')), findsOneWidget);
     expect(find.text('Start match'), findsOneWidget);
     await golden(tester, 'setup');
-    await tester.tap(find.text('Vs AI'));
+    await tester.tap(find.text('Vs bots'));
     await tester.pumpAndSettle();
     await golden(tester, 'setup_ai');
   });

@@ -10,6 +10,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../engine/board.dart';
 
 enum ResourceIconStyle {
+  banner('Banner', 'banner', 'Bold resource colours and familiar silhouettes'),
+  treasury(
+    'Treasury',
+    'treasury',
+    'Rich jewel colours and warm golden highlights',
+  ),
+  carvedStone(
+    'Carved Stone',
+    'carved-stone',
+    'Cool mineral colours with bright, clear edges',
+  ),
   gameIcons(
     'Game Icons',
     'game-icons',
@@ -26,7 +37,7 @@ enum ResourceIconStyle {
   final String description;
 }
 
-final resourceIconStyle = ValueNotifier(ResourceIconStyle.gameIcons);
+final resourceIconStyle = ValueNotifier(ResourceIconStyle.banner);
 final resourceIconsRevision = ValueNotifier(0);
 final _images = <ResourceIconStyle, Map<Resource, ui.Image>>{};
 Future<void>? _loading;
@@ -62,6 +73,7 @@ Future<void> _loadResourceIcons() async {
 Future<void> restoreResourceIconStyle() async {
   final prefs = await SharedPreferences.getInstance();
   final saved = prefs.getString('resource_icon_pack');
+  resourceIconStyle.value = ResourceIconStyle.banner;
   for (final style in ResourceIconStyle.values) {
     if (style.name == saved) resourceIconStyle.value = style;
   }

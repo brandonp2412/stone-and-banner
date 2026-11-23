@@ -1,3 +1,5 @@
+import 'package:stone_and_banner/ui/trade_picker.dart';
+
 import 'action_helpers.dart';
 
 import 'package:flutter/material.dart';
@@ -86,14 +88,14 @@ void main() {
     await tester.tap(find.text('Bank trade'));
     await tester.pumpAndSettle();
     expect(find.text('Bank exchange'), findsOneWidget);
-    expect(find.textContaining('Rate 4:1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('trade-offer-preview')), findsOneWidget);
     expect(
       find.byType(Dialog),
       findsOneWidget,
     ); // Negotiation overlays the tabletop.
-    await tester.tap(find.byType(DropdownButton<Resource>).last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('sheep (${s.bank[Resource.wool]})').last);
+    final sheep = find.byKey(const ValueKey('trade-get-wool'));
+    await tester.ensureVisible(sheep);
+    await tester.tap(sheep);
     await tester.pumpAndSettle();
     expect(find.text('Exchange'), findsOneWidget);
     await tester.tap(find.text('Exchange'));
@@ -133,12 +135,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Standing offer'), findsOneWidget);
     expect(find.text('Everyone'), findsWidgets);
-    await tester.tap(find.byType(DropdownButton<Resource>).first);
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.text('wood (${s.current.stores[Resource.wood]})').last,
+    final picker = tester.widget<TradePicker>(find.byType(TradePicker));
+    for (final entry in picker.gives.entries) {
+      for (var i = 0; i < entry.value; i++) {
+        await tester.tap(
+          find.byKey(ValueKey('trade-give-minus-${entry.key.name}')),
+        );
+        await tester.pump();
+      }
+    }
+    for (final entry in picker.wants.entries) {
+      for (var i = 0; i < entry.value; i++) {
+        await tester.tap(
+          find.byKey(ValueKey('trade-get-minus-${entry.key.name}')),
+        );
+        await tester.pump();
+      }
+    }
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Send offer'))
+          .onPressed,
+      isNull,
     );
-    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('trade-give-wood')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('trade-get-wool')));
+    await tester.pump();
+
     expect(
       find.byType(Dialog),
       findsOneWidget,

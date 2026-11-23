@@ -8,6 +8,58 @@ import 'package:stone_and_banner/ui/match_screen.dart';
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
 
 void main() {
+  test('short portrait badge fits beside the coast near the canvas edge', () {
+    const edge = Offset(44, 331);
+    final label = layoutDockLabels(
+      size: const Size(435, 730),
+      boardBounds: const Rect.fromLTRB(24, 185, 414, 545),
+      radius: 45,
+      boardVertices: const [
+        Offset(24, 342),
+        Offset(141, 185),
+        Offset(297, 185),
+        Offset(414, 342),
+        Offset(297, 545),
+        Offset(141, 545),
+      ],
+      requests: const [DockLabelRequest(edge, Size(22, 16))],
+    ).single;
+    expect((label - edge).distance, lessThan(65));
+    expect(label.dx, lessThan(edge.dx));
+    expect(label.dy, lessThan(edge.dy));
+  });
+
+  test('labels use open water beside angled coasts when they fit', () {
+    const size = Size(800, 600);
+    const bounds = Rect.fromLTRB(200, 100, 600, 500);
+    const edge = Offset(300, 200);
+    const requests = [DockLabelRequest(edge, Size(62, 16))];
+    final previous = layoutDockLabels(
+      size: size,
+      boardBounds: bounds,
+      radius: 60,
+      requests: requests,
+    ).single;
+    final close = layoutDockLabels(
+      size: size,
+      boardBounds: bounds,
+      radius: 60,
+      requests: requests,
+      boardVertices: const [
+        Offset(400, 100),
+        Offset(600, 300),
+        Offset(400, 500),
+        Offset(200, 300),
+      ],
+    ).single;
+    expect((close - edge).distance, lessThan((previous - edge).distance));
+    final badge = Rect.fromCenter(center: close, width: 74, height: 24);
+    // The northwest coast has x + y = 500; the badge stays in water.
+    expect(badge.right + badge.bottom, lessThan(500));
+    expect((Offset.zero & size).contains(badge.topLeft), isTrue);
+    expect((Offset.zero & size).contains(badge.bottomRight), isTrue);
+  });
+
   test('north and south dock labels clear board in landscape layouts', () {
     final topology = tableWithSupplies().topology;
     for (final size in [
@@ -225,20 +277,17 @@ void main() {
     }
   });
 
-  test('portrait board uses available height instead of staying flattened', () {
-    final topology = tableWithSupplies().topology;
+  test('portrait board uses available height for a larger top-down table', () {
+    final landscape = BoardGeometry(const Size(900, 500));
     for (final size in [const Size(360, 630), const Size(393, 695)]) {
       final geometry = BoardGeometry(size);
-      final points = topology.vertices.map(geometry.vertex).toList();
-      final boardHeight =
-          points.map((p) => p.dy).reduce(math.max) -
-          points.map((p) => p.dy).reduce(math.min);
-      expect(
-        boardHeight,
-        greaterThan(size.height * .45),
-        reason: 'Portrait board should occupy most available map height',
+      expect(geometry.horizontalFactor, 1);
+      expect(geometry.verticalFactor, 1);
+      final previousRadius = math.min(
+        size.width / (9.6 * landscape.horizontalFactor),
+        (size.height - 112) / (8 * landscape.verticalFactor),
       );
-      expect(geometry.verticalFactor, greaterThan(geometry.horizontalFactor));
+      expect(geometry.radius, greaterThan(previousRadius));
     }
   });
 

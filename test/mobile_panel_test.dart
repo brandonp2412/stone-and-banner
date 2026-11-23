@@ -104,14 +104,24 @@ void main() {
     tester,
   ) async {
     await showMobileMatch(tester, const Size(393, 852));
-    final first = tester.getRect(find.byKey(const ValueKey('activity-seat-0')));
+    final first = tester.getRect(find.byKey(const ValueKey('player-tile-0')));
     final second = tester.getRect(
-      find.byKey(const ValueKey('activity-seat-1')),
+      find.byKey(const ValueKey('player-tile-1')),
     );
-    final third = tester.getRect(find.byKey(const ValueKey('activity-seat-2')));
+    final third = tester.getRect(find.byKey(const ValueKey('player-tile-2')));
     expect(second.top, closeTo(first.top, 1));
     expect(third.top, greaterThan(first.top + 30));
     expect(third.right, lessThanOrEqualTo(393));
+    final react = tester.getRect(find.byTooltip('React'));
+    final raid = tester.getRect(find.byKey(const ValueKey('raid-defense-hud')));
+    expect(react.top, greaterThan(third.bottom));
+    expect(react.top, closeTo(raid.top, 1));
+    final wood = tester.getRect(
+      find.byKey(const ValueKey('resource-tile-wood')),
+    );
+    final ore = tester.getRect(find.byKey(const ValueKey('resource-tile-ore')));
+    expect(ore.top, greaterThan(wood.bottom));
+
     expect(tester.takeException(), isNull);
   });
 

@@ -142,7 +142,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Discard one wheat'));
+    await tester.tap(find.byKey(const ValueKey('transfer-DISCARD-add-wheat')));
     await tester.pump();
     expect(find.text('1 / 4 selected'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('minimize-discard')));

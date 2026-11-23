@@ -1,3 +1,5 @@
+import 'board_target_helpers.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -18,11 +20,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('New local match'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Vs AI'));
+    await tester.tap(find.text('Vs bots'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('2 AI'));
+    await tester.ensureVisible(find.text('2 bots'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('2 AI'));
+    await tester.tap(find.text('2 bots'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Start match'));
     await tester.pumpAndSettle();
@@ -31,23 +33,24 @@ void main() {
     expect(find.text('Pass the device'), findsNothing);
   }
 
+  Future<Map<String, dynamic>> saved() async {
+    final prefs = await SharedPreferences.getInstance();
+    return jsonDecode(prefs.getString('stone_banner_local_session_v2')!)
+        as Map<String, dynamic>;
+  }
+
   Future<void> humanSetup(WidgetTester tester) async {
     for (var i = 0; i < 2; i++) {
-      await tester.ensureVisible(find.byTooltip('Choose target'));
-      await tester.tap(find.byTooltip('Choose target'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(ListTile).first);
+      final session = await saved();
+      await tapBoardTarget(
+        tester,
+        MatchEngine.importReplay(session['replay'] as String),
+      );
       await tester.pump();
     }
     expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
     expect(find.text('Watch the realm grow.'), findsNothing);
     expect(find.text('Your goods'), findsNothing);
-  }
-
-  Future<Map<String, dynamic>> saved() async {
-    final prefs = await SharedPreferences.getInstance();
-    return jsonDecode(prefs.getString('stone_banner_local_session_v2')!)
-        as Map<String, dynamic>;
   }
 
   Future<void> finishAi(WidgetTester tester) async {
@@ -74,8 +77,22 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await startAi(tester);
+    expect(find.byKey(const ValueKey('fast-forward-bots')), findsNothing);
     await humanSetup(tester);
+    final fastForward = find.byKey(const ValueKey('fast-forward-bots'));
+    expect(fastForward, findsOneWidget);
+    final buttonBounds = tester.getRect(fastForward);
+    expect(buttonBounds.right, greaterThan(800));
+    final actionsBounds = tester.getRect(
+      find.byKey(const ValueKey('mobile-open-actions')),
+    );
+    expect(buttonBounds.center.dy, actionsBounds.center.dy);
+    expect(buttonBounds.left, greaterThan(actionsBounds.right));
+    await tester.tap(fastForward);
     await finishAi(tester);
+    expect(fastForward, findsNothing);
+    // Drain the presentation timer that fast-forward bypassed.
+    await tester.pump(const Duration(seconds: 3));
     final session = await saved();
     expect(session['computerSeats'], [1, 2]);
     final snapshot = MatchEngine.importReplay(session['replay'] as String);
@@ -87,7 +104,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Computer turn'), findsNothing);
     expect(find.text('Pass the device'), findsNothing);
-    expect(find.byTooltip('Choose target'), findsOneWidget);
+    expect(find.byTooltip('Choose target'), findsNothing);
   });
 
   testWidgets('leaving board cancels an in-flight bot event', (tester) async {

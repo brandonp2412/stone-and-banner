@@ -35,17 +35,11 @@ void main() {
     },
   );
 
-  testWidgets('landscape board target picker uses most of screen height', (
-    tester,
-  ) async {
+  testWidgets('board target picker is absent', (tester) async {
     final state = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 20261118);
     await display(tester, const Size(844, 390), state);
-    await tester.tap(find.byTooltip('Choose target'));
-    await tester.pumpAndSettle();
-    final sheet = find.byType(BottomSheet);
-    expect(sheet, findsOneWidget);
-    expect(tester.getSize(sheet).height, greaterThan(300));
-    expect(find.textContaining('Junction'), findsWidgets);
+    expect(find.byTooltip('Choose target'), findsNothing);
+    expect(find.byType(BottomSheet), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

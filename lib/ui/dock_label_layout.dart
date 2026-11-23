@@ -80,6 +80,7 @@ List<Offset> layoutDockLabels({
   required Rect boardBounds,
   required double radius,
   required List<DockLabelRequest> requests,
+  List<Offset> boardVertices = const [],
 }) {
   if (requests.isEmpty) return const [];
   final signature = StringBuffer()
@@ -92,6 +93,9 @@ List<Offset> layoutDockLabels({
       '/${request.edgeMidpoint.dx}/${request.edgeMidpoint.dy}/'
       '${request.labelSize.width}/${request.labelSize.height}',
     );
+  }
+  for (final point in boardVertices) {
+    signature.write('/v${point.dx}/${point.dy}');
   }
   final key = signature.toString();
   final cached = _dockLayoutCache[key];
@@ -126,12 +130,60 @@ List<Offset> layoutDockLabels({
     height: requests[index].labelSize.height + 8,
   );
 
+  // A convex coast envelope frees the water beside angled shores while
+  // conservatively keeping labels outside every terrain hex.
+  // Short canvases need the outer gutters to leave room for leader routes.
+  final sorted = [
+    if (size.height >= 500) ...boardVertices,
+  ]..sort((a, b) => a.dx == b.dx ? a.dy.compareTo(b.dy) : a.dx.compareTo(b.dx));
+  double cross(Offset a, Offset b, Offset c) =>
+      (b.dx - a.dx) * (c.dy - a.dy) - (b.dy - a.dy) * (c.dx - a.dx);
+  List<Offset> halfHull(Iterable<Offset> points) {
+    final result = <Offset>[];
+    for (final point in points) {
+      while (result.length >= 2 &&
+          cross(result[result.length - 2], result.last, point) <= 0) {
+        result.removeLast();
+      }
+      result.add(point);
+    }
+    return result;
+  }
+
+  final lower = halfHull(sorted);
+  final upper = halfHull(sorted.reversed);
+  final coast = [
+    ...lower.take(math.max(0, lower.length - 1)),
+    ...upper.take(math.max(0, upper.length - 1)),
+  ];
+  bool coversTerrain(Rect rect) {
+    if (!rect.overlaps(boardBounds)) return false;
+    if (coast.length < 3) return true;
+    final corners = [
+      rect.topLeft,
+      rect.topRight,
+      rect.bottomRight,
+      rect.bottomLeft,
+    ];
+    for (var i = 0; i < coast.length; i++) {
+      final a = coast[i], b = coast[(i + 1) % coast.length];
+      if (corners.every((point) => cross(a, b, point) < 0)) return false;
+    }
+    return true;
+  }
+
   bool clearStatic(int index, Offset center) {
     final rect = badge(index, center);
     // Keep badges away from both the playable terrain and HUD touch targets.
     if (!canvas.contains(rect.topLeft) ||
         !canvas.contains(rect.bottomRight) ||
-        rect.overlaps(boardBounds.inflate(1))) {
+        coversTerrain(rect.inflate(1))) {
+      return false;
+    }
+    if (coast.length >= 3 &&
+        requests.any(
+          (request) => rect.inflate(12).contains(request.edgeMidpoint),
+        )) {
       return false;
     }
     return !overlays.any((overlay) => rect.inflate(2).overlaps(overlay));
@@ -153,6 +205,29 @@ List<Offset> layoutDockLabels({
       if (clearStatic(index, position)) positions.add(position);
     }
 
+    if (coast.length >= 3) {
+      final outward = edge - size.center(Offset.zero);
+      final direction = outward.distance > 0
+          ? outward / outward.distance
+          : const Offset(0, -1);
+      final tangent = Offset(-direction.dy, direction.dx);
+      final reach = math.max(radius * 2, math.max(halfW, halfH) * 2);
+      for (var distance = edgeGap; distance <= reach; distance += 4) {
+        for (final shift in [0.0, -8.0, 8.0, -16.0, 16.0]) {
+          offer(edge + direction * distance + tangent * shift);
+        }
+      }
+      // Near a canvas edge, the radial positions can all be clipped even
+      // though a short badge fits just above or below the port. Search the
+      // surrounding water too before sending it to a distant board corner.
+      for (var dx = -reach; dx <= reach; dx += 4) {
+        for (var dy = -reach; dy <= reach; dy += 4) {
+          if (dx * dx + dy * dy <= reach * reach) {
+            offer(edge + Offset(dx, dy));
+          }
+        }
+      }
+    }
     for (final x in [left, right]) {
       offer(Offset(x, edge.dy));
       for (var y = halfH; y <= size.height - halfH; y += 4) {

@@ -21,6 +21,9 @@ flutter:
   assets:
     - assets/art/stone_banner_crest.jpg
     - assets/icons/
+    - assets/icons/banner/
+    - assets/icons/treasury/
+    - assets/icons/carved-stone/
     - assets/icons/game-icons/
     - assets/icons/mdi/
     - assets/icons/fluent-emoji-flat/

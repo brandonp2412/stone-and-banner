@@ -72,7 +72,7 @@ class _MatchActivityState extends State<MatchActivity> {
       () => _cue = _ActivityCue(
         index: -DateTime.now().microsecondsSinceEpoch,
         emoji: emoji,
-        title: '',
+        title: widget.state.players[seat].id,
         seat: seat,
         isEmote: true,
         detail: '',

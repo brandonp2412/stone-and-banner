@@ -5,6 +5,46 @@ import 'package:stone_and_banner/ui/match_screen.dart';
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
 
 void main() {
+  testWidgets('options sheet rebuilds after the match is removed', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final showMatch = ValueNotifier(true);
+    addTearDown(showMatch.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<bool>(
+          valueListenable: showMatch,
+          builder: (context, visible, child) => Scaffold(
+            body: visible
+                ? MatchView(
+                    state: tableWithSupplies(),
+                    online: true,
+                    viewingSeat: 0,
+                    onEvent: (_) {},
+                    onLeaveRoom: () {},
+                  )
+                : const Text('Room closed'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('match-room-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    showMatch.value = false;
+    await tester.pumpAndSettle();
+    // Force the surviving modal to rebuild its responsive layout.
+    tester.view.physicalSize = const Size(420, 800);
+    await tester.pumpAndSettle();
+    expect(find.text('Gameplay hints'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('mobile room exit is in top-left menu, not over reactions', (
     tester,
   ) async {

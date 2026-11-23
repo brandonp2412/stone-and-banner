@@ -52,9 +52,9 @@ void main() {
     await scrollToAction(tester, 'Player trade');
     await tester.tap(find.text('Player trade'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('+ Add another resource').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(PopupMenuItem<Resource>).first);
+    final addWheat = find.byKey(const ValueKey('trade-give-wheat'));
+    await tester.ensureVisible(addWheat);
+    await tester.tap(addWheat);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Send offer'));
     await tester.pumpAndSettle();

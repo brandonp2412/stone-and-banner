@@ -1,4 +1,13 @@
-# Resource icon credits
+# Resource icon artwork
+
+Banner, Treasury and Carved Stone are original Stone & Banner resource sets, inspired by the app crest’s faceted stone and amber banner. Each set includes wood, brick, wheat, sheep, ore, paper, cloth and coin. SVG sources and transparent PNG exports are bundled for offline use. Rebuild with `python3 tool/art/build_resource_icons.py` (requires rsvg-convert).
+
+Copyright 2026 Stone & Banner contributors. All rights reserved.
+
+All five third-party collections are also bundled and available in the resource icon picker, with their original licences and attribution in sources.json.
+
+## Third-party collection credits
+
 
 Original artwork is bundled unchanged, apart from a warm ivory colour for the two monochrome collections. SVG originals and 128px PNG exports are included. All icons load locally, without network requests.
 

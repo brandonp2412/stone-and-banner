@@ -1,3 +1,4 @@
+import 'board_target_helpers.dart';
 import 'action_helpers.dart';
 
 import 'package:flutter/material.dart';
@@ -142,26 +143,44 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text(action.key));
         await tester.pumpAndSettle();
+        int? selectedKnight;
         for (
           var step = 0;
           step < (action.key == 'Move Knight' ? 2 : 1);
           step++
         ) {
-          await tester.tap(find.byTooltip('Choose target'));
-          await tester.pumpAndSettle();
-          final targets = find.descendant(
-            of: find.byType(BottomSheet),
-            matching: find.byType(ListTile),
-          );
-          expect(targets, findsWidgets);
-          await Scrollable.ensureVisible(
-            tester.element(targets.first),
-            alignment: .1,
-            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-          );
-          await tester.pumpAndSettle();
-          tester.widget<ListTile>(targets.first).onTap!();
-          await tester.pumpAndSettle();
+          final vertices = switch (action.value) {
+            'fortify' => state.sites.keys.where(
+              (v) => MatchEngine.legalFort(state, v),
+            ),
+            'recruit' => Iterable.generate(
+              state.topology.vertices.length,
+            ).where((v) => MatchEngine.legalRecruit(state, v)),
+            'activate' => state.knights.keys.where(
+              (v) => MatchEngine.legalActivate(state, v),
+            ),
+            'promote' => state.knights.keys.where(
+              (v) => MatchEngine.legalPromote(state, v),
+            ),
+            _ =>
+              step == 0
+                  ? state.knights.keys.where(
+                      (v) =>
+                          state.knights[v]!.owner == state.active &&
+                          state.knights[v]!.active &&
+                          state.knights[v]!.actedTurn != state.turnSerial &&
+                          MatchEngine.legalKnightDestinations(
+                            state,
+                            v,
+                          ).isNotEmpty,
+                    )
+                  : MatchEngine.legalKnightDestinations(state, selectedKnight!),
+          };
+          final target = vertices.first;
+          if (action.value == 'knightMove' && step == 0) {
+            selectedKnight = target;
+          }
+          await tapBoardTarget(tester, state, vertex: target);
           expect(tester.takeException(), isNull);
         }
         expect(accepted.single.toJson()['type'], action.value);
