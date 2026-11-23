@@ -1,23 +1,23 @@
 import 'board.dart';
 import 'game.dart';
 
-enum KnightRank {
+enum GuardRank {
   sentinel(1),
   warden(2),
   champion(3);
 
-  const KnightRank(this.strength);
+  const GuardRank(this.strength);
   final int strength;
 }
 
-class KnightPiece {
-  const KnightPiece(this.owner, this.rank, this.active, this.actedTurn);
+class GuardPiece {
+  const GuardPiece(this.owner, this.rank, this.active, this.actedTurn);
   final int owner, actedTurn;
-  final KnightRank rank;
+  final GuardRank rank;
   final bool active;
 
-  KnightPiece copyWith({KnightRank? rank, bool? active, int? actedTurn}) =>
-      KnightPiece(
+  GuardPiece copyWith({GuardRank? rank, bool? active, int? actedTurn}) =>
+      GuardPiece(
         owner,
         rank ?? this.rank,
         active ?? this.active,
@@ -42,7 +42,7 @@ extension TownDevelopments on StrategyDeck {
     StrategyDeck.innovation => const [
       'Scriptorium',
       'Stoneworks',
-      'Aqueduct',
+      'Reservoir',
       'Supply Network',
       'Observatory',
     ],

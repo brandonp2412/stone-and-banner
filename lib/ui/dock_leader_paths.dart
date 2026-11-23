@@ -15,7 +15,7 @@ class DockLeaderRequest {
 final _routeCache = <String, List<List<Offset>>>{};
 
 /// Route port leaders in the water around the hexes, not diagonally across
-/// land, settlements and production numbers. The map is small enough to use
+/// land, villages and production numbers. The map is small enough to use
 /// an outside-only visibility grid; the resulting path is simplified into a
 /// handful of clean straight segments.
 List<List<Offset>> layoutDockLeaderPaths({

@@ -148,7 +148,7 @@ void main() {
     },
   );
 
-  test('Knights and settlements cannot share a corner', () {
+  test('Guards and villages cannot share a corner', () {
     var s = draft(76).copyWith(phase: MatchPhase.actions, sites: {});
     final edgeId = s.roads.keys.firstWhere((e) => s.roads[e] == 0);
     final edge = s.topology.edges[edgeId];
@@ -160,64 +160,64 @@ void main() {
         final occupied = s.copyWith(sites: {edge.b: Site(owner, structure)});
         expect(MatchEngine.legalRecruit(occupied, edge.b), isFalse);
         final moving = occupied.copyWith(
-          knights: {edge.a: const KnightPiece(0, KnightRank.warden, true, -1)},
+          guards: {edge.a: const GuardPiece(0, GuardRank.warden, true, -1)},
         );
-        expect(MatchEngine.legalMoveKnight(moving, edge.a, edge.b), isFalse);
+        expect(MatchEngine.legalMoveGuard(moving, edge.a, edge.b), isFalse);
       }
     }
     expect(MatchEngine.legalVillage(s, edge.b), isTrue);
-    final withKnight = s.copyWith(
-      knights: {edge.b: const KnightPiece(0, KnightRank.sentinel, false, -1)},
+    final withGuard = s.copyWith(
+      guards: {edge.b: const GuardPiece(0, GuardRank.sentinel, false, -1)},
     );
-    expect(MatchEngine.legalVillage(withKnight, edge.b), isFalse);
+    expect(MatchEngine.legalVillage(withGuard, edge.b), isFalse);
   });
 
-  test('Knight recruit, activation, promotion, movement and displacement', () {
+  test('Guard recruit, activation, promotion, movement and displacement', () {
     var s = draft(76).copyWith(phase: MatchPhase.actions, sites: {});
     final edgeId = s.roads.keys.firstWhere((e) => s.roads[e] == 0);
     final edge = s.topology.edges[edgeId];
     final from = edge.a, to = edge.b;
     s = fund(s, 0, MatchEngine.recruitCost);
-    s = MatchEngine.apply(s, RecruitKnight(from));
-    expect(s.knights[from]!.rank, KnightRank.sentinel);
-    expect(s.knights[from]!.active, false);
-    expect(() => MatchEngine.apply(s, ActivateKnight(from)), throwsStateError);
+    s = MatchEngine.apply(s, RecruitGuard(from));
+    expect(s.guards[from]!.rank, GuardRank.sentinel);
+    expect(s.guards[from]!.active, false);
+    expect(() => MatchEngine.apply(s, ActivateGuard(from)), throwsStateError);
     s = fund(
       s.copyWith(turnSerial: s.turnSerial + 1),
       0,
       MatchEngine.activateCost,
     );
-    s = MatchEngine.apply(s, ActivateKnight(from));
-    expect(s.knights[from]!.active, true);
-    expect(MatchEngine.legalMoveKnight(s, from, to), true);
-    final moved = MatchEngine.apply(s, MoveKnight(from, to));
-    expect(moved.knights[to]!.active, true);
-    expect(moved.knights[from], isNull);
-    expect(MatchEngine.legalMoveKnight(moved, to, from), false);
+    s = MatchEngine.apply(s, ActivateGuard(from));
+    expect(s.guards[from]!.active, true);
+    expect(MatchEngine.legalMoveGuard(s, from, to), true);
+    final moved = MatchEngine.apply(s, MoveGuard(from, to));
+    expect(moved.guards[to]!.active, true);
+    expect(moved.guards[from], isNull);
+    expect(MatchEngine.legalMoveGuard(moved, to, from), false);
     expect(
-      () => MatchEngine.apply(moved, MoveKnight(to, from)),
+      () => MatchEngine.apply(moved, MoveGuard(to, from)),
       throwsStateError,
     );
     conserved(moved);
     s = fund(
       s.copyWith(turnSerial: s.turnSerial + 1),
       0,
-      MatchEngine.promotionCost(KnightRank.sentinel),
+      MatchEngine.promotionCost(GuardRank.sentinel),
     );
-    s = MatchEngine.apply(s, PromoteKnight(from));
-    expect(s.knights[from]!.rank, KnightRank.warden);
+    s = MatchEngine.apply(s, PromoteGuard(from));
+    expect(s.guards[from]!.rank, GuardRank.warden);
     s = s.copyWith(
       turnSerial: s.turnSerial + 1,
-      knights: {
-        ...s.knights,
-        to: const KnightPiece(1, KnightRank.sentinel, true, -1),
+      guards: {
+        ...s.guards,
+        to: const GuardPiece(1, GuardRank.sentinel, true, -1),
       },
     );
-    expect(MatchEngine.legalMoveKnight(s, from, to), true);
-    s = MatchEngine.apply(s, MoveKnight(from, to));
-    expect(s.knights[to]!.owner, 0);
-    expect(s.knights[from], isNull);
-    expect(() => MatchEngine.apply(s, MoveKnight(to, from)), throwsStateError);
+    expect(MatchEngine.legalMoveGuard(s, from, to), true);
+    s = MatchEngine.apply(s, MoveGuard(from, to));
+    expect(s.guards[to]!.owner, 0);
+    expect(s.guards[from], isNull);
+    expect(() => MatchEngine.apply(s, MoveGuard(to, from)), throwsStateError);
     conserved(s);
   });
 
@@ -234,7 +234,7 @@ void main() {
       );
       final v = s.sites.keys.firstWhere((v) => s.sites[v]!.owner == 0);
       s = town(s, v);
-      // Two upgraded settlements outnumber a single Fort's defence.
+      // Two upgraded villages outnumber a single Fort's defence.
       final other = s.sites.keys.firstWhere(
         (site) => site != v && s.sites[site]!.owner == 0,
       );
@@ -267,7 +267,7 @@ void main() {
   );
 
   test(
-    'defence earns Honour only for sole Knight leader; victory scores 15',
+    'defence earns Honour only for sole Guard leader; victory scores 15',
     () {
       final base = draft(111);
       final upgraded = base.sites.keys.first;
@@ -278,9 +278,9 @@ void main() {
           ...base.sites,
           upgraded: Site(base.sites[upgraded]!.owner, Structure.town),
         },
-        knights: {
-          0: const KnightPiece(0, KnightRank.champion, true, -1),
-          1: const KnightPiece(0, KnightRank.warden, true, -1),
+        guards: {
+          0: const GuardPiece(0, GuardRank.champion, true, -1),
+          1: const GuardPiece(0, GuardRank.warden, true, -1),
         },
       );
       expect(MatchEngine.defenceStrength(s), 5);
@@ -407,7 +407,7 @@ void main() {
                 if (MatchEngine.legalRecruit(s, v)) v,
             ];
             if (possible.isNotEmpty) {
-              s = MatchEngine.apply(s, RecruitKnight(possible.first));
+              s = MatchEngine.apply(s, RecruitGuard(possible.first));
             }
           }
           if (s.phase == MatchPhase.actions) {

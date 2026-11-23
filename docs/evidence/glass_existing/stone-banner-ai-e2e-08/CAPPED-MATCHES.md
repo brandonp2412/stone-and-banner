@@ -1,8 +1,8 @@
 # Slice 08 — 90-round censored matches
 
-51 of 1120 main-corpus matches did not reach 15 VP by the specified 90-round horizon. These are **not** reducer exceptions or event-cap timeouts. Re-run with the same seed, seats, policy mode and a higher round cap to investigate late outcomes.
+51 of 1120 main-corpus matches did not reach 15 Renown by the specified 90-round horizon. These are **not** reducer exceptions or event-cap timeouts. Re-run with the same seed, seats, policy mode and a higher round cap to investigate late outcomes.
 
-| Seed | Seats | Policy | Simulated-human seat | Final VP by seat | Events | Range |
+| Seed | Seats | Policy | Simulated-human seat | Final Renown by seat | Events | Range |
 | ---: | ---: | --- | ---: | --- | ---: | --- |
 | 7223 | 3 | allAi | — | 8, 6, 8 | 1362 | corpus |
 | 7278 | 3 | allAi | — | 4, 4, 3 | 1343 | corpus |

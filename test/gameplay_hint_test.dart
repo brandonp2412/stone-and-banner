@@ -77,7 +77,7 @@ void main() {
     );
   }
 
-  testWidgets('second setup settlement explains the free Town', (tester) async {
+  testWidgets('second setup village explains the free Town', (tester) async {
     final initial = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 13);
     await showMatch(
       tester,

@@ -26,7 +26,7 @@
 | 14:46:46 | [16_before_home_actual_landscape_large_text.png](16_before_home_actual_landscape_large_text.png) | Rotate to real 1600×720 landscape | **PASS:** Home scrolls, nav accessible; very short vertical viewport |
 | 14:47:13 | [17_before_board_landscape_large_text.png](17_before_board_landscape_large_text.png) | Open game in landscape | **PASS:** Game header and scroll region remain accessible; gameplay actions require scrolling |
 | 14:48:51 | [18_after_home_resume_portrait.png](18_after_home_resume_portrait.png) | Install revised APK, force-stop and reopen | **PASS:** Saved match survives package replace/process restart; Continue visible |
-| 14:49:13 | [19_after_board_phase_portrait.png](19_after_board_phase_portrait.png) | Continue persisted match | **PASS:** Same 2 VP human match, header now `Round 1 · Your turn` |
+| 14:49:13 | [19_after_board_phase_portrait.png](19_after_board_phase_portrait.png) | Continue persisted match | **PASS:** Same 2 Renown human match, header now `Round 1 · Your turn` |
 | 14:49:59 | [20_after_bank_320dp_160text.png](20_after_bank_320dp_160text.png) | Repeat narrow Bank exchange | **PASS:** `Insufficient goods to offer.` fixed directly above disabled Exchange |
 | 14:53:08 | [21_after_replay_dialog_320dp.png](21_after_replay_dialog_320dp.png) | Repeat replay dialog | **PASS:** `Replay code` fully visible, two-line JSON/share-code helper readable |
 | 14:53:36 | [22_after_replay_keyboard_320dp.png](22_after_replay_keyboard_320dp.png) | Focus revised dialog with Gboard | **PASS:** Label, helper, Cancel and Load all visible above keyboard |
@@ -37,8 +37,8 @@
 - Android accessibility node inspection exposed role/label for Home tabs, mode/AI selectors, the legal board-target chooser, every enumerated junction/road, trade selectors, disabled Exchange, replay actions, and collapsible Rules/Glossary. The board's CustomPainter itself does not expose each vertex; the explicit **Choose board target from list** sheet provides semantic equivalents and was used to complete setup.
 - TalkBack package `com.google.android.marvin.talkback` was present. Its service was temporarily enabled on the isolated emulator and listed in `dumpsys accessibility`. A swipe did not yield a visually observable focus transition; spoken announcement quality was **not verified**. The service was disabled afterward. Do not count this as a complete TalkBack acceptance pass.
 - Gboard text entry in the replay dialog was tested at 320 dp / 160%, before and after. Physical keyboard Tab/Escape behavior remains backed by focused Flutter widget tests, not a comprehensive real-hardware keyboard traversal audit.
-- Orientation changed between portrait and landscape while the match persisted. Reinstall + process restart preserved Continue and the 2 VP turn. No proof of interrupted lifecycle during a live tactical response.
-- The actual emulator did **not** exercise a card-detail sheet, a tactical reaction screen, or a 15-VP victory in this slice. Existing engine/widget regressions cover those paths, but that is not Android visual acceptance. These remain open for a dedicated Android fixture-driven pass.
+- Orientation changed between portrait and landscape while the match persisted. Reinstall + process restart preserved Continue and the 2 Renown turn. No proof of interrupted lifecycle during a live tactical response.
+- The actual emulator did **not** exercise a card-detail sheet, a tactical reaction screen, or a 15-Renown victory in this slice. Existing engine/widget regressions cover those paths, but that is not Android visual acceptance. These remain open for a dedicated Android fixture-driven pass.
 
 ## Verification and ownership
 

@@ -159,7 +159,7 @@ void main() {
   test('AI retains bundles but prefers a recipient-friendly trade', () {
     final base = stocked();
     // Stock is private; candidates may only ask for goods an opponent's
-    // visible settlements could actually produce.
+    // visible villages could actually produce.
     final sites = <int, Site>{};
     for (final good in [Resource.wood, Resource.wool]) {
       final vertex = base.topology.vertices.firstWhere(

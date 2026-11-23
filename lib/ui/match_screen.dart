@@ -44,7 +44,7 @@ enum _Move {
   recruit,
   activate,
   promote,
-  knightMove,
+  guardMove,
 }
 
 const seatColors = [
@@ -159,7 +159,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     };
   }
 
-  int? selectedKnight;
+  int? selectedGuard;
   Offset? _hoverPosition;
   RollDice? _rollingDice;
   int _diceAnimationSerial = 0;
@@ -317,9 +317,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   int? _humiliatedBanditTile;
   late final AnimationController _cardsTabController;
   late final AnimationController _cityFallController;
-  late final AnimationController _longestRoadController;
-  int? _longestRoadWinner;
-  List<int> _longestRoadRoute = const [];
+  late final AnimationController _crownRoadController;
+  int? _crownRoadWinner;
+  List<int> _crownRoadRoute = const [];
   bool _unseenCard = false;
   String? _newCardNotice;
   Timer? _newCardTimer;
@@ -437,13 +437,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             setState(() => _fallenCityOwner = null);
           }
         });
-    _longestRoadController =
+    _crownRoadController =
         AnimationController(
           vsync: this,
           duration: const Duration(milliseconds: 3200),
         )..addStatusListener((status) {
           if (status == AnimationStatus.completed && mounted) {
-            setState(() => _longestRoadWinner = null);
+            setState(() => _crownRoadWinner = null);
           }
         });
     _numberPulseController = AnimationController(
@@ -570,7 +570,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     widget.onEvent(event);
     setState(() {
       choice = _Move.inspect;
-      selectedKnight = null;
+      selectedGuard = null;
       _mapCard = null;
       _mapCardOptions = const [];
     });
@@ -582,7 +582,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       _mapCard = card;
       _mapCardOptions = List.unmodifiable(options);
       choice = _Move.inspect;
-      selectedKnight = null;
+      selectedGuard = null;
       _mobilePage = null;
     });
   }
@@ -782,7 +782,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       return null;
     }
     if (s.phase != MatchPhase.actions) return null;
-    for (final id in s.knights.keys) {
+    for (final id in s.guards.keys) {
       if ((point - g.vertex(s.topology.vertices[id])).distance <=
           math.max(22, g.radius * .35)) {
         final actions = [
@@ -790,8 +790,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           if (MatchEngine.legalPromote(s, id)) 'upgrade',
         ];
         return actions.isEmpty
-            ? 'Inspect Knight · click for details'
-            : 'Inspect Knight · ${actions.join(' or ')} available';
+            ? 'Inspect Guard · click for details'
+            : 'Inspect Guard · ${actions.join(' or ')} available';
       }
     }
     for (final id in {
@@ -803,10 +803,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       if ((point - g.vertex(s.topology.vertices[id])).distance <=
           math.min(18, g.radius * .3)) {
         return s.sites.containsKey(id)
-            ? 'Upgrade settlement · ${_upgradeCostLabel()}'
+            ? 'Upgrade village · ${_upgradeCostLabel()}'
             : MatchEngine.legalVillage(s, id)
-            ? 'Build a settlement · ${_costLabel(MatchEngine.villageCost)}'
-            : 'Build Knight · ${_costLabel(MatchEngine.recruitCost)}';
+            ? 'Build a village · ${_costLabel(MatchEngine.villageCost)}'
+            : 'Build Guard · ${_costLabel(MatchEngine.recruitCost)}';
       }
     }
     final road = _roadNear(point, g, [
@@ -856,7 +856,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       _Move.recruit,
       _Move.activate,
       _Move.promote,
-      _Move.knightMove,
+      _Move.guardMove,
     }.contains(move)) {
       final legal = switch (move) {
         _Move.fortify => [
@@ -868,24 +868,24 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             if (MatchEngine.legalRecruit(s, v)) v,
         ],
         _Move.activate => [
-          for (final v in s.knights.keys)
+          for (final v in s.guards.keys)
             if (MatchEngine.legalActivate(s, v)) v,
         ],
         _Move.promote => [
-          for (final v in s.knights.keys)
+          for (final v in s.guards.keys)
             if (MatchEngine.legalPromote(s, v)) v,
         ],
-        _Move.knightMove =>
-          selectedKnight == null
+        _Move.guardMove =>
+          selectedGuard == null
               ? [
-                  for (final v in s.knights.keys)
-                    if (s.knights[v]!.owner == s.active &&
-                        s.knights[v]!.active &&
-                        s.knights[v]!.actedTurn != s.turnSerial &&
-                        MatchEngine.legalKnightDestinations(s, v).isNotEmpty)
+                  for (final v in s.guards.keys)
+                    if (s.guards[v]!.owner == s.active &&
+                        s.guards[v]!.active &&
+                        s.guards[v]!.actedTurn != s.turnSerial &&
+                        MatchEngine.legalGuardDestinations(s, v).isNotEmpty)
                       v,
                 ]
-              : MatchEngine.legalKnightDestinations(s, selectedKnight!),
+              : MatchEngine.legalGuardDestinations(s, selectedGuard!),
         _ => <int>[],
       };
       int? best;
@@ -903,19 +903,19 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           send(FortifyTown(best));
           break;
         case _Move.recruit:
-          send(RecruitKnight(best));
+          send(RecruitGuard(best));
           break;
         case _Move.activate:
-          send(ActivateKnight(best));
+          send(ActivateGuard(best));
           break;
         case _Move.promote:
-          send(PromoteKnight(best));
+          send(PromoteGuard(best));
           break;
-        case _Move.knightMove:
-          if (selectedKnight == null) {
-            setState(() => selectedKnight = best);
+        case _Move.guardMove:
+          if (selectedGuard == null) {
+            setState(() => selectedGuard = best);
           } else {
-            send(MoveKnight(selectedKnight!, best));
+            send(MoveGuard(selectedGuard!, best));
           }
           break;
         default:
@@ -964,7 +964,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       }
     } else {
       if (move == _Move.inspect && s.phase == MatchPhase.actions) {
-        for (final entry in s.knights.entries) {
+        for (final entry in s.guards.entries) {
           if ((tap - g.vertex(s.topology.vertices[entry.key])).distance >
               math.max(22, g.radius * .35)) {
             continue;
@@ -974,10 +974,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             context: context,
             builder: (dialogContext) => CompactAlertDialog(
               title: Text(
-                '${entry.value.rank.name} Knight · strength ${entry.value.rank.strength}',
+                '${entry.value.rank.name} Guard · strength ${entry.value.rank.strength}',
               ),
               content: Text(
-                '${entry.value.active ? 'Active' : 'Inactive'} · Upgrade cost: ${entry.value.rank == KnightRank.champion ? 'Maximum rank' : _costLabel(MatchEngine.promotionCost(entry.value.rank))}. Upgrading requires an active Knight that has not acted this turn.',
+                '${entry.value.active ? 'Active' : 'Inactive'} · Upgrade cost: ${entry.value.rank == GuardRank.champion ? 'Maximum rank' : _costLabel(MatchEngine.promotionCost(entry.value.rank))}. Upgrading requires an active Guard that has not acted this turn.',
               ),
               actions: [
                 TextButton(
@@ -988,16 +988,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   onPressed: MatchEngine.legalPromote(s, vertex)
                       ? () {
                           Navigator.pop(dialogContext);
-                          send(PromoteKnight(vertex));
+                          send(PromoteGuard(vertex));
                         }
                       : null,
-                  child: const Text('Upgrade Knight'),
+                  child: const Text('Upgrade Guard'),
                 ),
                 if (MatchEngine.legalActivate(s, vertex))
                   TextButton(
                     onPressed: () {
                       Navigator.pop(dialogContext);
-                      send(ActivateKnight(vertex));
+                      send(ActivateGuard(vertex));
                     },
                     child: Text(
                       'Activate · ${_costLabel(MatchEngine.activateCost)}',
@@ -1026,7 +1026,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             context: context,
             builder: (context) => CompactAlertDialog(
               title: Text(
-                upgrade ? 'Upgrade settlement?' : 'Build at this junction',
+                upgrade ? 'Upgrade village?' : 'Build at this junction',
               ),
               content: Text(
                 upgrade
@@ -1042,23 +1042,23 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   FilledButton(
                     onPressed: () =>
                         Navigator.pop(context, UpgradeSite(vertex)),
-                    child: const Text('Upgrade settlement'),
+                    child: const Text('Upgrade village'),
                   ),
                 if (canVillage)
                   FilledButton(
                     onPressed: () =>
                         Navigator.pop(context, PlaceVillage(vertex)),
                     child: Text(
-                      'Build settlement · ${_costLabel(MatchEngine.villageCost)}',
+                      'Build village · ${_costLabel(MatchEngine.villageCost)}',
                     ),
                   ),
                 if (canRecruit)
                   OutlinedButton(
-                    key: const ValueKey('build-knight-at-junction'),
+                    key: const ValueKey('build-guard-at-junction'),
                     onPressed: () =>
-                        Navigator.pop(context, RecruitKnight(vertex)),
+                        Navigator.pop(context, RecruitGuard(vertex)),
                     child: Text(
-                      'Build Knight · ${_costLabel(s.players[viewerSeat].level(StrategyDeck.governance) >= 4 ? {Resource.wool: 1} : MatchEngine.recruitCost)}',
+                      'Build Guard · ${_costLabel(s.players[viewerSeat].level(StrategyDeck.governance) >= 4 ? {Resource.wool: 1} : MatchEngine.recruitCost)}',
                     ),
                   ),
               ],
@@ -1097,24 +1097,24 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         if (MatchEngine.legalRecruit(s, v)) v,
     ],
     _Move.activate => [
-      for (final v in s.knights.keys)
+      for (final v in s.guards.keys)
         if (MatchEngine.legalActivate(s, v)) v,
     ],
     _Move.promote => [
-      for (final v in s.knights.keys)
+      for (final v in s.guards.keys)
         if (MatchEngine.legalPromote(s, v)) v,
     ],
-    _Move.knightMove =>
-      selectedKnight == null
+    _Move.guardMove =>
+      selectedGuard == null
           ? [
-              for (final v in s.knights.keys)
-                if (s.knights[v]!.owner == s.active &&
-                    s.knights[v]!.active &&
-                    s.knights[v]!.actedTurn != s.turnSerial &&
-                    MatchEngine.legalKnightDestinations(s, v).isNotEmpty)
+              for (final v in s.guards.keys)
+                if (s.guards[v]!.owner == s.active &&
+                    s.guards[v]!.active &&
+                    s.guards[v]!.actedTurn != s.turnSerial &&
+                    MatchEngine.legalGuardDestinations(s, v).isNotEmpty)
                   v,
             ]
-          : MatchEngine.legalKnightDestinations(s, selectedKnight!),
+          : MatchEngine.legalGuardDestinations(s, selectedGuard!),
     _Move.bandit => [
       for (var i = 0; i < s.board.tiles.length; i++)
         if (i != s.banditTile) i,
@@ -1346,7 +1346,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     _banditBlockController.dispose();
     _cardsTabController.dispose();
     _cityFallController.dispose();
-    _longestRoadController.dispose();
+    _crownRoadController.dispose();
     for (final controller in _panelScroll) {
       controller.dispose();
     }
@@ -1441,9 +1441,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
     if (s.seed != oldWidget.state.seed ||
         s.events.length < oldWidget.state.events.length) {
-      _longestRoadWinner = null;
-      _longestRoadRoute = const [];
-      _longestRoadController.reset();
+      _crownRoadWinner = null;
+      _crownRoadRoute = const [];
+      _crownRoadController.reset();
       _dismissedHintContext = null;
       _unseenCard = false;
       _newCardNotice = null;
@@ -1468,7 +1468,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if (rolled && !MediaQuery.disableAnimationsOf(context)) {
       _numberPulseController.forward(from: 0);
     }
-    final blockedRobbery = s.events
+    final blockedTheft = s.events
         .skip(oldWidget.state.events.length)
         .any(
           (event) =>
@@ -1478,7 +1478,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if ((rolled &&
             s.dice != null &&
             s.board.tiles[s.banditTile].productionNumber == s.dice) ||
-        blockedRobbery) {
+        blockedTheft) {
       _humiliatedBanditTile = s.banditTile;
       if (!MediaQuery.disableAnimationsOf(context)) {
         _banditBlockController.forward(from: 0);
@@ -1499,7 +1499,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           old.topology.vertices[vertex].edges.any(
             (id) => old.roads[id] == owner,
           );
-      // Reveal outwards from the settlement or existing road network, rather
+      // Reveal outwards from the village or existing road network, rather
       // than arbitrarily following the topology's edge ID orientation.
       _animatedRoadStart = old.pendingVillage == edge.b
           ? edge.b
@@ -1511,14 +1511,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       _roadController.forward(from: 0);
     }
     if (s.seed == oldWidget.state.seed &&
-        s.longestRoadHolder != null &&
-        s.longestRoadHolder != oldWidget.state.longestRoadHolder) {
-      _longestRoadWinner = s.longestRoadHolder;
-      _longestRoadRoute = MatchEngine.longestRoadPath(s, s.longestRoadHolder!);
+        s.crownRoadHolder != null &&
+        s.crownRoadHolder != oldWidget.state.crownRoadHolder) {
+      _crownRoadWinner = s.crownRoadHolder;
+      _crownRoadRoute = MatchEngine.crownRoadPath(s, s.crownRoadHolder!);
       if (!MediaQuery.disableAnimationsOf(context)) {
-        _longestRoadController.forward(from: 0);
+        _crownRoadController.forward(from: 0);
       } else {
-        _longestRoadWinner = null;
+        _crownRoadWinner = null;
       }
     }
     if (s.seed == oldWidget.state.seed &&
@@ -1561,7 +1561,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if (oldWidget.state.active != s.active ||
         oldWidget.state.phase != s.phase) {
       choice = _Move.inspect;
-      selectedKnight = null;
+      selectedGuard = null;
     }
   }
 
@@ -1572,7 +1572,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             s.setupStep < s.players.length
                 ? 'Place your village'
                 : 'Place your town',
-          MatchPhase.setupRoad => 'Connect your settlement',
+          MatchPhase.setupRoad => 'Connect your village',
           MatchPhase.roll => '',
           MatchPhase.bandit => 'Move the Bandit',
           MatchPhase.invasion => 'Defend the realm',
@@ -1582,15 +1582,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             _Move.inspect => 'Shape your realm',
             _Move.village => 'Place a village',
             _Move.road => 'Build a road',
-            _Move.upgrade => 'Upgrade a settlement',
+            _Move.upgrade => 'Upgrade a village',
             _Move.fortify => 'Fortify a town',
-            _Move.recruit => 'Recruit a Knight',
-            _Move.activate => 'Activate a Knight',
-            _Move.promote => 'Promote a Knight',
-            _Move.knightMove =>
-              selectedKnight == null
-                  ? 'Select a Knight'
-                  : 'Choose a destination',
+            _Move.recruit => 'Recruit a Guard',
+            _Move.activate => 'Activate a Guard',
+            _Move.promote => 'Promote a Guard',
+            _Move.guardMove =>
+              selectedGuard == null ? 'Select a Guard' : 'Choose a destination',
             _Move.bandit => 'Move the Bandit',
           },
         };
@@ -1600,12 +1598,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       : switch (s.phase) {
           MatchPhase.setupVillage =>
             'Tap a glowing junction · first placements are free',
-          MatchPhase.setupRoad =>
-            'Tap a glowing edge beside your new settlement',
+          MatchPhase.setupRoad => 'Tap a glowing edge beside your new village',
           MatchPhase.roll => '',
           MatchPhase.bandit => 'Tap another hex, then choose a neighbour',
           MatchPhase.invasion => 'Review the fleet and your shared defence',
-          MatchPhase.finished => '15 Victory Points · a realm to remember',
+          MatchPhase.finished => '15 Renown · a realm to remember',
           MatchPhase.actions => switch (move) {
             _Move.road =>
               '${_costLabel(MatchEngine.effectiveRoadCost(s))} · tap a glowing edge',
@@ -2030,10 +2027,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               ),
             if (_fallenCityOwner != null)
               Positioned.fill(child: IgnorePointer(child: _cityFallOverlay())),
-            if (_longestRoadWinner != null)
-              Positioned.fill(
-                child: IgnorePointer(child: _longestRoadOverlay()),
-              ),
+            if (_crownRoadWinner != null)
+              Positioned.fill(child: IgnorePointer(child: _crownRoadOverlay())),
             if (gameplayHint != null)
               Positioned.fill(
                 child: BlockSemantics(
@@ -2059,10 +2054,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     );
   }
 
-  Widget _longestRoadOverlay() => AnimatedBuilder(
-    animation: _longestRoadController,
+  Widget _crownRoadOverlay() => AnimatedBuilder(
+    animation: _crownRoadController,
     builder: (context, child) {
-      final t = _longestRoadController.value;
+      final t = _crownRoadController.value;
       final opacity =
           (t < .16
                   ? t / .16
@@ -2077,7 +2072,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           child: Transform.scale(
             scale: .78 + .22 * Curves.elasticOut.transform(t.clamp(0.0, 1.0)),
             child: DecoratedBox(
-              key: const ValueKey('longest-road-award-animation'),
+              key: const ValueKey('crown-road-award-animation'),
               decoration: BoxDecoration(
                 color: const Color(0xf5222b32),
                 borderRadius: BorderRadius.circular(16),
@@ -2095,7 +2090,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      '🏆 LONGEST ROAD!',
+                      '🏆 CROWN ROAD!',
                       style: TextStyle(
                         color: Color(0xffffde93),
                         fontSize: 19,
@@ -2103,7 +2098,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                       ),
                     ),
                     Text(
-                      '${s.players[_longestRoadWinner!].id} · +2 VP',
+                      '${s.players[_crownRoadWinner!].id} · +2 Renown',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -2673,7 +2668,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     ])
                       Semantics(
                         label:
-                            '${s.players[i].id}, ${MatchEngine.score(s, i)} of 15 Victory Points${i == winner
+                            '${s.players[i].id}, ${MatchEngine.score(s, i)} of 15 Renown${i == winner
                                 ? ', winner'
                                 : i == s.active
                                 ? ', active player'
@@ -2681,7 +2676,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                         child: Tooltip(
                           message: i == viewerSeat
                               ? 'Settings'
-                              : '${MatchEngine.score(s, i)} VP',
+                              : '${MatchEngine.score(s, i)} Renown',
                           child: InkWell(
                             onTap: i == viewerSeat ? _openPlayerOptions : null,
                             child: Container(
@@ -2778,9 +2773,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                                 i == winner
                                                     ? 'Winner'
                                                     : i == s.active
-                                                    ? 'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.longestRoadHolder == i ? ' · Road +2' : ''}'
-                                                    : s.longestRoadHolder == i
-                                                    ? 'Longest road · +2 VP'
+                                                    ? 'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.crownRoadHolder == i ? ' · Road +2' : ''}'
+                                                    : s.crownRoadHolder == i
+                                                    ? 'Crown road · +2 Renown'
                                                     : 'Realm ${i + 1}',
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
@@ -2954,10 +2949,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if (event is PlaceVillage) vertex = event.vertex;
     if (event is UpgradeSite) vertex = event.vertex;
     if (event is FortifyTown) vertex = event.vertex;
-    if (event is RecruitKnight) vertex = event.vertex;
-    if (event is ActivateKnight) vertex = event.vertex;
-    if (event is PromoteKnight) vertex = event.vertex;
-    if (event is MoveKnight) vertex = event.to;
+    if (event is RecruitGuard) vertex = event.vertex;
+    if (event is ActivateGuard) vertex = event.vertex;
+    if (event is PromoteGuard) vertex = event.vertex;
+    if (event is MoveGuard) vertex = event.to;
     if (event is MoveBandit) tile = event.tile;
     if (event is PlayStrategyCard) {
       vertex = event.vertex;
@@ -3024,7 +3019,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             widget.observing || s.tactical != null
                                 ? _Move.inspect
                                 : move,
-                            selectedKnight,
+                            selectedGuard,
                             showTargets:
                                 !widget.observing &&
                                 viewerSeat == s.actingSeat &&
@@ -3050,8 +3045,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             animatedRoad: _animatedRoad,
                             animatedRoadStart: _animatedRoadStart,
                             roadReveal: _roadReveal,
-                            roadCelebration: _longestRoadController,
-                            highlightedRoads: _longestRoadRoute,
+                            roadCelebration: _crownRoadController,
+                            highlightedRoads: _crownRoadRoute,
                             numberPulse: _numberPulseController,
                             banditBlock: _banditBlockController,
                             humiliatedBanditTile: _humiliatedBanditTile,
@@ -3228,7 +3223,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             tooltip: 'Cancel selection',
             onPressed: () => setState(() {
               choice = _Move.inspect;
-              selectedKnight = null;
+              selectedGuard = null;
             }),
             icon: const Icon(Icons.close),
           ),
@@ -3281,7 +3276,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     tooltip: 'Cancel selection',
                     onPressed: () => setState(() {
                       choice = _Move.inspect;
-                      selectedKnight = null;
+                      selectedGuard = null;
                     }),
                     icon: const Icon(Icons.close),
                   ),
@@ -3319,7 +3314,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     if (index == 2) _unseenCard = false;
                     if (index != 0) {
                       choice = _Move.inspect;
-                      selectedKnight = null;
+                      selectedGuard = null;
                     }
                   });
                 },
@@ -3467,7 +3462,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 s.tactical == null
             ? () => setState(() {
                 choice = action;
-                selectedKnight = null;
+                selectedGuard = null;
                 _mobilePage = null;
               })
             : null,
@@ -3660,7 +3655,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               _buildAction(
                 _Move.recruit,
                 Icons.person_add_alt,
-                'Recruit Knight',
+                'Recruit Guard',
                 _costLabel(
                   s.current.level(StrategyDeck.governance) >= 4
                       ? {Resource.wool: 1}
@@ -3674,26 +3669,26 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               _buildAction(
                 _Move.activate,
                 Icons.bolt,
-                'Activate Knight',
+                'Activate Guard',
                 _costLabel(MatchEngine.activateCost),
-                s.knights.keys.any((v) => MatchEngine.legalActivate(s, v)),
+                s.guards.keys.any((v) => MatchEngine.legalActivate(s, v)),
               ),
               _buildAction(
                 _Move.promote,
                 Icons.upgrade,
-                'Upgrade Knight',
-                'Sentinel → Warden: ${_costLabel(MatchEngine.promotionCost(KnightRank.sentinel))}\nWarden → Champion: ${_costLabel(MatchEngine.promotionCost(KnightRank.warden))}',
-                s.knights.keys.any((v) => MatchEngine.legalPromote(s, v)),
+                'Upgrade Guard',
+                'Sentinel → Warden: ${_costLabel(MatchEngine.promotionCost(GuardRank.sentinel))}\nWarden → Champion: ${_costLabel(MatchEngine.promotionCost(GuardRank.warden))}',
+                s.guards.keys.any((v) => MatchEngine.legalPromote(s, v)),
               ),
               _buildAction(
-                _Move.knightMove,
+                _Move.guardMove,
                 Icons.open_with,
-                'Move Knight',
-                'Free · active Knight, once per turn',
-                s.knights.keys.any(
+                'Move Guard',
+                'Free · active Guard, once per turn',
+                s.guards.keys.any(
                   (v) =>
-                      s.knights[v]!.owner == s.active &&
-                      MatchEngine.legalKnightDestinations(s, v).isNotEmpty,
+                      s.guards[v]!.owner == s.active &&
+                      MatchEngine.legalGuardDestinations(s, v).isNotEmpty,
                 ),
               ),
             ],
@@ -3720,7 +3715,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   ),
                   if (MediaQuery.sizeOf(context).width >= 900)
                     const Text(
-                      'Active Knights and Fortifications defend the realm.',
+                      'Active Guards and Fortifications defend the realm.',
                     ),
                 ],
               ),
@@ -4974,7 +4969,7 @@ class _TacticalPanel extends StatelessWidget {
     final detail = switch (w.kind) {
       TacticalKind.bandit =>
         'An opponent is trying to steal a random good. '
-            'Exhaust one active Knight to prevent the theft.',
+            'Exhaust one active Guard to prevent the theft.',
       TacticalKind.governance =>
         'A targeted Governance card is pending. '
             'Spend the matching countercard to cancel it.',
@@ -5016,7 +5011,7 @@ class _TacticalPanel extends StatelessWidget {
               RespondTactical(w.id, responder, TacticalChoice.intercept),
             ),
             icon: const Icon(Icons.shield_outlined),
-            label: const Text('Intercept with Knight'),
+            label: const Text('Intercept with Guard'),
           ),
         if (w.kind == TacticalKind.governance)
           for (final i in MatchEngine.counterCards(state, responder, w.card!))
@@ -5125,7 +5120,7 @@ class _Painter extends CustomPainter {
   _Painter(
     this.state,
     this.mode,
-    this.selectedKnight, {
+    this.selectedGuard, {
     required this.roadReveal,
     required this.roadCelebration,
     required this.highlightedRoads,
@@ -5156,7 +5151,7 @@ class _Painter extends CustomPainter {
   final int? hoveredRoad;
   final Set<int> cardRoadTargets, cardVertexTargets, cardTileTargets;
   final _Move mode;
-  final int? selectedKnight;
+  final int? selectedGuard;
   final int? animatedRoad;
   final int? animatedRoadStart;
   final Animation<double> roadReveal;
@@ -5304,8 +5299,8 @@ class _Painter extends CustomPainter {
       final c = g.tile(state.board.tiles[i].position);
       final radius = g.radius;
       if (i == state.banditTile) {
-        // Keep the production number unobscured; shame the robber whenever
-        // the blocked number rolls or a knight stops a robbery.
+        // Keep the production number unobscured; shame the bandit whenever
+        // the blocked number rolls or a guard stops a theft.
         final bandit = c + Offset(radius * .51, -radius * .29);
         final progress = banditBlock.value;
         final humiliation = humiliatedBanditTile == i && progress < 1
@@ -5477,29 +5472,26 @@ class _Painter extends CustomPainter {
             if (MatchEngine.legalRecruit(state, v)) v,
         },
         _Move.activate => {
-          for (final v in state.knights.keys)
+          for (final v in state.guards.keys)
             if (MatchEngine.legalActivate(state, v)) v,
         },
         _Move.promote => {
-          for (final v in state.knights.keys)
+          for (final v in state.guards.keys)
             if (MatchEngine.legalPromote(state, v)) v,
         },
-        _Move.knightMove =>
-          selectedKnight == null
+        _Move.guardMove =>
+          selectedGuard == null
               ? {
-                  for (final v in state.knights.keys)
-                    if (state.knights[v]!.owner == state.active &&
-                        state.knights[v]!.active &&
-                        state.knights[v]!.actedTurn != state.turnSerial &&
-                        MatchEngine.legalKnightDestinations(
-                          state,
-                          v,
-                        ).isNotEmpty)
+                  for (final v in state.guards.keys)
+                    if (state.guards[v]!.owner == state.active &&
+                        state.guards[v]!.active &&
+                        state.guards[v]!.actedTurn != state.turnSerial &&
+                        MatchEngine.legalGuardDestinations(state, v).isNotEmpty)
                       v,
                 }
-              : MatchEngine.legalKnightDestinations(
+              : MatchEngine.legalGuardDestinations(
                   state,
-                  selectedKnight!,
+                  selectedGuard!,
                 ).toSet(),
         _ => <int>{},
       },
@@ -5626,19 +5618,19 @@ class _Painter extends CustomPainter {
         );
       }
     }
-    for (final entry in state.knights.entries) {
-      final knight = entry.value;
+    for (final entry in state.guards.entries) {
+      final guard = entry.value;
       final c = g.vertex(state.topology.vertices[entry.key]);
       canvas.drawCircle(c, 9, Paint()..color = const Color(0xff182a32));
       canvas.drawCircle(
         c,
         7,
         Paint()
-          ..color = knight.active
-              ? seatColors[knight.owner]
+          ..color = guard.active
+              ? seatColors[guard.owner]
               : const Color(0xff879699),
       );
-      _label(canvas, '${knight.rank.strength}', c, 11, const Color(0xff102028));
+      _label(canvas, '${guard.rank.strength}', c, 11, const Color(0xff102028));
     }
     // Gold target rings remain visible above the pieces, without obscuring
     // their ownership colours. Only the candidate set is painted.
@@ -5885,7 +5877,7 @@ class _Painter extends CustomPainter {
       !_sameTargets(old.cardRoadTargets, cardRoadTargets) ||
       !_sameTargets(old.cardVertexTargets, cardVertexTargets) ||
       !_sameTargets(old.cardTileTargets, cardTileTargets) ||
-      old.selectedKnight != selectedKnight ||
+      old.selectedGuard != selectedGuard ||
       old.animatedRoad != animatedRoad ||
       old.roadReveal != roadReveal ||
       old.banditBlock != banditBlock ||

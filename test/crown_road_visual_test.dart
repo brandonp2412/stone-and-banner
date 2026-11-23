@@ -38,8 +38,8 @@ MatchState longRoad() {
 void main() {
   test('highlighted road is an actual connected scoring route', () {
     final game = longRoad();
-    final path = MatchEngine.longestRoadPath(game, 0);
-    expect(path.length, MatchEngine.longestRoad(game, 0));
+    final path = MatchEngine.crownRoadPath(game, 0);
+    expect(path.length, MatchEngine.crownRoad(game, 0));
     expect(path.toSet().length, path.length);
     for (var i = 0; i < path.length - 1; i++) {
       final a = game.topology.edges[path[i]];
@@ -48,7 +48,7 @@ void main() {
     }
   });
 
-  testWidgets('longest road ownership change animates and clears', (
+  testWidgets('crown road ownership change animates and clears', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({'gameplay_hints_enabled': false});
@@ -63,17 +63,17 @@ void main() {
     );
     await tester.pumpWidget(app(initial));
     await tester.pump();
-    await tester.pumpWidget(app(initial.copyWith(longestRoadHolder: 0)));
+    await tester.pumpWidget(app(initial.copyWith(crownRoadHolder: 0)));
     await tester.pump(const Duration(milliseconds: 400));
     expect(
-      find.byKey(const ValueKey('longest-road-award-animation')),
+      find.byKey(const ValueKey('crown-road-award-animation')),
       findsOneWidget,
     );
-    expect(find.text('🏆 LONGEST ROAD!'), findsOneWidget);
+    expect(find.text('🏆 CROWN ROAD!'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
     await tester.pump();
     expect(
-      find.byKey(const ValueKey('longest-road-award-animation')),
+      find.byKey(const ValueKey('crown-road-award-animation')),
       findsNothing,
     );
     await tester.pumpWidget(const SizedBox.shrink());

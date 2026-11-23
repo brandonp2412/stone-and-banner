@@ -12,7 +12,7 @@ All 16 frames were reviewed individually or as the [contact sheet](qa-contact-sh
 | 04 | [14:03:48](20261105T140348-04-four-players.png) | Click 4 players (796,284) | Four seats selected, 1–3 AI available | PASS |
 | 05 | [14:04:29](20261105T140429-05-three-ai.png) | Click 3 AI (840,359) | 1 human / 3 computers selected | PASS |
 | 06 | [14:04:30](20261105T140430-06-start-four-player-match.png) | Click Start match (636,431) | Real four-seat setup board, Player 1 | PASS |
-| 07 | [14:05:06](20261105T140506-07-human-place-village.png) | Click legal junction (532,187) | Human Village, 1 VP, Road phase | PASS |
+| 07 | [14:05:06](20261105T140506-07-human-place-village.png) | Click legal junction (532,187) | Human Village, 1 Renown, Road phase | PASS |
 | 08 | [14:05:46](20261105T140546-08-human-place-road.png) | Click glowing side (502,204) | Private Computer turn overlay | PASS |
 | 09 | [14:05:47](20261105T140547-09-three-ai-progress.png) | Observe without input | Automatic AI snake draft returned to Player 1 | PASS |
 | 10 | [14:05:49](20261105T140549-10-three-ai-after-progress.png) | Observe settled result | Same board after AI completion, no repeated action | PASS |
@@ -20,7 +20,7 @@ All 16 frames were reviewed individually or as the [contact sheet](qa-contact-sh
 | 12 | [14:08:17](20261105T140817-12-resume-four-player.png) | Click Continue (640,195) | Same Player 1 draft and AI pieces; no needless solo-human privacy gate | PASS |
 | 13 | [14:08:59](20261105T140859-13-leave-board-to-home.png) | Click Home (213,669) | Home with Continue; local save retained | PASS |
 | 14 | [14:08:59](20261105T140859-14-reenter-saved-board.png) | Click Board (640,669) | Exact four-seat board re-entered | PASS |
-| 15 | [14:10:08](20261105T141008-15-human-second-village.png) | Click legal second junction (909,468) | Human at 2 VP, Road phase | PASS |
+| 15 | [14:10:08](20261105T141008-15-human-second-village.png) | Click legal second junction (909,468) | Human at 2 Renown, Road phase | PASS |
 | 16 | [14:10:56](20261105T141056-16-human-second-road-round1.png) | Click glowing side (881,483) | All eight setup Village/Road pairs complete; Round 1 roll | PASS |
 
 ## Persistence checks
@@ -32,6 +32,6 @@ All 16 frames were reviewed individually or as the [contact sheet](qa-contact-sh
 
 ## Explicit limitations
 
-This is a real four-seat UI acceptance of automatic setup, private computer overlay, save/restart/resume and navigation, not a 15-VP victory or full-game autoplay. No real UI replay import/export, tactical private handoff between **multiple humans**, Invasion, Bandit or game-over was reached in this run. Four-seat replay round-trip and 1–3 AI private handoff/lifecycle scenarios are separately exercised by focused widget tests; do not conflate those with live UI proof. No Waydroid, Samsung, LAN, or public release was used.
+This is a real four-seat UI acceptance of automatic setup, private computer overlay, save/restart/resume and navigation, not a 15-Renown victory or full-game autoplay. No real UI replay import/export, tactical private handoff between **multiple humans**, Invasion, Bandit or game-over was reached in this run. Four-seat replay round-trip and 1–3 AI private handoff/lifecycle scenarios are separately exercised by focused widget tests; do not conflate those with live UI proof. No Waydroid, Samsung, LAN, or public release was used.
 
 An initial **separate** headless Cage keyboard attempt (not counted in the sixteen X11 PASS frames) had ambiguous focus and accidentally entered a default three-seat hot-seat match. It did demonstrate real saved data loading and private Player 1 handoff after restart, but that is not a four-seat acceptance. That compositor was stopped without touching the shared user session.

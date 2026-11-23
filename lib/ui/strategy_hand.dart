@@ -124,18 +124,18 @@ class StrategyHand extends StatelessWidget {
         final receive = card.power == CardPower.portSwap ? 2 : 1;
         return 'Give $give ${option.give!.displayName} · receive $receive ${option.receive!.displayName}';
       case CardPower.activate:
-        return 'Activate Knight at junction ${option.vertex! + 1}';
+        return 'Activate Guard at junction ${option.vertex! + 1}';
       case CardPower.promote:
-        return 'Promote Knight at junction ${option.vertex! + 1}';
+        return 'Promote Guard at junction ${option.vertex! + 1}';
       case CardPower.exhaust:
-        return 'Stand down rival Knight at junction ${option.vertex! + 1}';
+        return 'Stand down rival Guard at junction ${option.vertex! + 1}';
       case CardPower.moveBandit:
         return 'Move Bandit to hex ${option.tile! + 1} '
             '(${terrainLabel(state.board.tiles[option.tile!].land)})';
       case CardPower.massRaid:
         return 'Collect one stolen resource from each rival';
       case CardPower.massExhaust:
-        return 'Dismiss Knights around hex ${option.tile! + 1}';
+        return 'Dismiss Guards around hex ${option.tile! + 1}';
       case CardPower.seizeGood:
         return 'Take ${option.receive!.displayName} from '
             '${state.players[option.target!].id}';

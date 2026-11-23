@@ -119,7 +119,7 @@ void main() {
     expect((events.single as RespondTrade).accept, isFalse);
   });
 
-  testWidgets('AI robbery uses board animation without a duplicate toast', (
+  testWidgets('AI theft uses board animation without a duplicate toast', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(750, 450);

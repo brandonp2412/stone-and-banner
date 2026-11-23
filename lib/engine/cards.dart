@@ -201,7 +201,7 @@ abstract final class StrategyCards {
       'Marshal',
       StrategyDeck.governance,
       CardPower.activate,
-      'Activate one rested friendly Knight at no cost.',
+      'Activate one rested friendly Guard at no cost.',
     ),
     StrategyCard(
       'founding-charter',
@@ -216,7 +216,7 @@ abstract final class StrategyCards {
       'Defection',
       StrategyDeck.governance,
       CardPower.exhaust,
-      'Stand down an opposing active Knight.',
+      'Stand down an opposing active Guard.',
     ),
     StrategyCard(
       'boundary-dispute',
@@ -251,7 +251,7 @@ abstract final class StrategyCards {
       'Rally',
       StrategyDeck.governance,
       CardPower.promote,
-      'Promote an active friendly Knight without cost.',
+      'Promote an active friendly Guard without cost.',
     ),
     StrategyCard(
       'tribute',
@@ -304,7 +304,7 @@ abstract final class StrategyCards {
       'Mass Suspension',
       StrategyDeck.governance,
       CardPower.massExhaust,
-      'Choose a map hex to exhaust every opposing Knight on its corners.',
+      'Choose a map hex to exhaust every opposing Guard on its corners.',
       copies: 1,
     ),
     StrategyCard(

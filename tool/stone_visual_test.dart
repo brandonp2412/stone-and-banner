@@ -68,7 +68,7 @@ void main() {
     );
   });
 
-  testWidgets('cheeky robbery and board burst snapshot', (tester) async {
+  testWidgets('cheeky theft and board burst snapshot', (tester) async {
     final fonts = FontLoader('NotoSans')
       ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     await fonts.load();
@@ -101,7 +101,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await expectLater(
       find.byType(MatchView),
-      matchesGoldenFile('visual_snapshots/cheeky_robbery.png'),
+      matchesGoldenFile('visual_snapshots/cheeky_theft.png'),
     );
   });
 }

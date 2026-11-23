@@ -51,7 +51,7 @@ async def run():
         gtext=await guest.locator('body').inner_text()
         print('HOST MATCH',after[:1500],flush=True)
         print('GUEST MATCH',gtext[:1300],flush=True)
-        assert 'ROUND 1' in after or 'Choose your starting settlement' in after
+        assert 'ROUND 1' in after or 'Choose your starting village' in after
         assert 'ROUND 1' in gtext or 'Realm map.' in gtext
         assert 'Resume computer' not in after
         assert 'Resume computer' not in gtext

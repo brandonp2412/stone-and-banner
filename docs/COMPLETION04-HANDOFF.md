@@ -26,7 +26,7 @@ Android release APK was not installed, and the shared Waydroid, Samsung, Nox run
 
 ## Boundaries and handoff
 
-- This is **not** a naturally finished four-player 15-VP match. Live Invasion, reactions, Bandit, late-game victory and game-over were not reached here. An imported 15-VP victory in earlier evidence is not a substitute for a natural game.
+- This is **not** a naturally finished four-player 15-Renown match. Live Invasion, reactions, Bandit, late-game victory and game-over were not reached here. An imported 15-Renown victory in earlier evidence is not a substitute for a natural game.
 - Actual Linux UI replay **copy/import** was not traversed; compact replay equivalence was validated in the widget test and existing engine tests. No physical-device acceptance or live Android screenshot is claimed.
 - An isolated initial Cage keyboard-only route had ambiguous focus and was abandoned for precise X11 mouse control. Its three-seat hot-seat match and private restart screen are not counted as four-player proof.
 - The primary Glass `/home/brandon/stone-and-banner` checkout was left dirty exactly as found; mobile-actions (1/8), natural-match (2/8), cards/trades (3/8) and Nox reconciliation worktrees were not edited. Keep this isolated feature branch until active owners reconcile; integrate with the latest main only after those owners' validated changes are coordinated. No public release.

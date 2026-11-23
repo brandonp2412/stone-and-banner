@@ -95,7 +95,7 @@ class _EventBurstPainter extends CustomPainter {
       return;
     }
     final invasion = event is ResolveInvasion;
-    final robbery = event is MoveBandit;
+    final theft = event is MoveBandit;
     final construction =
         event is PlaceRoad ||
         event is PlaceVillage ||
@@ -103,13 +103,13 @@ class _EventBurstPainter extends CustomPainter {
         event is FortifyTown;
     final combat =
         invasion ||
-        robbery ||
-        event is RecruitKnight ||
-        event is MoveKnight ||
+        theft ||
+        event is RecruitGuard ||
+        event is MoveGuard ||
         event is PlayStrategyCard;
     final color = invasion
         ? const Color(0xffff7656)
-        : robbery
+        : theft
         ? const Color(0xffffa783)
         : construction
         ? const Color(0xff75ecc4)
@@ -118,7 +118,7 @@ class _EventBurstPainter extends CustomPainter {
         : const Color(0xfff3cf88);
     final glyph = invasion
         ? '🔥'
-        : robbery
+        : theft
         ? '🦹'
         : event is RollDice
         ? '🎲'
@@ -135,7 +135,7 @@ class _EventBurstPainter extends CustomPainter {
     final impulse = Curves.easeOutCubic.transform(t);
     final ringCount = invasion
         ? 4
-        : robbery
+        : theft
         ? 3
         : 2;
     for (var ring = 0; ring < ringCount; ring++) {
@@ -153,7 +153,7 @@ class _EventBurstPainter extends CustomPainter {
     }
     final sparkCount = invasion
         ? 18
-        : robbery
+        : theft
         ? 12
         : 9;
     for (var i = 0; i < sparkCount; i++) {

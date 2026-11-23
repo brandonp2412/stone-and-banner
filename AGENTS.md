@@ -70,8 +70,8 @@ Temporary Dart scripts outside the repo can use the same explicit SDK and
 
 For invasion investigations, inspect the state before the `invasion` event:
 `MatchEngine.defenceStrength(state)`, `state.invasionAid`,
-`MatchEngine.invasionStrength(state)`, and each knight's owner, rank, and active
+`MatchEngine.invasionStrength(state)`, and each guard's owner, rank, and active
 flag. Inspect preceding `tactical` events for the players and goods pledged as
-aid. After resolution, `state.lastInvasion` records the result, but knights
+aid. After resolution, `state.lastInvasion` records the result, but guards
 have been deactivated and emergency aid reset, so the current defence meter
 cannot explain the previous result by itself.

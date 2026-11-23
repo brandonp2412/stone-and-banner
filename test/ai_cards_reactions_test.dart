@@ -142,7 +142,7 @@ void main() {
     () {
       var s = fixture().copyWith(
         phase: MatchPhase.bandit,
-        knights: {2: const KnightPiece(1, KnightRank.sentinel, true, -1)},
+        guards: {2: const GuardPiece(1, GuardRank.sentinel, true, -1)},
         tactical: TacticalWindow(7, TacticalKind.bandit, 0, [
           1,
         ], bandit: const MoveBandit(1, victim: 1)),
@@ -154,7 +154,7 @@ void main() {
       expect((action as RespondTactical).choice, TacticalChoice.intercept);
       final after = AiActionAdapter.applySelected(s, view, action);
       expect(after.tactical, isNull);
-      expect(after.knights[2]!.active, isFalse);
+      expect(after.guards[2]!.active, isFalse);
       expect(after.players[1].stores[Resource.ore], 1);
       conserve(after);
       expect(() => MatchEngine.apply(after, action), throwsStateError);

@@ -21,7 +21,7 @@
 | [Road targets](qa-road-targets.png) | Open legal-road sheet | **PASS:** legal target descriptions readable |
 | [AI draft](qa-after-first-road.png) | Choose first Road; AI performs draft, returns human | **PASS:** pieces visible, human resumes setupVillage |
 | [Second village targets](qa-second-village-targets.png) | Open second junction sheet | **PASS:** layout readable |
-| [Second Village](qa-second-village.png) | Choose second legal junction | **PASS:** 2 VP and setupRoad |
+| [Second Village](qa-second-village.png) | Choose second legal junction | **PASS:** 2 Renown and setupRoad |
 | [Second Road targets](qa-second-road-targets.png) | Open legal-road sheet | **PASS:** options readable |
 | [Ready to roll](qa-ready-roll.png) | Choose second Road | **PASS:** large Roll Dice is now **above** the board |
 | [Initial revised panel](qa-action-panel-after.png) | Roll Dice into actions (before compact adjustment) | **LIMITED:** legal-unavailable buttons removed, but icon trade buttons wrapped into two rows and panel remained too tall |
@@ -33,5 +33,5 @@ All listed PNGs were opened and visually inspected for contrast, typography, con
 ### Residual UI boundaries
 
 - The board begins below the action card at 390 × 844; users still scroll for full board inspection. Legal board targets also have the large accessible list button, proven during setup, but building with resources in the *new* action panel was not tapped on Android; only widget-tested.
-- Live strategy card play, bank/trade completion, Knight and Invasion responses were not exercised through this Android build. Existing engine and focused tests remain separate evidence.
+- Live strategy card play, bank/trade completion, Guard and Invasion responses were not exercised through this Android build. Existing engine and focused tests remain separate evidence.
 - Glass Waydroid and physical Samsung acceptance remain **unverified**. The original Nox package rejected a replacement APK due to mismatched signatures, so the side-by-side QA package was used without uninstalling or overwriting saved data.

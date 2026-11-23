@@ -58,29 +58,26 @@ void main() {
   });
 
   for (final defended in [true, false]) {
-    test(
-      'invasion exhausts knights after ${defended ? "defence" : "raid"}',
-      () {
-        final base = MatchEngine.newGame(['A', 'B', 'C'], 55);
-        final s = base.copyWith(
-          phase: MatchPhase.invasion,
-          sites: {
-            0: const Site(0, Structure.town),
-            1: const Site(1, Structure.capital),
-          },
-          knights: {
-            3: KnightPiece(
-              0,
-              defended ? KnightRank.champion : KnightRank.sentinel,
-              true,
-              -1,
-            ),
-            4: const KnightPiece(1, KnightRank.sentinel, false, -1),
-          },
-        );
-        final next = MatchEngine.apply(s, const ResolveInvasion());
-        expect(next.knights.values.every((k) => !k.active), isTrue);
-      },
-    );
+    test('invasion exhausts guards after ${defended ? "defence" : "raid"}', () {
+      final base = MatchEngine.newGame(['A', 'B', 'C'], 55);
+      final s = base.copyWith(
+        phase: MatchPhase.invasion,
+        sites: {
+          0: const Site(0, Structure.town),
+          1: const Site(1, Structure.capital),
+        },
+        guards: {
+          3: GuardPiece(
+            0,
+            defended ? GuardRank.champion : GuardRank.sentinel,
+            true,
+            -1,
+          ),
+          4: const GuardPiece(1, GuardRank.sentinel, false, -1),
+        },
+      );
+      final next = MatchEngine.apply(s, const ResolveInvasion());
+      expect(next.guards.values.every((k) => !k.active), isTrue);
+    });
   }
 }

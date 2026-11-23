@@ -5,7 +5,7 @@
 - First-screen New local match call to action moved above description, reachable in smaller or magnified layouts.
 - Each main page uses a distinct keyed scroll subtree to prevent preserved offset hiding the Rules title after navigating from setup.
 - Root Focus handles Escape for secondary pages and routes (using Navigator.maybePop), preserving dialog and match handoff PopScope rules.
-- Match actions now prioritise a full-width End turn button; bank/player trades wrap to minimum 48 px touch-height controls; Knights & defence and Town Developments are separate collapsed expandable groups.
+- Match actions now prioritise a full-width End turn button; bank/player trades wrap to minimum 48 px touch-height controls; Guards & defence and Town Developments are separate collapsed expandable groups.
 - Updated game-action widget tests to open secondary expansion panels, added six focused accessibility/navigation/widget-size tests, updated changed Home golden.
 
 ## Verified checks (Nox buildq)

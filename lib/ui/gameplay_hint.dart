@@ -9,18 +9,18 @@ class GameplayHint {
 const gameplayHints = <String, GameplayHint>{
   'setupVillage': GameplayHint(
     'setupVillage',
-    'Choose your starting settlement',
-    'Tap a glowing junction to place your free settlement. Nearby terrain and number tokens determine which goods it can produce. Leave room for roads and future settlements.',
+    'Choose your starting village',
+    'Tap a glowing junction to place your free village. Nearby terrain and number tokens determine which goods it can produce. Leave room for roads and future villages.',
   ),
   'setupTown': GameplayHint(
     'setupTown',
     'Place your starting Town',
-    'Your second starting settlement is a free Town. Choose its neighbouring terrain carefully, then connect a free road. Develop the Town in Realm to unlock advanced goods.',
+    'Your second starting village is a free Town. Choose its neighbouring terrain carefully, then connect a free road. Develop the Town in Realm to unlock advanced goods.',
   ),
   'setupRoad': GameplayHint(
     'setupRoad',
-    'Connect your settlement',
-    'Tap a glowing edge beside the settlement you just placed. This starting road is free. Extend roads later to reach new building sites.',
+    'Connect your village',
+    'Tap a glowing edge beside the village you just placed. This starting road is free. Extend roads later to reach new building sites.',
   ),
   'roll': GameplayHint(
     'roll',
@@ -35,27 +35,27 @@ const gameplayHints = <String, GameplayHint>{
   'invasion': GameplayHint(
     'invasion',
     'Defend against the invasion',
-    'Active Knights and Fortifications contribute to shared defence. Review the defence forecast before resolving the invasion. A failed defence can damage a leading Town or Capital.',
+    'Active Guards and Fortifications contribute to shared defence. Review the defence forecast before resolving the invasion. A failed defence can damage a leading Town or Capital.',
   ),
   'actions': GameplayHint(
     'actions',
     'Shape your realm',
-    'Build roads and settlements, trade for missing goods, or play a strategy card. Select an action to see its cost and legal targets. End your turn when you are done.',
+    'Build roads and villages, trade for missing goods, or play a strategy card. Select an action to see its cost and legal targets. End your turn when you are done.',
   ),
   'road': GameplayHint(
     'road',
     'Extend your roads',
-    'Tap a glowing edge connected to your network. Roads open routes to new settlement sites. The action shows the current cost, including any discounts.',
+    'Tap a glowing edge connected to your network. Roads open routes to new village sites. The action shows the current cost, including any discounts.',
   ),
   'village': GameplayHint(
     'village',
     'Build a village',
-    'Tap a glowing junction along your road network. Settlements need space from other settlements. A new village produces goods from its neighbouring terrain.',
+    'Tap a glowing junction along your road network. Villages need space from other villages. A new village produces goods from its neighbouring terrain.',
   ),
   'upgrade': GameplayHint(
     'upgrade',
-    'Upgrade a settlement',
-    'Tap a highlighted settlement to upgrade it. The action shows the required goods. Towns can be developed in Realm to unlock advanced production.',
+    'Upgrade a village',
+    'Tap a highlighted village to upgrade it. The action shows the required goods. Towns can be developed in Realm to unlock advanced production.',
   ),
   'fortify': GameplayHint(
     'fortify',
@@ -64,23 +64,23 @@ const gameplayHints = <String, GameplayHint>{
   ),
   'recruit': GameplayHint(
     'recruit',
-    'Recruit a Knight',
-    'Tap a highlighted junction to recruit a Knight. Recruit where your network allows it, then activate the Knight so it can defend and take actions.',
+    'Recruit a Guard',
+    'Tap a highlighted junction to recruit a Guard. Recruit where your network allows it, then activate the Guard so it can defend and take actions.',
   ),
   'activate': GameplayHint(
     'activate',
-    'Activate a Knight',
-    'Tap a highlighted Knight and pay the activation cost. Active Knights contribute to invasion defence and can perform Knight actions.',
+    'Activate a Guard',
+    'Tap a highlighted Guard and pay the activation cost. Active Guards contribute to invasion defence and can perform Guard actions.',
   ),
   'promote': GameplayHint(
     'promote',
-    'Promote a Knight',
-    'Tap a highlighted Knight to increase its rank and strength. Higher ranks have different costs and requirements; the action lists the cost for each promotion.',
+    'Promote a Guard',
+    'Tap a highlighted Guard to increase its rank and strength. Higher ranks have different costs and requirements; the action lists the cost for each promotion.',
   ),
-  'knightMove': GameplayHint(
-    'knightMove',
-    'Move an active Knight',
-    'Select your Knight, then tap a glowing destination. Movement follows your road network. An active Knight can move once per turn.',
+  'guardMove': GameplayHint(
+    'guardMove',
+    'Move an active Guard',
+    'Select your Guard, then tap a glowing destination. Movement follows your road network. An active Guard can move once per turn.',
   ),
   'trade': GameplayHint(
     'trade',

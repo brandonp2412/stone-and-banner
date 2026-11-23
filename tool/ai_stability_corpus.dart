@@ -52,7 +52,7 @@ void main(List<String> args) {
         var state = MatchEngine.newGame(names, seed, boardSeed: seed * 7 + 11);
         var steps = 0;
         var maxDecisionUs = 0;
-        var longestRoadTies = 0;
+        var crownRoadTies = 0;
         var scoreTies = 0;
         final localEvents = <String, int>{};
         String? failed;
@@ -101,23 +101,21 @@ void main(List<String> args) {
             _verifyScores(next);
             if (chosen is PlaceRoad ||
                 chosen is PlaceVillage ||
-                next.longestRoadHolder != state.longestRoadHolder) {
+                next.crownRoadHolder != state.crownRoadHolder) {
               final lengths = [
                 for (var seat = 0; seat < seats; seat++)
-                  MatchEngine.longestRoad(next, seat),
+                  MatchEngine.crownRoad(next, seat),
               ];
               final largest = lengths.reduce(math.max);
               final tied = lengths.where((n) => n == largest).length > 1;
-              if (tied && largest >= 5) longestRoadTies++;
-              final holder = next.longestRoadHolder;
+              if (tied && largest >= 5) crownRoadTies++;
+              final holder = next.crownRoadHolder;
               if (holder != null &&
                   (largest < 5 || lengths[holder] != largest)) {
-                throw StateError(
-                  'invalid longest-road holder $holder: $lengths',
-                );
+                throw StateError('invalid crown-road holder $holder: $lengths');
               }
               if (holder == null && largest >= 5 && !tied) {
-                throw StateError('unique longest road has no holder: $lengths');
+                throw StateError('unique crown road has no holder: $lengths');
               }
             }
             final scores = [
@@ -202,10 +200,10 @@ void main(List<String> args) {
           'finished': state.phase == MatchPhase.finished,
           'winner': MatchEngine.winner(state),
           'scores': scores,
-          'longestRoadTies': longestRoadTies,
+          'crownRoadTies': crownRoadTies,
           'scoreTies': scoreTies,
           'invasions': state.invasions,
-          'roadHolder': state.longestRoadHolder,
+          'roadHolder': state.crownRoadHolder,
           'events': localEvents,
           'eventHash64': _eventHash(state.events),
           'failure': failed,
@@ -263,7 +261,7 @@ void main(List<String> args) {
         ),
         'roadTiesObserved': sample.fold<int>(
           0,
-          (n, r) => n + (r['longestRoadTies'] as int),
+          (n, r) => n + (r['crownRoadTies'] as int),
         ),
       });
     }

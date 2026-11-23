@@ -26,13 +26,13 @@ class AiLegalActions {
       _options.whereType<BankExchange>().toList();
   List<PlayStrategyCard> get cards =>
       _options.whereType<PlayStrategyCard>().toList();
-  List<RecruitKnight> get recruits =>
-      _options.whereType<RecruitKnight>().toList();
-  List<MoveKnight> get knightMoves => _options.whereType<MoveKnight>().toList();
-  List<ActivateKnight> get activates =>
-      _options.whereType<ActivateKnight>().toList();
-  List<PromoteKnight> get promotions =>
-      _options.whereType<PromoteKnight>().toList();
+  List<RecruitGuard> get recruits =>
+      _options.whereType<RecruitGuard>().toList();
+  List<MoveGuard> get guardMoves => _options.whereType<MoveGuard>().toList();
+  List<ActivateGuard> get activates =>
+      _options.whereType<ActivateGuard>().toList();
+  List<PromoteGuard> get promotions =>
+      _options.whereType<PromoteGuard>().toList();
   List<FortifyTown> get fortifications =>
       _options.whereType<FortifyTown>().toList();
   List<MoveBandit> get banditMoves => _options.whereType<MoveBandit>().toList();
@@ -141,12 +141,12 @@ class HeuristicAi {
     return value;
   }
 
-  double _knightValue(MatchState state, int vertex) {
+  double _guardValue(MatchState state, int vertex) {
     final junction = state.topology.vertices[vertex];
     final ownRoads = junction.edges
         .where((e) => state.roads[e] == state.active)
         .length;
-    // Guard contested junctions without occupying our best settlement sites.
+    // Guard contested junctions without occupying our best village sites.
     return _blockingValue(state, vertex) * 2 +
         ownRoads * 1.5 -
         (_open(state, vertex) ? siteValue(state, vertex) * .8 : 0);
@@ -168,7 +168,7 @@ class HeuristicAi {
         best = math.max(best, siteValue(state, vertex));
       }
       for (final next in state.topology.neighbours(vertex)) {
-        // Do not route through a rival settlement.
+        // Do not route through a rival village.
         if (state.sites[vertex]?.owner != null &&
             state.sites[vertex]!.owner != state.active) {
           continue;
@@ -307,12 +307,12 @@ class HeuristicAi {
     final answer = AiCardStrategy.incomingOffer(view);
     if (answer != null) return answer;
 
-    // Defend before all ore is sunk into points: a Knight needs a recruitment
+    // Defend before all ore is sunk into points: a Guard needs a recruitment
     // turn and a later activation, so reacting at invasion time is too late.
-    final ownKnights = state.knights.entries
+    final ownGuards = state.guards.entries
         .where((entry) => entry.value.owner == state.active)
         .toList();
-    final ownActiveStrength = ownKnights
+    final ownActiveStrength = ownGuards
         .where((entry) => entry.value.active)
         .fold<int>(0, (total, entry) => total + entry.value.rank.strength);
     final approachingFleet = MatchEngine.invasionStrength(state) + 1;
@@ -330,26 +330,26 @@ class HeuristicAi {
     final defend = ownsTown || !rivalTowns;
     if (preparing && defend && needDefence && view.actionsSinceRoll < 6) {
       if (legal.activates.isNotEmpty) {
-        return _best<ActivateKnight>(
+        return _best<ActivateGuard>(
           legal.activates,
-          (event) => state.knights[event.vertex]!.rank.strength.toDouble(),
+          (event) => state.guards[event.vertex]!.rank.strength.toDouble(),
           (event) => event.vertex,
         );
       }
       if (needDefence && legal.promotions.isNotEmpty) {
-        return _best<PromoteKnight>(
+        return _best<PromoteGuard>(
           legal.promotions,
-          (event) => state.knights[event.vertex]!.rank.strength.toDouble(),
+          (event) => state.guards[event.vertex]!.rank.strength.toDouble(),
           (event) => event.vertex,
         );
       }
       // Have a second guard ready if the next attack disables the first.
       if (legal.recruits.isNotEmpty &&
-          ownKnights.length < 2 &&
+          ownGuards.length < 2 &&
           (needDefence || ownActiveStrength == 0)) {
-        return _best<RecruitKnight>(
+        return _best<RecruitGuard>(
           legal.recruits,
-          (event) => _knightValue(state, event.vertex),
+          (event) => _guardValue(state, event.vertex),
           (event) => event.vertex,
         );
       }
@@ -358,13 +358,13 @@ class HeuristicAi {
       }
     }
 
-    if (legal.knightMoves.isNotEmpty) {
-      final move = _best<MoveKnight>(
-        legal.knightMoves,
-        (e) => _knightValue(state, e.to) - _knightValue(state, e.from),
+    if (legal.guardMoves.isNotEmpty) {
+      final move = _best<MoveGuard>(
+        legal.guardMoves,
+        (e) => _guardValue(state, e.to) - _guardValue(state, e.from),
         (e) => e.to,
       );
-      if (_knightValue(state, move.to) > _knightValue(state, move.from) + 2) {
+      if (_guardValue(state, move.to) > _guardValue(state, move.from) + 2) {
         return move;
       }
     }
@@ -380,7 +380,7 @@ class HeuristicAi {
       );
     }
 
-    // Legal settlement placement wins points and productive diversity now.
+    // Legal village placement wins points and productive diversity now.
     if (legal.villages.isNotEmpty) {
       return _best<PlaceVillage>(
         legal.villages,
@@ -419,7 +419,7 @@ class HeuristicAi {
     if (trade != null) return trade;
 
     // Roads are an investment only when they unlock useful, spaced sites.
-    // Retain wood/brick if a settlement is already reachable but unaffordable.
+    // Retain wood/brick if a village is already reachable but unaffordable.
     final availableSite = state.topology.vertices.any(
       (v) =>
           _open(state, v.id) &&

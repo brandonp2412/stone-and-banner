@@ -90,10 +90,10 @@ void main() {
     }
     for (final action in {
       'Fortify': 'fortify',
-      'Recruit Knight': 'recruit',
-      'Activate Knight': 'activate',
-      'Upgrade Knight': 'promote',
-      'Move Knight': 'knightMove',
+      'Recruit Guard': 'recruit',
+      'Activate Guard': 'activate',
+      'Upgrade Guard': 'promote',
+      'Move Guard': 'knightMove',
     }.entries) {
       testWidgets('${action.key} through the tabletop at scale $scale', (
         tester,
@@ -143,10 +143,10 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text(action.key));
         await tester.pumpAndSettle();
-        int? selectedKnight;
+        int? selectedGuard;
         for (
           var step = 0;
-          step < (action.key == 'Move Knight' ? 2 : 1);
+          step < (action.key == 'Move Guard' ? 2 : 1);
           step++
         ) {
           final vertices = switch (action.value) {
@@ -156,29 +156,29 @@ void main() {
             'recruit' => Iterable.generate(
               state.topology.vertices.length,
             ).where((v) => MatchEngine.legalRecruit(state, v)),
-            'activate' => state.knights.keys.where(
+            'activate' => state.guards.keys.where(
               (v) => MatchEngine.legalActivate(state, v),
             ),
-            'promote' => state.knights.keys.where(
+            'promote' => state.guards.keys.where(
               (v) => MatchEngine.legalPromote(state, v),
             ),
             _ =>
               step == 0
-                  ? state.knights.keys.where(
+                  ? state.guards.keys.where(
                       (v) =>
-                          state.knights[v]!.owner == state.active &&
-                          state.knights[v]!.active &&
-                          state.knights[v]!.actedTurn != state.turnSerial &&
-                          MatchEngine.legalKnightDestinations(
+                          state.guards[v]!.owner == state.active &&
+                          state.guards[v]!.active &&
+                          state.guards[v]!.actedTurn != state.turnSerial &&
+                          MatchEngine.legalGuardDestinations(
                             state,
                             v,
                           ).isNotEmpty,
                     )
-                  : MatchEngine.legalKnightDestinations(state, selectedKnight!),
+                  : MatchEngine.legalGuardDestinations(state, selectedGuard!),
           };
           final target = vertices.first;
           if (action.value == 'knightMove' && step == 0) {
-            selectedKnight = target;
+            selectedGuard = target;
           }
           await tapBoardTarget(tester, state, vertex: target);
           expect(tester.takeException(), isNull);

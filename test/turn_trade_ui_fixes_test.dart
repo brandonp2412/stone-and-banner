@@ -160,7 +160,7 @@ void main() {
         tactical: TacticalWindow(77, TacticalKind.bandit, 1, [
           0,
         ], bandit: const MoveBandit(0, victim: 0)),
-        knights: {5: const KnightPiece(0, KnightRank.sentinel, true, -1)},
+        guards: {5: const GuardPiece(0, GuardRank.sentinel, true, -1)},
       );
       var observing = false;
       late StateSetter refresh;
@@ -182,13 +182,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Intercept with Knight'), findsOneWidget);
+      expect(find.text('Intercept with Guard'), findsOneWidget);
       await tester.pump(const Duration(minutes: 1));
-      expect(find.text('Intercept with Knight'), findsOneWidget);
+      expect(find.text('Intercept with Guard'), findsOneWidget);
       expect(events, isEmpty);
       refresh(() => observing = true);
       await tester.pumpAndSettle();
-      expect(find.text('Intercept with Knight'), findsNothing);
+      expect(find.text('Intercept with Guard'), findsNothing);
       expect(find.text('Watch the realm grow.'), findsNothing);
     },
   );

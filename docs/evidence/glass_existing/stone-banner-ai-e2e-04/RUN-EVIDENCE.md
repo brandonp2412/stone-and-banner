@@ -4,10 +4,10 @@ Recorded: 2026-11-04 18:57:38 NZDT. Host: Glass, `/home/brandon/stone-and-banner
 
 ## Implemented
 
-- Extended `AiTurnView` with an immutable `AiStrategySignals` DTO containing public seasons/rounds, Town/Capital source-terrain production pips, own development levels and Knights, public Knight positions, Reaver/Invasion parameters, own dry-roll/relief and score deficit, finite bank stock, and legal trading rate. No opponent resource stores, cards, deck order or future rolls are exposed.
-- Added `AiActionAdapter.advancedDecision` to prioritize VP, productive Town Development, Commerce II, Governance defence and Aqueduct drought recovery, plus threat-driven Knight activation/promotion/recruitment, Town fortification and Knight displacement. Invasion aid spends only a legal wheat/ore amount when the public gap may be bridged; otherwise passes. Bank trades use legal stock-backed candidates, only for deficits while preserving the next build cost.
+- Extended `AiTurnView` with an immutable `AiStrategySignals` DTO containing public seasons/rounds, Town/Capital source-terrain production pips, own development levels and Guards, public Guard positions, Reaver/Invasion parameters, own dry-roll/relief and score deficit, finite bank stock, and legal trading rate. No opponent resource stores, cards, deck order or future rolls are exposed.
+- Added `AiActionAdapter.advancedDecision` to prioritize Renown, productive Town Development, Commerce II, Governance defence and Reservoir drought recovery, plus threat-driven Guard activation/promotion/recruitment, Town fortification and Guard displacement. Invasion aid spends only a legal wheat/ore amount when the public gap may be bridged; otherwise passes. Bank trades use legal stock-backed candidates, only for deficits while preserving the next build cost.
 - Integrated the planner into `HeuristicAi` for tactical responses and action phase, retaining its earlier setup/site/road/card heuristics. Enforced eight post-roll events per turn; no reducer rules or network/backend changed.
-- Twelve new deterministic tests in `test/ai_advanced_strategy_test.dart`: production/season signals, Town development, Capital resource targeting, Knight activation/promotion, fortification, displacement, invasion aid/pass (including wheat-only impossible gap), catch-up 3:1 and exhausted bank, Aqueduct drought planning, action cap/finished state, hidden-hand invariance, and multi-round replay with bank + escrow conservation.
+- Twelve new deterministic tests in `test/ai_advanced_strategy_test.dart`: production/season signals, Town development, Capital resource targeting, Guard activation/promotion, fortification, displacement, invasion aid/pass (including wheat-only impossible gap), catch-up 3:1 and exhausted bank, Reservoir drought planning, action cap/finished state, hidden-hand invariance, and multi-round replay with bank + escrow conservation.
 
 ## Verification — exact Glass commands (scheduled with buildq)
 
@@ -16,7 +16,7 @@ Recorded: 2026-11-04 18:57:38 NZDT. Host: Glass, `/home/brandon/stone-and-banner
 | #4770 | `flutter test test/ --reporter expanded` | Passed, 97 tests, 0 failures |
 | #4771 | `flutter analyze lib test tool` | Passed, zero issues |
 | #4772 | `flutter build apk --release` | Passed, APK 54.4 MB; build only, not installed |
-| #4773 | `dart run tool/ai_strategy_benchmark.dart 801 24 50` | 24 seeded games; heuristic 7.6667 mean VP, random-rival 2.6042 mean VP/seat; 3 finished games, all 3 won by heuristic; 11,135 event steps |
+| #4773 | `dart run tool/ai_strategy_benchmark.dart 801 24 50` | 24 seeded games; heuristic 7.6667 mean Renown, random-rival 2.6042 mean Renown/seat; 3 finished games, all 3 won by heuristic; 11,135 event steps |
 
 Flutter: `/home/brandon/.local/share/flutter-stone-and-banner-3.47.6/bin/flutter` (3.47.6 / Dart 3.13.5). Release APK: `/home/brandon/stone-and-banner/build/app/outputs/flutter-apk/app-release.apk`; bytes: `54398538`; SHA-256: `3f57b11e25d17e00780a2a1ceb8348a8f169831c603f38ee6d7340a43f4df372`. SDK warned about Android SDK XML version 4 vs parser version 3 during release, but Gradle finished successfully. There was no install or device launch.
 

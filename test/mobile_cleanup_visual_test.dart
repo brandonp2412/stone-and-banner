@@ -48,7 +48,7 @@ void main() {
     expect(rect.height, greaterThan(size.height - 90));
     expect(find.byType(AppBar), findsNothing);
     expect(find.byTooltip('Close trade'), findsOneWidget);
-    expect(find.byKey(const ValueKey('robber-hand-capacity')), findsNothing);
+    expect(find.byKey(const ValueKey('bandit-hand-capacity')), findsNothing);
     expect(find.byTooltip('wood: 3'), findsWidgets);
     expect(tester.takeException(), isNull);
     await expectLater(

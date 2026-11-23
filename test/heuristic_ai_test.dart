@@ -117,7 +117,7 @@ void main() {
     expect(aiBetter, greaterThan(15));
   });
 
-  test('prioritizes legal VP upgrades and conserves stores', () {
+  test('prioritizes legal Renown upgrades and conserves stores', () {
     const ai = HeuristicAi();
     var state = afterDraft(117);
     final (first, second) = MatchEngine.expectedDice(state);

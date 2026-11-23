@@ -272,32 +272,33 @@ class FortifyTown extends MatchEvent {
   Map<String, Object?> toJson() => {'type': 'fortify', 'vertex': vertex};
 }
 
-class RecruitKnight extends MatchEvent {
-  const RecruitKnight(this.vertex);
+class RecruitGuard extends MatchEvent {
+  const RecruitGuard(this.vertex);
   final int vertex;
   @override
   Map<String, Object?> toJson() => {'type': 'recruit', 'vertex': vertex};
 }
 
-class ActivateKnight extends MatchEvent {
-  const ActivateKnight(this.vertex);
+class ActivateGuard extends MatchEvent {
+  const ActivateGuard(this.vertex);
   final int vertex;
   @override
   Map<String, Object?> toJson() => {'type': 'activate', 'vertex': vertex};
 }
 
-class PromoteKnight extends MatchEvent {
-  const PromoteKnight(this.vertex);
+class PromoteGuard extends MatchEvent {
+  const PromoteGuard(this.vertex);
   final int vertex;
   @override
   Map<String, Object?> toJson() => {'type': 'promote', 'vertex': vertex};
 }
 
-class MoveKnight extends MatchEvent {
-  const MoveKnight(this.from, this.to);
+class MoveGuard extends MatchEvent {
+  const MoveGuard(this.from, this.to);
   final int from, to;
   @override
   Map<String, Object?> toJson() => {
+    // Preserve the v1 event token for saved replays and older room clients.
     'type': 'knightMove',
     'from': from,
     'to': to,
@@ -374,8 +375,8 @@ class MatchState {
     this.rollCount = 0,
     this.banditTile = 0,
     this.round = 1,
-    this.longestRoadHolder,
-    Map<int, KnightPiece> knights = const {},
+    this.crownRoadHolder,
+    Map<int, GuardPiece> guards = const {},
     Set<int> fortified = const {},
     Set<int> reaverScars = const {},
     Map<int, int> dryRolls = const {},
@@ -406,7 +407,7 @@ class MatchState {
        ),
        sites = Map.unmodifiable(sites),
        roads = Map.unmodifiable(roads),
-       knights = Map.unmodifiable(knights),
+       guards = Map.unmodifiable(guards),
        fortified = Set.unmodifiable(fortified),
        reaverScars = Set.unmodifiable(reaverScars),
        dryRolls = Map.unmodifiable(dryRolls),
@@ -439,7 +440,7 @@ class MatchState {
   final List<int> turnOrder;
   final Map<int, Site> sites;
   final Map<int, int> roads;
-  final Map<int, KnightPiece> knights;
+  final Map<int, GuardPiece> guards;
   final Set<int> fortified, reaverScars, reliefUsed;
   final Map<int, int> dryRolls;
   final int reaverPressure, invasions, turnSerial, raidInterval;
@@ -453,7 +454,7 @@ class MatchState {
   final String lastInvasion;
   final Map<Resource, int> bank;
   final MatchPhase phase;
-  final int? pendingVillage, dice, longestRoadHolder;
+  final int? pendingVillage, dice, crownRoadHolder;
 
   /// Players who have built something after the free setup placements.
   final Set<int> builders;
@@ -477,7 +478,7 @@ class MatchState {
     int? cardDeckVersion,
     Map<int, Site>? sites,
     Map<int, int>? roads,
-    Map<int, KnightPiece>? knights,
+    Map<int, GuardPiece>? guards,
     Set<int>? fortified,
     Set<int>? reaverScars,
     Set<int>? reliefUsed,
@@ -499,7 +500,7 @@ class MatchState {
     int? rollCount,
     int? banditTile,
     int? round,
-    int? longestRoadHolder,
+    int? crownRoadHolder,
     bool clearRoadHolder = false,
     Set<int>? builders,
     Set<int>? catchupUsed,
@@ -525,7 +526,7 @@ class MatchState {
     turnOrder: turnOrder,
     sites: sites ?? this.sites,
     roads: roads ?? this.roads,
-    knights: knights ?? this.knights,
+    guards: guards ?? this.guards,
     fortified: fortified ?? this.fortified,
     reaverScars: reaverScars ?? this.reaverScars,
     reliefUsed: reliefUsed ?? this.reliefUsed,
@@ -547,9 +548,9 @@ class MatchState {
     rollCount: rollCount ?? this.rollCount,
     banditTile: banditTile ?? this.banditTile,
     round: round ?? this.round,
-    longestRoadHolder: clearRoadHolder
+    crownRoadHolder: clearRoadHolder
         ? null
-        : longestRoadHolder ?? this.longestRoadHolder,
+        : crownRoadHolder ?? this.crownRoadHolder,
     builders: builders ?? this.builders,
     catchupUsed: catchupUsed ?? this.catchupUsed,
     drawPiles: drawPiles ?? this.drawPiles,
@@ -716,10 +717,10 @@ class MatchEngine {
           StrategyDeck.values.byName(e['track'] as String),
         ),
         'fortify' => FortifyTown(e['vertex'] as int),
-        'recruit' => RecruitKnight(e['vertex'] as int),
-        'activate' => ActivateKnight(e['vertex'] as int),
-        'promote' => PromoteKnight(e['vertex'] as int),
-        'knightMove' => MoveKnight(e['from'] as int, e['to'] as int),
+        'recruit' => RecruitGuard(e['vertex'] as int),
+        'activate' => ActivateGuard(e['vertex'] as int),
+        'promote' => PromoteGuard(e['vertex'] as int),
+        'knightMove' => MoveGuard(e['from'] as int, e['to'] as int),
         'cardPlay' => PlayStrategyCard(
           e['hand'] as int,
           vertex: e['vertex'] as int?,
@@ -812,7 +813,7 @@ class MatchEngine {
     'rollCount': s.rollCount,
     'bandit': s.banditTile,
     'builders': s.builders.toList()..sort(),
-    'holder': s.longestRoadHolder,
+    'holder': s.crownRoadHolder,
     'pressure': s.reaverPressure,
     'raidInterval': s.raidInterval,
     'invasions': s.invasions,
@@ -832,14 +833,15 @@ class MatchEngine {
     'scars': s.reaverScars.toList()..sort(),
     'reliefUsed': s.reliefUsed.toList()..sort(),
     'dryRolls': [for (var i = 0; i < s.players.length; i++) s.dryRolls[i] ?? 0],
+    // Preserve the snapshot field consumed by older room clients.
     'knights': [
-      for (final v in (s.knights.keys.toList()..sort()))
+      for (final v in (s.guards.keys.toList()..sort()))
         [
           v,
-          s.knights[v]!.owner,
-          s.knights[v]!.rank.name,
-          s.knights[v]!.active,
-          s.knights[v]!.actedTurn,
+          s.guards[v]!.owner,
+          s.guards[v]!.rank.name,
+          s.guards[v]!.active,
+          s.guards[v]!.actedTurn,
         ],
     ],
     'catchup': s.catchupUsed.toList()..sort(),
@@ -902,7 +904,7 @@ class MatchEngine {
 
   static int score(MatchState s, int player) =>
       GameEngine.score(s.players[player]) +
-      (s.longestRoadHolder == player ? 2 : 0);
+      (s.crownRoadHolder == player ? 2 : 0);
 
   static int? winner(MatchState s) {
     for (var i = 0; i < s.players.length; i++) {
@@ -949,7 +951,7 @@ class MatchEngine {
     if (vertex < 0 ||
         vertex >= s.topology.vertices.length ||
         s.sites.containsKey(vertex) ||
-        s.knights.containsKey(vertex)) {
+        s.guards.containsKey(vertex)) {
       return false;
     }
     if (s.topology.neighbours(vertex).any(s.sites.containsKey)) return false;
@@ -978,8 +980,8 @@ class MatchEngine {
     }
     bool linked(int vertex) {
       if (s.events.length >= s.invasionInvitesFromEvent) {
-        if (s.knights[vertex] case final KnightPiece knight) {
-          if (knight.owner != s.active) return false;
+        if (s.guards[vertex] case final GuardPiece guard) {
+          if (guard.owner != s.active) return false;
         }
       }
       if (s.sites[vertex] case final Site site) return site.owner == s.active;
@@ -1045,9 +1047,9 @@ class MatchEngine {
     if (s.phase != MatchPhase.actions ||
         vertex < 0 ||
         vertex >= s.topology.vertices.length ||
-        s.knights.containsKey(vertex) ||
+        s.guards.containsKey(vertex) ||
         s.sites.containsKey(vertex) ||
-        s.knights.values.where((k) => k.owner == s.active).length >= 3 ||
+        s.guards.values.where((k) => k.owner == s.active).length >= 3 ||
         !affordable(
           s,
           s.current.level(StrategyDeck.governance) >= 4
@@ -1060,46 +1062,46 @@ class MatchEngine {
   }
 
   static bool legalActivate(MatchState s, int vertex) {
-    final knight = s.knights[vertex];
+    final guard = s.guards[vertex];
     return s.phase == MatchPhase.actions &&
-        knight != null &&
-        knight.owner == s.active &&
-        !knight.active &&
-        knight.actedTurn != s.turnSerial &&
+        guard != null &&
+        guard.owner == s.active &&
+        !guard.active &&
+        guard.actedTurn != s.turnSerial &&
         affordable(s, activateCost);
   }
 
-  static Map<Resource, int> promotionCost(KnightRank rank) => switch (rank) {
-    KnightRank.sentinel => {Resource.ore: 1, Resource.wool: 1},
-    KnightRank.warden => {Resource.ore: 2, Resource.coin: 1},
-    KnightRank.champion => {},
+  static Map<Resource, int> promotionCost(GuardRank rank) => switch (rank) {
+    GuardRank.sentinel => {Resource.ore: 1, Resource.wool: 1},
+    GuardRank.warden => {Resource.ore: 2, Resource.coin: 1},
+    GuardRank.champion => {},
   };
 
   static bool legalPromote(MatchState s, int vertex) {
-    final knight = s.knights[vertex];
+    final guard = s.guards[vertex];
     return s.phase == MatchPhase.actions &&
-        knight != null &&
-        knight.owner == s.active &&
-        knight.active &&
-        knight.rank != KnightRank.champion &&
-        knight.actedTurn != s.turnSerial &&
-        affordable(s, promotionCost(knight.rank));
+        guard != null &&
+        guard.owner == s.active &&
+        guard.active &&
+        guard.rank != GuardRank.champion &&
+        guard.actedTurn != s.turnSerial &&
+        affordable(s, promotionCost(guard.rank));
   }
 
-  static bool legalMoveKnight(MatchState s, int from, int to) {
-    final knight = s.knights[from], occupant = s.knights[to];
+  static bool legalMoveGuard(MatchState s, int from, int to) {
+    final guard = s.guards[from], occupant = s.guards[to];
     if (s.phase != MatchPhase.actions ||
-        knight == null ||
-        knight.owner != s.active ||
-        !knight.active ||
-        knight.actedTurn == s.turnSerial ||
+        guard == null ||
+        guard.owner != s.active ||
+        !guard.active ||
+        guard.actedTurn == s.turnSerial ||
         to < 0 ||
         to >= s.topology.vertices.length ||
         from == to ||
         s.sites.containsKey(to) ||
         (occupant != null &&
             (occupant.owner == s.active ||
-                occupant.rank.strength >= knight.rank.strength))) {
+                occupant.rank.strength >= guard.rank.strength))) {
       return false;
     }
     return s.topology.vertices[from].edges.any((id) {
@@ -1108,12 +1110,12 @@ class MatchEngine {
     });
   }
 
-  static List<int> legalKnightDestinations(MatchState s, int from) => [
+  static List<int> legalGuardDestinations(MatchState s, int from) => [
     for (var v = 0; v < s.topology.vertices.length; v++)
-      if (legalMoveKnight(s, from, v)) v,
+      if (legalMoveGuard(s, from, v)) v,
   ];
 
-  /// The fleet is as strong as the number of upgraded settlements in play.
+  /// The fleet is as strong as the number of upgraded villages in play.
   /// Pressure determines *when* it attacks, not how hard it hits; a Village
   /// contributes nothing, and repeated invasions do not snowball its strength.
   static int invasionStrength(MatchState s) => s.sites.values
@@ -1126,7 +1128,7 @@ class MatchEngine {
       _resolveInvasion(s).lastInvasion;
 
   static int defenceStrength(MatchState s) =>
-      s.knights.values
+      s.guards.values
           .where((k) => k.active)
           .fold<int>(0, (total, k) => total + k.rank.strength) +
       s.fortified.length +
@@ -1233,8 +1235,8 @@ class MatchEngine {
     final edge = s.topology.edges[id];
     bool linked(int vertex) {
       if (s.events.length >= s.invasionInvitesFromEvent) {
-        if (s.knights[vertex] case final KnightPiece knight) {
-          if (knight.owner != s.active) return false;
+        if (s.guards[vertex] case final GuardPiece guard) {
+          if (guard.owner != s.active) return false;
         }
       }
       if (s.sites[vertex] case final Site site) return site.owner == s.active;
@@ -1320,17 +1322,17 @@ class MatchEngine {
       case CardPower.activate:
       case CardPower.promote:
       case CardPower.exhaust:
-        for (final vertex in (s.knights.keys.toList()..sort())) {
-          final knight = s.knights[vertex]!;
+        for (final vertex in (s.guards.keys.toList()..sort())) {
+          final guard = s.guards[vertex]!;
           if (card.power == CardPower.exhaust) {
-            if (knight.owner != s.active && knight.active) add(vertex: vertex);
-          } else if (knight.owner == s.active &&
-              knight.actedTurn != s.turnSerial) {
-            if (card.power == CardPower.activate && !knight.active) {
+            if (guard.owner != s.active && guard.active) add(vertex: vertex);
+          } else if (guard.owner == s.active &&
+              guard.actedTurn != s.turnSerial) {
+            if (card.power == CardPower.activate && !guard.active) {
               add(vertex: vertex);
             } else if (card.power == CardPower.promote &&
-                knight.active &&
-                knight.rank != KnightRank.champion) {
+                guard.active &&
+                guard.rank != GuardRank.champion) {
               add(vertex: vertex);
             }
           }
@@ -1351,9 +1353,9 @@ class MatchEngine {
         for (var tile = 0; tile < s.board.tiles.length; tile++) {
           if (s.topology.tileVertices[tile].any(
             (vertex) =>
-                s.knights[vertex] != null &&
-                s.knights[vertex]!.owner != s.active &&
-                s.knights[vertex]!.active,
+                s.guards[vertex] != null &&
+                s.guards[vertex]!.owner != s.active &&
+                s.guards[vertex]!.active,
           )) {
             add(tile: tile);
           }
@@ -1422,30 +1424,30 @@ class MatchEngine {
         rewards[event.receive!] = card.power == CardPower.portSwap ? 2 : 1;
       case CardPower.activate:
         s = s.copyWith(
-          knights: {
-            ...s.knights,
-            event.vertex!: s.knights[event.vertex]!.copyWith(
+          guards: {
+            ...s.guards,
+            event.vertex!: s.guards[event.vertex]!.copyWith(
               active: true,
               actedTurn: s.turnSerial,
             ),
           },
         );
       case CardPower.promote:
-        final knight = s.knights[event.vertex]!;
+        final guard = s.guards[event.vertex]!;
         s = s.copyWith(
-          knights: {
-            ...s.knights,
-            event.vertex!: knight.copyWith(
-              rank: KnightRank.values[knight.rank.index + 1],
+          guards: {
+            ...s.guards,
+            event.vertex!: guard.copyWith(
+              rank: GuardRank.values[guard.rank.index + 1],
               actedTurn: s.turnSerial,
             ),
           },
         );
       case CardPower.exhaust:
         s = s.copyWith(
-          knights: {
-            ...s.knights,
-            event.vertex!: s.knights[event.vertex]!.copyWith(active: false),
+          guards: {
+            ...s.guards,
+            event.vertex!: s.guards[event.vertex]!.copyWith(active: false),
           },
         );
       case CardPower.moveBandit:
@@ -1470,14 +1472,14 @@ class MatchEngine {
           stores[stolen] = (stores[stolen] ?? 0) + 1;
         }
       case CardPower.massExhaust:
-        final knights = Map<int, KnightPiece>.of(s.knights);
+        final guards = Map<int, GuardPiece>.of(s.guards);
         for (final vertex in s.topology.tileVertices[event.tile!]) {
-          final knight = knights[vertex];
-          if (knight != null && knight.owner != s.active && knight.active) {
-            knights[vertex] = knight.copyWith(active: false);
+          final guard = guards[vertex];
+          if (guard != null && guard.owner != s.active && guard.active) {
+            guards[vertex] = guard.copyWith(active: false);
           }
         }
-        s = s.copyWith(knights: knights);
+        s = s.copyWith(guards: guards);
       case CardPower.seizeGood:
         final victim = players[event.target!];
         final lost = Map<Resource, int>.of(victim.stores);
@@ -1569,7 +1571,7 @@ class MatchEngine {
     };
   }
 
-  static int longestRoad(MatchState s, int player) {
+  static int crownRoad(MatchState s, int player) {
     final owned = {
       for (final e in s.roads.keys)
         if (s.roads[e] == player) e,
@@ -1585,8 +1587,8 @@ class MatchEngine {
       }
       if (length > 0 &&
           s.events.length >= s.invasionInvitesFromEvent &&
-          s.knights[vertex] != null &&
-          s.knights[vertex]!.owner != player) {
+          s.guards[vertex] != null &&
+          s.guards[vertex]!.owner != player) {
         return;
       }
       for (final edge in s.topology.vertices[vertex].edges) {
@@ -1606,9 +1608,9 @@ class MatchEngine {
     return best;
   }
 
-  /// The exact continuous route awarded by longestRoad, in traversal order.
-  /// Uses the same rival-site / knight blockers as the scoring algorithm.
-  static List<int> longestRoadPath(MatchState s, int player) {
+  /// The exact continuous route awarded by crownRoad, in traversal order.
+  /// Uses the same rival-site / guard blockers as the scoring algorithm.
+  static List<int> crownRoadPath(MatchState s, int player) {
     final owned = {
       for (final edge in s.roads.keys)
         if (s.roads[edge] == player) edge,
@@ -1623,8 +1625,8 @@ class MatchEngine {
       }
       if (path.isNotEmpty &&
           s.events.length >= s.invasionInvitesFromEvent &&
-          s.knights[vertex] != null &&
-          s.knights[vertex]!.owner != player) {
+          s.guards[vertex] != null &&
+          s.guards[vertex]!.owner != player) {
         return;
       }
       for (final edge in s.topology.vertices[vertex].edges) {
@@ -1648,7 +1650,7 @@ class MatchEngine {
 
   static MatchState _recalculateRoads(MatchState s) {
     final lengths = [
-      for (var i = 0; i < s.players.length; i++) longestRoad(s, i),
+      for (var i = 0; i < s.players.length; i++) crownRoad(s, i),
     ];
     final largest = lengths.reduce((a, b) => a > b ? a : b);
     if (largest < 5) return s.copyWith(clearRoadHolder: true);
@@ -1658,12 +1660,12 @@ class MatchEngine {
     ];
     final holder = tied.length == 1
         ? tied.single
-        : tied.contains(s.longestRoadHolder)
-        ? s.longestRoadHolder
+        : tied.contains(s.crownRoadHolder)
+        ? s.crownRoadHolder
         : null;
     return holder == null
         ? s.copyWith(clearRoadHolder: true)
-        : s.copyWith(longestRoadHolder: holder);
+        : s.copyWith(crownRoadHolder: holder);
   }
 
   static MatchState _syncBuildings(MatchState s) => s.copyWith(
@@ -1864,7 +1866,7 @@ class MatchEngine {
     } else if (strength >= threat) {
       final contributions = <int, int>{
         for (var i = 0; i < s.players.length; i++)
-          i: s.knights.values
+          i: s.guards.values
               .where((k) => k.owner == i && k.active)
               .fold<int>(0, (total, k) => total + k.rank.strength),
       };
@@ -1880,10 +1882,10 @@ class MatchEngine {
         );
         result = result.copyWith(players: players);
         report =
-            'Defended $strength–$threat. ${players[index].id} earns Guardian\'s Honour (+1 VP).';
+            'Defended $strength–$threat. ${players[index].id} earns Guardian\'s Honour (+1 Renown).';
       } else {
         report =
-            'Defended $strength–$threat. No sole Knight leader; no Honour awarded.';
+            'Defended $strength–$threat. No sole Guard leader; no Honour awarded.';
       }
     } else {
       final targets =
@@ -1938,7 +1940,7 @@ class MatchEngine {
           }
           report =
               'Invasion $threat–$strength. ${s.players[site.owner].id}: ${site.structure.name} downgraded to ${next.name} at junction $vertex '
-              '(-${site.structure == Structure.capital ? 2 : 1} VP). '
+              '(-${site.structure == Structure.capital ? 2 : 1} Renown). '
               '${s.players[site.owner].level(StrategyDeck.governance) >= 3 ? 'Governance III protected hand goods.' : 'Up to two hand goods were raided.'}';
         }
       } else {
@@ -1949,8 +1951,8 @@ class MatchEngine {
     }
     return result.copyWith(
       phase: MatchPhase.roll,
-      knights: {
-        for (final entry in result.knights.entries)
+      guards: {
+        for (final entry in result.guards.entries)
           entry.key: entry.value.copyWith(active: false),
       },
       invasions: s.invasions + 1,
@@ -1969,7 +1971,7 @@ class MatchEngine {
       return false;
     }
     final nearby = s.topology.tileVertices[attackedTile];
-    return s.knights.entries.any(
+    return s.guards.entries.any(
       (entry) =>
           entry.value.owner == player &&
           entry.value.active &&
@@ -2072,16 +2074,16 @@ class MatchEngine {
         w.kind == TacticalKind.bandit &&
             (replaying && s.events.length < s.invasionInvitesFromEvent
                 ? !s.reactionsUsed.contains(player) &&
-                      s.knights.values.any((k) => k.owner == player && k.active)
+                      s.guards.values.any((k) => k.owner == player && k.active)
                 : canIntercept(s, player)),
-        'No active Knight or response allowance.',
+        'No active Guard or response allowance.',
       );
       final vertex =
-          (s.knights.keys
+          (s.guards.keys
                   .where(
                     (v) =>
-                        s.knights[v]!.owner == player &&
-                        s.knights[v]!.active &&
+                        s.guards[v]!.owner == player &&
+                        s.guards[v]!.active &&
                         (replaying &&
                                 s.events.length < s.invasionInvitesFromEvent ||
                             s.topology.tileVertices[w.bandit!.tile].contains(
@@ -2092,9 +2094,9 @@ class MatchEngine {
                 ..sort())
               .first;
       s = s.copyWith(
-        knights: {
-          ...s.knights,
-          vertex: s.knights[vertex]!.copyWith(active: false),
+        guards: {
+          ...s.guards,
+          vertex: s.guards[vertex]!.copyWith(active: false),
         },
         reactionsUsed: {...s.reactionsUsed, player},
       );
@@ -2320,7 +2322,7 @@ class MatchEngine {
       _require(legalFort(s, event.vertex), 'Cannot fortify that Town.');
       s = _pay(s, fortCost);
       s = s.copyWith(fortified: {...s.fortified, event.vertex});
-    } else if (event is RecruitKnight) {
+    } else if (event is RecruitGuard) {
       _require(legalRecruit(s, event.vertex), 'Cannot recruit there.');
       s = _pay(
         s,
@@ -2330,47 +2332,47 @@ class MatchEngine {
       );
       s = _recalculateRoads(
         s.copyWith(
-          knights: {
-            ...s.knights,
-            event.vertex: KnightPiece(
+          guards: {
+            ...s.guards,
+            event.vertex: GuardPiece(
               s.active,
-              KnightRank.sentinel,
+              GuardRank.sentinel,
               false,
               s.turnSerial,
             ),
           },
         ),
       );
-    } else if (event is ActivateKnight) {
-      _require(legalActivate(s, event.vertex), 'Cannot activate that Knight.');
+    } else if (event is ActivateGuard) {
+      _require(legalActivate(s, event.vertex), 'Cannot activate that Guard.');
       s = _pay(s, activateCost);
       s = s.copyWith(
-        knights: {
-          ...s.knights,
-          event.vertex: s.knights[event.vertex]!.copyWith(active: true),
+        guards: {
+          ...s.guards,
+          event.vertex: s.guards[event.vertex]!.copyWith(active: true),
         },
       );
-    } else if (event is PromoteKnight) {
-      _require(legalPromote(s, event.vertex), 'Cannot promote that Knight.');
-      final knight = s.knights[event.vertex]!;
-      s = _pay(s, promotionCost(knight.rank));
+    } else if (event is PromoteGuard) {
+      _require(legalPromote(s, event.vertex), 'Cannot promote that Guard.');
+      final guard = s.guards[event.vertex]!;
+      s = _pay(s, promotionCost(guard.rank));
       s = s.copyWith(
-        knights: {
-          ...s.knights,
-          event.vertex: knight.copyWith(
-            rank: KnightRank.values[knight.rank.index + 1],
+        guards: {
+          ...s.guards,
+          event.vertex: guard.copyWith(
+            rank: GuardRank.values[guard.rank.index + 1],
             actedTurn: s.turnSerial,
           ),
         },
       );
-    } else if (event is MoveKnight) {
+    } else if (event is MoveGuard) {
       _require(
-        legalMoveKnight(s, event.from, event.to),
-        'Knight movement is not legal.',
+        legalMoveGuard(s, event.from, event.to),
+        'Guard movement is not legal.',
       );
-      final moving = s.knights[event.from]!;
-      final knights = Map<int, KnightPiece>.of(s.knights)..remove(event.from);
-      final displaced = knights.remove(event.to);
+      final moving = s.guards[event.from]!;
+      final guards = Map<int, GuardPiece>.of(s.guards)..remove(event.from);
+      final displaced = guards.remove(event.to);
       if (displaced != null) {
         final choices =
             s.topology.vertices[event.to].edges
@@ -2381,18 +2383,18 @@ class MatchEngine {
                 })
                 .where(
                   (v) =>
-                      !knights.containsKey(v) &&
+                      !guards.containsKey(v) &&
                       v != event.from &&
                       !s.sites.containsKey(v),
                 )
                 .toList()
               ..sort();
         if (choices.isNotEmpty) {
-          knights[choices.first] = displaced.copyWith(active: false);
+          guards[choices.first] = displaced.copyWith(active: false);
         }
       }
-      knights[event.to] = moving.copyWith(actedTurn: s.turnSerial);
-      s = _recalculateRoads(s.copyWith(knights: knights));
+      guards[event.to] = moving.copyWith(actedTurn: s.turnSerial);
+      s = _recalculateRoads(s.copyWith(guards: guards));
     } else if (event is ResolveInvasion) {
       _require(s.phase == MatchPhase.invasion, 'No Invasion to resolve.');
       s = _resolveInvasion(s);
@@ -2448,7 +2450,7 @@ class MatchEngine {
           event.victim != null &&
               (replaying && s.events.length < s.invasionInvitesFromEvent
                   ? !s.reactionsUsed.contains(event.victim!) &&
-                        s.knights.values.any(
+                        s.guards.values.any(
                           (k) => k.owner == event.victim && k.active,
                         )
                   : canIntercept(s, event.victim!, tile: event.tile))
@@ -2678,7 +2680,7 @@ class MatchEngine {
       final target = power == CardPower.seizeGood
           ? event.target
           : power == CardPower.exhaust
-          ? s.knights[event.vertex]?.owner
+          ? s.guards[event.vertex]?.owner
           : null;
       s = target != null && counterCards(s, target, event).isNotEmpty
           ? s.copyWith(

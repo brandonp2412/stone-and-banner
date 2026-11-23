@@ -35,7 +35,7 @@ The first ad-hoc Linux cage process exited on tool return, so an attempted grim 
 
 ## Live visual review
 
-- Linux Home: clear dark/gold hierarchy, generous card whitespace, readable primary CTA, aligned bottom navigation. Private handoff: centered lock, explicit next action, no hidden goods visible. Board: visible glowing setup junctions and 0/15 VP; lower board requires scrolling at 720px height.
+- Linux Home: clear dark/gold hierarchy, generous card whitespace, readable primary CTA, aligned bottom navigation. Private handoff: centered lock, explicit next action, no hidden goods visible. Board: visible glowing setup junctions and 0/15 Renown; lower board requires scrolling at 720px height.
 - Linux keyboard focus: Tab traversal frames #2–#8 and #11 show no reliably discernible focus ring. Marked LIMITED/minor in individual reviews. The eventual Return actions demonstrably opened the private handoff and the board, but intermediate focus attribution remains unproven. No broad UI rewrite was made during concurrent changes.
 - Waydroid Home: clear segmented selection feedback, visible 1-human/3-computer caption, no clipping. Existing APK shows an older, lengthy "Start new match (replaces saved match)" CTA, while current source uses a shorter label and separate warning. This is installed-build drift, not a verified regression in the current source.
 - Waydroid Rules: all original-rule headings visible, but paragraphs visually dense/small at wide landscape resolution (minor). Return to Home preserved Vs AI, four players and three AI.

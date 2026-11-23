@@ -84,7 +84,7 @@ tokens):
   `nox-after-guest-rejoin.png`.
 
 Screen captures were visually inspected: matching 19-hex layout and
-positions, legal glow, 1/15 VP for each newly placed village, distinct
+positions, legal glow, 1/15 Renown for each newly placed village, distinct
 host/guest turn labels, preserved board pieces after both restarts.
 Initial import-replay misclick, first denied Glass connection during test
 firewall setup, and transient form states are retained in adjacent PNGs.
@@ -103,7 +103,7 @@ device install or production game was changed.
 - Live GUI proof covers opening 4 actions, host restart, guest app restart;
   the full 12-step draft plus 3 turns was automated **on Glass loopback
   sockets**, not played to game-over with both cross-machine GUIs.
-- No naturally reached 15-VP LAN victory, nonzero rival strategy-card
+- No naturally reached 15-Renown LAN victory, nonzero rival strategy-card
   secrecy observation from live GUI, or live 20-second/3-minute wait
   with an actual disconnected Linux GUI was claimed. Existing bounded
   reducer/server tests and the wire driver cover these components.

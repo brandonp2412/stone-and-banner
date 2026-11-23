@@ -6,14 +6,14 @@ Date: 4 November 2026 NZDT. Host: **Nox** fallback. Started on `main` at `126b99
 
 - The pure reducer now disallows card play while any standing trade is pending. Discard/end-turn remain available. The UI continues to derive playable targets directly from reducer enumeration.
 - Strategy Card detail separates choosing an option from committing it. Trade cards group by offered good; seizure cards group by rival; a selected choice needs explicit **Play selected card** confirmation. Discard uses a separate **Discard this card?** confirmation with Keep card / Discard. Short/simple sheets use a compact height to eliminate the 78%-height one-option blank area observed in the first Linux run.
-- New deterministic `test/ai_slice15_cards_matrix_test.dart`: 54 physical copies (18 per deck), **352** unique legal play choices accepted by the real reducer, conservation of all 8 goods and physical-copy accounting, duplicate/stale rejection, zero-bank unplayable cards still discardable/end-turn-safe, standing-trade guard, and all three targeted Governance attack/counter/pass/timeout variations. The matrix uses a controlled seeded state with explicit resource/knight setup, not a full replay-import proof for each option.
+- New deterministic `test/ai_slice15_cards_matrix_test.dart`: 54 physical copies (18 per deck), **352** unique legal play choices accepted by the real reducer, conservation of all 8 goods and physical-copy accounting, duplicate/stale rejection, zero-bank unplayable cards still discardable/end-turn-safe, standing-trade guard, and all three targeted Governance attack/counter/pass/timeout variations. The matrix uses a controlled seeded state with explicit resource/guard setup, not a full replay-import proof for each option.
 - Expanded widget tests check selection is not play, explicit discard Keep/Discard, and grouping/confirmation of an Open Routes exchange.
 
 ## Actual buildq results on Nox
 
 | Job | Command / scope | Result |
 | --- | --- | --- |
-| #4524 | New four-test matrix before guard fix | FAIL as expected: pending trade allowed a play, plus test fixture compared Knight object identity |
+| #4524 | New four-test matrix before guard fix | FAIL as expected: pending trade allowed a play, plus test fixture compared Guard object identity |
 | #4525 | Matrix after guard fix | PASS, 4/4 |
 | #4526 | Matrix + card widget tests | PASS, 7/7; 54 copies and 352 legal options |
 | #4527 | `flutter test test/ --reporter expanded` | PASS, 128 tests |

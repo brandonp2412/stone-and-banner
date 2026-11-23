@@ -5,7 +5,7 @@
 - Devices: Glass Waydroid (Android 13, 432×960/960×432), and `stone_design_api35` (Android 15, 1280×640, density 240).
 - Installed current Glass working-tree Android-x64 debug build on the Android 15 emulator; the earlier installed build was also viewed.
 - Played a **complete 3-player match** (Player 1, Computer 1, Computer 2), from setup through two initial villages and roads, rolling, bank/player trading, build/upgrade, cards, developments, bandit theft, invasion, and final results.
-- **Computer 2 won round 33 with 16/15 VP**; Computer 1 ended at 8, Player 1 at 3. Verified the defeat modal, View board, Results, and Home navigation.
+- **Computer 2 won round 33 with 16/15 Renown**; Computer 1 ended at 8, Player 1 at 3. Verified the defeat modal, View board, Results, and Home navigation.
 - Screenshot evidence was observed live via Glass Mobile MCP, with selected PNGs retained alongside this document.
 
 ## Findings, ordered by priority
@@ -26,7 +26,7 @@
 - Free village and road placement for all players, subsequent roll/phase navigation.
 - Board target picker, roll, End turn, AI turns, bandit move and theft, invasion resolve.
 - Trade UI navigation and disabled bank exchange when resources are insufficient (no false success observed).
-- Selecting and buying a Town upgrade; Player 1 rose from 2 to 3 VP and paid 2 wheat + 3 ore.
+- Selecting and buying a Town upgrade; Player 1 rose from 2 to 3 Renown and paid 2 wheat + 3 ore.
 - Saved-match recovery after emulator crashes; end-of-match defeat persisted and was restored on relaunch.
 - End-game defeat modal, View board, Results, Home.
 
@@ -40,7 +40,7 @@
 - `home-default-landscape.png`: initial home view; bottom content off-screen.
 - `10-standing-offer.png`: older trade dialog (pre-current debug build).
 - `round10-board.png`: congested top-left HUD.
-- `round18-board.png`, `round26-board.png`, `round31-pre-final.png`: progression and AI settlements.
+- `round18-board.png`, `round26-board.png`, `round31-pre-final.png`: progression and AI villages.
 - `round33-defeat.png`: actual completed-match defeat modal.
 - `round33-postmatch-board.png`: end-of-match board, overlaid status, miswrapped “Match complete” button.
 

@@ -27,7 +27,7 @@ implicitly revalidated by a later slice.
   hand/goods, and finite legal event candidates. It does not return
   `MatchState`, another seat's cards/stores or deck order.
 - Candidate enumeration uses the existing engine legality methods for setup,
-  dice, construction, upgrades, Town developments, Knights, bank trades,
+  dice, construction, upgrades, Town developments, Guards, bank trades,
   strategy cards, tactical pass/counters/aid, invasion and end turn.
 - The bot omits private-inventory-dependent Bandit theft targets and
   resource-seizure card targets instead of inferring hidden hands; null-victim
@@ -92,22 +92,22 @@ that file was not changed in slice 02.
   This was an engine-only implementation/QA slice; no visual inspection,
   Waydroid installation, or on-device AI interaction is claimed.
 - The deterministic `HeuristicAi` evaluates productive numbered terrain,
-  output variety, opening settlement spacing, road access to future sites,
-  Village/Town/Capital VP, Commerce development, bank trade surpluses, and
+  output variety, opening village spacing, road access to future sites,
+  Village/Town/Capital Renown, Commerce development, bank trade surpluses, and
   tactical response options. The policy consumes the committed
   `AiActionAdapter` whitelist and the test/benchmark dispatch through
   `AiActionAdapter.applySelected`; no new dice or reducer rule was added.
   Rival hidden hands and hidden-target-dependent Bandit/card moves are not
   consulted.
 - `buildq` **#4741**: 85 tests passed (7 new strategy tests including
-  seeded setup comparison, VP upgrade/capital, resource conservation,
+  seeded setup comparison, Renown upgrade/capital, resource conservation,
   private-inventory invariance and replay). **#4742**: full
   `flutter analyze lib test tool` passed, no issues. **#4744**:
   `flutter build apk --release` passed (54,398,538 bytes,
   SHA-256 `3f57b11e25d17e00780a2a1ceb8348a8f169831c603f38ee6d7340a43f4df372`);
   built only, not installed.
 - `buildq` **#4743**: 24 seeded games (601–624, up to 65 rounds), heuristic
-  seat average **10.375 VP**, legal-random opponents average **2.542 VP per
+  seat average **10.375 Renown**, legal-random opponents average **2.542 Renown per
   seat**. The heuristic won **9** matches; **15** had no winner by the
   round cap. Actions included 154 roads, 101 villages, 418 upgrades,
   and 434 bank exchanges. This shows a nontrivial legal move policy
@@ -119,7 +119,7 @@ that file was not changed in slice 02.
 
 Remaining: integrate AI seat selection and turn-running UI in a later
 slice, then capture every new AI screen and interaction on Linux/Waydroid.
-Add stronger human-like opponents, defensive Knight planning and larger
+Add stronger human-like opponents, defensive Guard planning and larger
 balanced-seat simulations before drawing conclusions about match equity.
 Stage 8 publication, accessibility and physical-device gates remain open.
 
@@ -138,14 +138,14 @@ Stage 8 publication, accessibility and physical-device gates remain open.
   opened or interacted with, so visual verdict is not applicable.
 - The AI evaluates actual Town/Capital productive pips (without inventing
   seasonal production multipliers), Town Development track effects, impending
-  Reaver threat, legal Knight activation/promotion/recruitment and enemy Knight
+  Reaver threat, legal Guard activation/promotion/recruitment and enemy Guard
   displacement, fortification damage absorption, public Invasion aid gap,
   dry-roll recovery prospects and stock-backed catch-up bank trades. Choices
   use only public state and the acting seat's private data; actual validity,
   bank stock, costs and victory remain reducer-owned. No new rules/servers.
 - The heuristic opponent honours a deterministic eight-event action cap.
   New tests exercise tactical aid/pass, development production and Commerce,
-  Knight/fortification plans, catch-up and empty bank, Aqueduct drought
+  Guard/fortification plans, catch-up and empty bank, Reservoir drought
   investment, hidden-hand invariance, finished/cap behavior, conservation
   and deterministic seeded replay.
 - Verification on Glass (Flutter 3.47.6, Dart 3.13.5): buildq **#4770**
@@ -153,7 +153,7 @@ Stage 8 publication, accessibility and physical-device gates remain open.
   `flutter analyze lib test tool`: **no issues**; **#4772**
   Android `flutter build apk --release`: **passed**, build only;
   **#4773** seeded benchmark (24 games, seeds 801–824, max 50 rounds)
-  heuristic **7.667 VP/seat**, legal-random rivals **2.604 VP/seat**,
+  heuristic **7.667 Renown/seat**, legal-random rivals **2.604 Renown/seat**,
   **3/24 finished and won by heuristic**. Benchmark is a limited
   random-opponent comparison, not competitive strength or human balance proof.
   Post-QA aid-edge and Capital-goal fixes received final reruns as documented in RUN-EVIDENCE.md.
@@ -172,13 +172,13 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 - [Glass run evidence](evidence/glass_existing/stone-banner-ai-e2e-08/RUN-EVIDENCE.md), [per-action screenshot manifest](evidence/glass_existing/stone-banner-ai-e2e-08/SCREENSHOT-MANIFEST.md) and [90-round capped seeds](evidence/glass_existing/stone-banner-ai-e2e-08/CAPPED-MATCHES.md).
 - `tool/ai_stability_corpus.dart` checks every accepted event for resource/card conservation, legality, score/victory consistency, replay equality and bounded progress. Seed ranges 7200–7279 and independent 7600–7799 produced **1,120 three-/four-seat matches, 1,023,024 accepted events, zero invariant/replay/timeout failures**, and 51 matches censored at 90 rounds. An additional 96 paired runs reproduced **96/96 ordered-event fingerprints**.
 - Four-seat all-AI opening seat won **88/280** (31.4% vs 25% equal-seat baseline), a bot-model balance risk requiring stronger controlled study before rule changes. A legal-random input simulator is not real human testing. Two-seat matches are **unsupported** by the current reducer; do not claim two-seat coverage.
-- Focused longest-road tie and 15-VP tests **2/2 passed** (#4800); 115 non-golden Flutter tests passed (#4806); analyzer passed (#4813); release APK built only (#4804). Full suite #4803 initially had **one Home golden failure** from concurrent AI UI work; recheck **#4814 passed all 116 tests** after that work updated the golden. Visual inspection still found the Start button obscured at 390×844, so golden success is not UI acceptance. **No actual Linux/Waydroid UI screen was opened or interacted with in this engine-only slice; no live screenshot exists.** No Samsung or public deployment.
+- Focused crown-road tie and 15-Renown tests **2/2 passed** (#4800); 115 non-golden Flutter tests passed (#4806); analyzer passed (#4813); release APK built only (#4804). Full suite #4803 initially had **one Home golden failure** from concurrent AI UI work; recheck **#4814 passed all 116 tests** after that work updated the golden. Visual inspection still found the Start button obscured at 390×844, so golden success is not UI acceptance. **No actual Linux/Waydroid UI screen was opened or interacted with in this engine-only slice; no live screenshot exists.** No Samsung or public deployment.
 
 ## Slice 06/20 — bounded AI turn coordination (4 Nov 2026)
 
 - Pure-Dart sequential coordinator: one reducer-validated event per asynchronous tick, one in-flight pump, bounded turns, cancellation generation guard, illegal-choice fallback, malformed-state stop.
 - Flutter integration: lifecycle/navigation cancellation, private computer-turn progress, local replay + AI-seat persistence and restore/resume.
-- Glass Waydroid offline APK walkthrough: 21 timestamped captured and visually inspected screenshots, each action/expected/actual/verdict in [screenshot manifest](evidence/glass_existing/stone-banner-ai-e2e-06/SCREENSHOT-MANIFEST.md). Photos include computer progress and return-to-human privacy handoff. Screenshot 08 was taken before frame settlement; 09/10 establish outcome.
+- Glass Waydroid offline APK walkthrough: 21 timestamped captured and visually inspected screenshots, each action/expected/actual/verdict in [screenshot manifest](evidence/glass_existing/stone-banner-ai-e2e-06/SCREENSHOT-MANIFEST.md). Photos include computer progress and return-to-human privacy handoff. Screenshot 08 was taken before frame village; 09/10 establish outcome.
 - Tests: pure coordinator #4781 passed; focused widget integration #4833 passed after concurrent setup UI change; full suite #4808 passed (116 tests) before subsequent concurrent setup controls; final full-suite #4836 passed after setup controls and golden refresh #4835. Linux release APK build #4810 passed and installed solely on Glass Waydroid.
 - Visual change: compact target chooser modal (before screenshot 07, after screenshot 16). Remaining issue: human action panel remains too dense at 1792×1008 (screenshot 19).
 - See also local [run evidence](evidence/glass_existing/stone-banner-ai-e2e-06/RUN-EVIDENCE.md). No Samsung or public deployment.
@@ -195,7 +195,7 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 
 - [Per-action screenshot and visual verdict manifest](evidence/glass_existing/stone-banner-ai-e2e-09/SCREENSHOT-MANIFEST.md) and [full factual run evidence](evidence/glass_existing/stone-banner-ai-e2e-09/RUN-EVIDENCE.md), recorded directly on Glass.
 - Rebuilt Waydroid release in isolated Android user 10: one human plus two AI seats, human setup Village/Road, two automatic computer drafts, reverse draft, seeded roll, human End Turn, AI turns, and return to human at Round 2. Restart resumed the same match.
-- A separate **genuine deterministic replay** from 381 previously accepted engine events (seed 914) was imported through the installed APK's UI. A human chose Upgrade → legal Junction 42; the reducer applied event 382, Bot-0 advanced 12→15 VP, and the actual UI rendered **`Bot-0 wins! 15/15 VP`**. Force-stop/relaunch and Continue preserved the finished state. This is **not** an AI autoplay victory from the live human+AI match and does not prove live UI coverage of Bandit/Invasion/tactical phases.
+- A separate **genuine deterministic replay** from 381 previously accepted engine events (seed 914) was imported through the installed APK's UI. A human chose Upgrade → legal Junction 42; the reducer applied event 382, Bot-0 advanced 12→15 Renown, and the actual UI rendered **`Bot-0 wins! 15/15 Renown`**. Force-stop/relaunch and Continue preserved the finished state. This is **not** an AI autoplay victory from the live human+AI match and does not prove live UI coverage of Bandit/Invasion/tactical phases.
 - `buildq` #4840: 120 Flutter tests passed; #4826 analyzer clear; #4839 release APK built; #4845 Linux release built and launched in isolated Cage with a captured real window. Generated Linux runner committed for future reproducibility.
 - Visual notes: small-screen Start control remained visible and readable; the legal target list is lengthy and action phase is button-dense below the fold. Earlier stale-build/mistap/import failure screenshots remain in the manifest with honest verdicts. No Samsung/public deployment.
 
@@ -240,7 +240,7 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 ## Slice 18/20 — accessibility, navigation and responsive UI (4 November 2026 NZDT)
 
 - [33-row real Linux/Waydroid read-only screenshot/action visual manifest](evidence/nox_recovery/stone-banner-ai-e2e-18/SCREENSHOT-MANIFEST.md) and [build/test/limitations handoff](evidence/nox_recovery/stone-banner-ai-e2e-18/RUN-EVIDENCE.md) saved on Nox. Every Linux screen/open/navigation/action captured; all 33 PNGs visually inspected and given an explicit PASS, FAIL or LIMITED verdict with follow-up decision.
-- Setup is responsive at high text scale and very narrow widths; Main Home CTA now visible earlier. Page-specific keys repair Rules scroll-offset leakage; Escape keyboard back respects navigation/modal rules. Match actions prioritise full-width End turn and collapse secondary Knight/development complexity.
+- Setup is responsive at high text scale and very narrow widths; Main Home CTA now visible earlier. Page-specific keys repair Rules scroll-offset leakage; Escape keyboard back respects navigation/modal rules. Match actions prioritise full-width End turn and collapse secondary Guard/development complexity.
 - Nox buildq **#4562: 137 full tests pass**, **#4566: analyzer zero issues**, **#4564: Linux release**, **#4565: Android release APK built but not installed**; Home golden updated via **#4561**. The earlier #4563 analyzer lint was fixed.
 - Actual isolated Linux desktop 1280×800 and 390×844 viewport Home→setup→AI→Rules→Escape/Board-empty visually proved, plus CTA hover/focus checks; 320×640/1.6× light and 390×844/2.0× dark layout/keyboard assertions were **widget tests**, not actual themed-device screenshot proof.
 - **Limits:** Glass unavailable/off; Nox Waydroid Android user 11 in use, untouched. One read-only screenshot is of old APK. Dark GTK/DPI attempts produced pixel-identical normal-light captures, so actual dark/large-text visual QA, phone safe areas/orientation/touch semantics and TalkBack remain unverified. Focus outline subtle. No Samsung or public release.
@@ -249,7 +249,7 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 
 - [35-row real Linux screenshot/action and visual-review manifest](evidence/nox_recovery/stone-banner-ai-e2e-17/SCREENSHOT-MANIFEST.md) and [exact build/test handoff](evidence/nox_recovery/stone-banner-ai-e2e-17/RUN-EVIDENCE.md) saved on Nox. Every opened Linux screen/action captured; all 35 PNGs individually inspected, including black/clipped/transitional captures followed by corrected frames.
 - Saved-match replay import now requires explicit replacement confirmation, warns AI-seat metadata is not carried by shared codes, and leaves the original game untouched on cancellation. Raw JSON replay imports now enforce the existing compact-code 1 MiB UTF-8 decoding limit. Regression tests cover cancellation/confirmation, corrupt session fallback and invalid/oversized data.
-- Actual isolated Linux release: Village + Road created exactly two persisted events, stop/cold restart restored Player 2 private handoff without duplicate events, copy/paste replay reached replacement confirmation, Keep preserved original save. A separate valid 89-event compact replay imported after confirmation, and its saved event sequence/seed exactly matched the original deterministic fixture. Targeted SIGKILL of the isolated app and cold restart restored the same Round 7, Bot-1, 2-VP board with all 89 events intact.
+- Actual isolated Linux release: Village + Road created exactly two persisted events, stop/cold restart restored Player 2 private handoff without duplicate events, copy/paste replay reached replacement confirmation, Keep preserved original save. A separate valid 89-event compact replay imported after confirmation, and its saved event sequence/seed exactly matched the original deterministic fixture. Targeted SIGKILL of the isolated app and cold restart restored the same Round 7, Bot-1, 2-Renown board with all 89 events intact.
 - Nox buildq **#4544** focused tests passed, **#4545** full suite **131 passed**, **#4546** analyzer zero issues, **#4547** Linux release built, **#4548** Android APK built with a Nox JDK 21 override (not installed).
 - **Limits:** Glass connector 429; Nox Waydroid Android user 11 already running Stone & Banner and not disturbed, so no Waydroid/rotation/background, actual Android crash, or new victory/rematch screen proof. Linux hot-seat and imported manual continuation were observed; all-AI long-play remains supported by prior pure-Dart tests, not freshly observed on a device here. No Samsung or public release.
 
@@ -271,7 +271,7 @@ Stage 8 publication, accessibility and physical-device gates remain open.
   #5046 existing smoke passed, #5051 all 140 earlier Flutter tests passed,
   #5052 analyzer clean, #5053 Linux and #5054 Android releases built;
   final #5067 **141 tests** and #5069 analyzer **no issues**. The GUI
-  cross-machine run did not reach 15 VP; full-game network acceptance remains.
+  cross-machine run did not reach 15 Renown; full-game network acceptance remains.
 - No persistent test service, nft port opening, public deployment or physical
   device install was left behind.
 
@@ -279,8 +279,8 @@ Stage 8 publication, accessibility and physical-device gates remain open.
 
 - [40 ordered Linux screenshot/action/visual-review rows](evidence/nox_recovery/stone-banner-ai-e2e-20/SCREENSHOT-MANIFEST.md) and [exact run evidence and acceptance matrix](evidence/nox_recovery/stone-banner-ai-e2e-20/RUN-EVIDENCE.md) on Nox fallback.
 - Nox buildq **#4568** analyzer clean, **#4569** 137 Flutter tests passed, **#4570** Android release built only, **#4574** Linux release built, **#4575** three-socket LAN protocol smoke passed, **#4577** deterministic pre-win fixture regenerated.
-- Actual isolated Linux release GUI proved one-human/two-AI setup, opening draft, human dice, full AI turn cycle and Round 2 save/resume. Separate real GUI imported a reducer-generated 1,143-event pre-win replay, manually upgraded Town Junction 42 to Capital, and rendered **Bot-0 wins! 15/15 VP**. **This is fixture victory UI proof, not a naturally played human-versus-AI victory.**
-- Glass connector HTTP 429; Nox Waydroid user 11 occupied by another session, so **no Waydroid installation/launch**, 2-GUI LAN, fresh card/trade/reaction UI, rematch, or full natural 15-VP game was proved. Stage 8 release gates remain open.
+- Actual isolated Linux release GUI proved one-human/two-AI setup, opening draft, human dice, full AI turn cycle and Round 2 save/resume. Separate real GUI imported a reducer-generated 1,143-event pre-win replay, manually upgraded Town Junction 42 to Capital, and rendered **Bot-0 wins! 15/15 Renown**. **This is fixture victory UI proof, not a naturally played human-versus-AI victory.**
+- Glass connector HTTP 429; Nox Waydroid user 11 occupied by another session, so **no Waydroid installation/launch**, 2-GUI LAN, fresh card/trade/reaction UI, rematch, or full natural 15-Renown game was proved. Stage 8 release gates remain open.
 
 ## Slice 19/20 — visual consistency baseline (4 November 2026 NZDT)
 

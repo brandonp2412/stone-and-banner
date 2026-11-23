@@ -225,7 +225,7 @@ void main() {
   );
 
   test(
-    'Bandit active Knight intercepts before theft; pass steals only once',
+    'Bandit active Guard intercepts before theft; pass steals only once',
     () {
       var s = grant(
         draft(77).copyWith(phase: MatchPhase.bandit),
@@ -249,9 +249,9 @@ void main() {
           .id;
       s = s.copyWith(
         builders: {...s.builders, 1},
-        knights: {
-          near: const KnightPiece(1, KnightRank.sentinel, true, -1),
-          far: const KnightPiece(1, KnightRank.warden, true, -1),
+        guards: {
+          near: const GuardPiece(1, GuardRank.sentinel, true, -1),
+          far: const GuardPiece(1, GuardRank.warden, true, -1),
         },
       );
       final before = s.players[1].stores[Resource.ore]!;
@@ -278,8 +278,8 @@ void main() {
       expect(intercepted.tactical, isNull);
       expect(intercepted.phase, MatchPhase.actions);
       expect(intercepted.players[1].stores[Resource.ore], before);
-      expect(intercepted.knights[near]!.active, isFalse);
-      expect(intercepted.knights[far]!.active, isTrue);
+      expect(intercepted.guards[near]!.active, isFalse);
+      expect(intercepted.guards[far]!.active, isTrue);
       expect(intercepted.reactionsUsed, contains(1));
       conserved(intercepted);
 

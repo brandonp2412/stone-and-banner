@@ -190,16 +190,16 @@ void main() {
     walk(0, {}, []);
     expect(path, isNotNull);
     final own = s.copyWith(sites: {}, roads: {for (final e in path!) e: 0});
-    expect(MatchEngine.longestRoad(own, 0), 5);
+    expect(MatchEngine.crownRoad(own, 0), 5);
     final a = g.edges[path![0]], b = g.edges[path![1]];
     final shared = {a.a, a.b}.intersection({b.a, b.b}).single;
     final blocked = own.copyWith(
       sites: {shared: const Site(1, Structure.village)},
     );
-    expect(MatchEngine.longestRoad(blocked, 0), lessThan(5));
+    expect(MatchEngine.crownRoad(blocked, 0), lessThan(5));
   });
 
-  test('15 VP wins with replacement structures', () {
+  test('15 Renown wins with replacement structures', () {
     final s = draft(52);
     final players = s.players.toList();
     players[0] = players[0].copyWith(
@@ -260,8 +260,7 @@ void main() {
           final site = s.sites[v];
           if (site == null) continue;
           final p = claims.putIfAbsent(resource, () => {});
-          p[site.owner] =
-              (p[site.owner] ?? 0) + site.structure.points;
+          p[site.owner] = (p[site.owner] ?? 0) + site.structure.points;
         }
       }
       if (claims.isNotEmpty) {
@@ -299,7 +298,7 @@ void main() {
     conserved(noGrant);
   });
 
-  test('fifth connected road earns longest-road bonus', () {
+  test('fifth connected road earns crown-road bonus', () {
     var s = draft(312)
         .copyWith(phase: MatchPhase.actions, sites: {}, roads: {});
     final g = s.topology;
@@ -335,7 +334,7 @@ void main() {
     expect(MatchEngine.legalRoad(s, path![4]), true);
     final before = MatchEngine.score(s, 0);
     s = MatchEngine.apply(s, PlaceRoad(path![4]));
-    expect(s.longestRoadHolder, 0);
+    expect(s.crownRoadHolder, 0);
     expect(MatchEngine.score(s, 0), before + 2);
     conserved(s);
   });

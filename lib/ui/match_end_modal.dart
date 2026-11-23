@@ -144,7 +144,7 @@ class _MatchEndModalState extends State<MatchEndModal>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$points / 15 Victory Points  ·  Round ${widget.state.round}',
+                    '$points / 15 Renown  ·  Round ${widget.state.round}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 11,
@@ -306,7 +306,7 @@ class _MatchEndModalState extends State<MatchEndModal>
                 child: Semantics(
                   label:
                       '${widget.victory ? 'Victory' : 'Defeat'}. '
-                      '$winnerName wins with $points victory points.',
+                      '$winnerName wins with $points renown.',
                   explicitChildNodes: true,
                   child: Stack(
                     children: [
@@ -507,7 +507,7 @@ class _MatchEndModalState extends State<MatchEndModal>
                                       ),
                                     ),
                                     Text(
-                                      '$points / 15 Victory Points  ·  Round ${widget.state.round}',
+                                      '$points / 15 Renown  ·  Round ${widget.state.round}',
                                       style: const TextStyle(
                                         fontSize: 10,
                                         color: Color(0xffb5c9c8),

@@ -24,7 +24,7 @@ void main() {
         ...base.sites,
         base.sites.keys.first: const Site(0, Structure.town),
       },
-      knights: {0: const KnightPiece(0, KnightRank.champion, true, -1)},
+      guards: {0: const GuardPiece(0, GuardRank.champion, true, -1)},
     );
     expect(MatchEngine.score(state, 0), 14);
     final after = MatchEngine.apply(state, const ResolveInvasion());
@@ -34,7 +34,7 @@ void main() {
   });
 
   test(
-    'inactive knights and tied active strength earn no sole-leader award',
+    'inactive guards and tied active strength earn no sole-leader award',
     () {
       final base = tableWithSupplies();
       final state = base.copyWith(
@@ -44,16 +44,16 @@ void main() {
           ...base.sites,
           base.sites.keys.first: const Site(0, Structure.town),
         },
-        knights: {
-          0: const KnightPiece(0, KnightRank.champion, false, -1),
-          1: const KnightPiece(0, KnightRank.sentinel, true, -1),
-          2: const KnightPiece(1, KnightRank.sentinel, true, -1),
+        guards: {
+          0: const GuardPiece(0, GuardRank.champion, false, -1),
+          1: const GuardPiece(0, GuardRank.sentinel, true, -1),
+          2: const GuardPiece(1, GuardRank.sentinel, true, -1),
         },
       );
       final after = MatchEngine.apply(state, const ResolveInvasion());
       expect(after.players[0].guardianHonour, 0);
       expect(after.players[1].guardianHonour, 0);
-      expect(after.lastInvasion, contains('No sole Knight leader'));
+      expect(after.lastInvasion, contains('No sole Guard leader'));
     },
   );
 
@@ -102,7 +102,7 @@ void main() {
     );
   }
 
-  testWidgets('tapping an active knight exposes and performs its upgrade', (
+  testWidgets('tapping an active guard exposes and performs its upgrade', (
     tester,
   ) async {
     var state = tableWithSupplies();
@@ -110,7 +110,7 @@ void main() {
       (v) => state.sites[v]!.owner == 0,
     );
     state = state.copyWith(
-      knights: {vertex: const KnightPiece(0, KnightRank.sentinel, true, -1)},
+      guards: {vertex: const GuardPiece(0, GuardRank.sentinel, true, -1)},
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -133,9 +133,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('Upgrade cost:'), findsOneWidget);
-    await tester.tap(find.text('Upgrade Knight'));
+    await tester.tap(find.text('Upgrade Guard'));
     await tester.pumpAndSettle();
-    expect(state.knights[vertex]!.rank, KnightRank.warden);
+    expect(state.guards[vertex]!.rank, GuardRank.warden);
     expect(tester.takeException(), isNull);
   });
 

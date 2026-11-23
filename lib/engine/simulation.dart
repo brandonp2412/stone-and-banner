@@ -267,7 +267,7 @@ class BalanceSimulation {
       );
       final roads = s.roads.values.where((p) => p == seat).length;
       final forts = s.fortified.where((v) => s.sites[v]?.owner == seat).length;
-      final military = s.knights.values
+      final military = s.guards.values
           .where((k) => k.owner == seat && k.active)
           .fold<int>(0, (v, k) => v + k.rank.strength);
       return goods +
@@ -343,8 +343,8 @@ class BalanceSimulation {
           event is PlaceVillage ||
           event is UpgradeSite ||
           event is DevelopTown ||
-          event is RecruitKnight ||
-          event is ActivateKnight ||
+          event is RecruitGuard ||
+          event is ActivateGuard ||
           event is FortifyTown ||
           event is BankExchange ||
           event is RespondTrade && event.accept) {
@@ -509,13 +509,13 @@ class BalanceSimulation {
         }
         if (bot.defend && military < 2) {
           final inactive =
-              s.knights.keys
+              s.guards.keys
                   .where((v) => MatchEngine.legalActivate(s, v))
                   .toList()
                 ..sort();
           if (inactive.isNotEmpty) {
             military++;
-            dispatch(ActivateKnight(inactive.first));
+            dispatch(ActivateGuard(inactive.first));
             continue;
           }
           final positions = List.generate(
@@ -525,7 +525,7 @@ class BalanceSimulation {
           if (positions.isNotEmpty &&
               (s.round % 3 == 0 || s.reaverPressure >= 2)) {
             military++;
-            dispatch(RecruitKnight(positions.first));
+            dispatch(RecruitGuard(positions.first));
             continue;
           }
         }

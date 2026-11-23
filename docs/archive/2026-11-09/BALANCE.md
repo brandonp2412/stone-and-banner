@@ -16,9 +16,9 @@ Seeds 1000–1119 and independent confirmation seeds 2000–2239.
 Board seeds are `7 * seed + 11`. Every fourth match has four seats; other
 matches have three. Each track starts equally often. Trading and defence
 temperaments rotate independently of track and opening seat. Bots place
-legal settlements/roads, upgrade and develop, negotiate and bank-trade, play
+legal villages/roads, upgrade and develop, negotiate and bank-trade, play
 Strategy Cards, defend and resolve seeded tactical windows via the **same
-pure reducer** as hot-seat and LAN modes. No free goods or synthetic VP.
+pure reducer** as hot-seat and LAN modes. No free goods or synthetic Renown.
 
 Results are bounded at 90 full rounds. Capped games are **not** credited to
 any track. This is a deterministic sensitivity study, not proof of optimal
@@ -33,8 +33,8 @@ reaction, card valuation and long-horizon planning are approximate.
   respectively (capped games remain in denominators).
 - First seat: **101/304 wins (33.2%)** versus a neutral 31.25% expected
   for the mixed three-/four-seat sample.
-- Late comeback: **181/908 (19.9%)** of seats recorded at least 3 VP behind
-  after a leader reached 8 VP later won.
+- Late comeback: **181/908 (19.9%)** of seats recorded at least 3 Renown behind
+  after a leader reached 8 Renown later won.
 - Mean turns entered: **220.5** per game (including censored matches).
   Unproductive full rounds: **1,101/24,517 (4.49%)**. A round counts
   unproductive if no build, development, recruitment, card play, bank
@@ -44,7 +44,7 @@ reaction, card valuation and long-horizon planning are approximate.
 - Strategy Card immediate estimated value per play: Innovation **~2.05**,
   Commerce **~1.20**, Governance **~1.29** material-good equivalents.
   Valuation weights basic goods=1, commodities=1.5, road=2,
-  fortification=2.5, active Knight rank=1–3, VP=5. These are immediate
+  fortification=2.5, active Guard rank=1–3, Renown=5. These are immediate
   proxy changes, **not** long-term strategic value.
 
 ## Paired alternatives and decision
@@ -66,7 +66,7 @@ suggesting that its tier-V benefit was rarely decisive for these bots.
 
 **Decision:** retain every established default (Market Hall 3:1 at II,
 Guild Exchange 2:1 at IV, Stoneworks discount at II, bounded 3:1
-recovery and once-per-season dry relief). No direct VP bonuses, extra
+recovery and once-per-season dry relief). No direct Renown bonuses, extra
 green acceleration or unmeasured rubber-banding. Commerce's high bot
 win share is an open balance risk to revisit with broader bot policies
 and human sessions during Stage 8. The study explicitly does **not**

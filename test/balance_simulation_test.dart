@@ -43,7 +43,7 @@ void main() {
     );
   });
 
-  test('trailing trade enhancement spends goods, gives no VP', () {
+  test('trailing trade enhancement spends goods, gives no Renown', () {
     final baseline = MatchEngine.newGame(['A', 'B', 'C'], 123);
     final players = baseline.players.toList();
     players[0] = players[0].copyWith(

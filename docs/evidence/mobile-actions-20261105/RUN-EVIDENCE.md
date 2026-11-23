@@ -1,12 +1,12 @@
 # Completion 1/8 — exact build and handoff
 
-Source worktree: `/home/brandon/worktrees/stone-mobile-actions-20261105` on Glass, branch `feature/mobile-actions-20261105`, based on reconciled evidence commit `f35dd33` (parent origin/main `f36c843`). The original Glass `main` remains dirty and untouched. Its unfinished `match_screen.dart` and `stage5_widget_test.dart` changes were ported by reviewed three-way merge, resolving a Knight-chip conflict without modifying the original files.
+Source worktree: `/home/brandon/worktrees/stone-mobile-actions-20261105` on Glass, branch `feature/mobile-actions-20261105`, based on reconciled evidence commit `f35dd33` (parent origin/main `f36c843`). The original Glass `main` remains dirty and untouched. Its unfinished `match_screen.dart` and `stage5_widget_test.dart` changes were ported by reviewed three-way merge, resolving a Guard-chip conflict without modifying the original files.
 
 ## Implemented and verified
 
 - Mobile actions precede the board; phase-appropriate Roll/Resolve/End controls are prominent and scroll position resets on phase/seat transition.
-- Unaffordable build chips and unavailable Knight choices are absent rather than disabled; inspect stays available; trade entry points are visible and placed side by side at 390 px.
-- Existing unfinished focused bank/standing-trade routes were incorporated, with stock/escrow reducer tests; cards/development/Knight panels and tactical privacy remain accessible.
+- Unaffordable build chips and unavailable Guard choices are absent rather than disabled; inspect stays available; trade entry points are visible and placed side by side at 390 px.
+- Existing unfinished focused bank/standing-trade routes were incorporated, with stock/escrow reducer tests; cards/development/Guard panels and tactical privacy remain accessible.
 - No game-engine rules, seeded events, replay semantics, external services, Riverpod, or go_router were added.
 
 | Glass buildq | Result |

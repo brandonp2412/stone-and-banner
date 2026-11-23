@@ -46,7 +46,7 @@ The historical Market Hall 4:1 nerf likewise failed independent confirmation (do
 
 ## Integrity and testing
 
-- **1,680/1,680** rotated games completed or censored without a fatal error. Final replay export/import snapshots matched; finite resources including standing-offer escrow, physical Strategy Card stock and 15-VP victory checks passed in every run.
+- **1,680/1,680** rotated games completed or censored without a fatal error. Final replay export/import snapshots matched; finite resources including standing-offer escrow, physical Strategy Card stock and 15-Renown victory checks passed in every run.
 - **1,920/1,920** stability games finished or censored with **zero** legality, supply, replay, victory or timeout failures. Two-player games remain unsupported; no human test is implied.
 - buildq **#5079** rotated discovery, **#5080** rotated confirmation, **#5081** independent stability, **#5088/#5089** same-seed stability: all passed.
 - buildq **#5075** focused tests passed (before the final added regression assertion); **#5077** targeted analyzer passed; **#5078** corrected pilot passed. Earlier **#5074/#5076** failed on a missing import in the new harness, then were fixed.

@@ -46,9 +46,9 @@ void main() {
     );
   });
 
-  test('live GUI Knight interception replays with no theft', () {
-    final before = _checkpoint('completion3_knight_pre.json');
-    final observed = _checkpoint('completion3_knight_after_live_gui.json');
+  test('live GUI Guard interception replays with no theft', () {
+    final before = _checkpoint('completion3_guard_pre.json');
+    final observed = _checkpoint('completion3_guard_after_live_gui.json');
     final response = before.tactical!;
     final expected = MatchEngine.apply(
       before,
@@ -60,11 +60,11 @@ void main() {
     expect(MatchEngine.snapshot(observed), MatchEngine.snapshot(expected));
     expect(observed.tactical, isNull);
     expect(observed.players[0].stores, before.players[0].stores);
-    final activeBefore = before.knights.values
-        .where((knight) => knight.owner == 0 && knight.active)
+    final activeBefore = before.guards.values
+        .where((guard) => guard.owner == 0 && guard.active)
         .length;
-    final activeAfter = observed.knights.values
-        .where((knight) => knight.owner == 0 && knight.active)
+    final activeAfter = observed.guards.values
+        .where((guard) => guard.owner == 0 && guard.active)
         .length;
     expect(activeAfter, activeBefore - 1);
   });

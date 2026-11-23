@@ -24,13 +24,13 @@ MatchState prepared() {
   }
   final mine = s.sites.keys.firstWhere((v) => s.sites[v]!.owner == 0);
   final villages = {...s.sites, mine: const Site(0, Structure.town)};
-  final knights = <int, KnightPiece>{
-    mine: const KnightPiece(0, KnightRank.sentinel, false, -1),
+  final guards = <int, GuardPiece>{
+    mine: const GuardPiece(0, GuardRank.sentinel, false, -1),
     s.sites.keys.firstWhere((v) => s.sites[v]!.owner == 0 && v != mine):
-        const KnightPiece(0, KnightRank.warden, true, -1),
-    s.sites.keys.firstWhere((v) => s.sites[v]!.owner == 1): const KnightPiece(
+        const GuardPiece(0, GuardRank.warden, true, -1),
+    s.sites.keys.firstWhere((v) => s.sites[v]!.owner == 1): const GuardPiece(
       1,
-      KnightRank.sentinel,
+      GuardRank.sentinel,
       true,
       -1,
     ),
@@ -40,7 +40,7 @@ MatchState prepared() {
     players: players,
     bank: bank,
     sites: villages,
-    knights: knights,
+    guards: guards,
   );
 }
 

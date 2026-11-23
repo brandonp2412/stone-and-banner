@@ -151,12 +151,12 @@ void main() {
     final recruits = AiActionAdapter.observe(
       state,
       state.active,
-    ).legalActions.whereType<RecruitKnight>().toList();
+    ).legalActions.whereType<RecruitGuard>().toList();
     expect(recruits, isNotEmpty);
     final hire = bot.choose(state);
-    expect(hire, isA<RecruitKnight>());
+    expect(hire, isA<RecruitGuard>());
     state = MatchEngine.apply(state, hire!);
-    expect(state.knights.values.single.active, isFalse);
+    expect(state.guards.values.single.active, isFalse);
     conserved(state);
     // Recruitment cannot activate in the same turn. The bot does it first
     // on its next turn rather than building another scoring site instead.
@@ -164,14 +164,14 @@ void main() {
       Resource.wheat: 1,
     });
     final activate = bot.choose(state);
-    expect(activate, isA<ActivateKnight>());
+    expect(activate, isA<ActivateGuard>());
     state = MatchEngine.apply(state, activate!);
     expect(MatchEngine.defenceStrength(state), greaterThan(0));
     conserved(state);
   });
 
   test(
-    'capital resource goal guides trade after both settlements become Towns',
+    'capital resource goal guides trade after both villages become Towns',
     () {
       final state = deal(town(157), {Resource.wood: 6});
       expect(
@@ -192,7 +192,7 @@ void main() {
     },
   );
 
-  test('Reaver pressure activates and promotes Knights without free goods', () {
+  test('Reaver pressure activates and promotes Guards without free goods', () {
     var state = town(101);
     final edge = state.roads.entries
         .firstWhere((e) => e.value == state.active)
@@ -201,16 +201,16 @@ void main() {
     state = deal(
       state.copyWith(
         reaverPressure: 2,
-        knights: {
-          vertex: KnightPiece(state.active, KnightRank.sentinel, false, -1),
+        guards: {
+          vertex: GuardPiece(state.active, GuardRank.sentinel, false, -1),
         },
       ),
       {Resource.wheat: 1},
     );
     final activate = bot.choose(state);
-    expect(activate, isA<ActivateKnight>());
+    expect(activate, isA<ActivateGuard>());
     state = MatchEngine.apply(state, activate!);
-    expect(state.knights[vertex]!.active, isTrue);
+    expect(state.guards[vertex]!.active, isTrue);
     conserved(state);
 
     // A second Town raises the fleet to strength 2. Promotion is now needed.
@@ -228,9 +228,9 @@ void main() {
       Resource.wool: 1,
     });
     final promote = bot.choose(state);
-    expect(promote, isA<PromoteKnight>());
+    expect(promote, isA<PromoteGuard>());
     state = MatchEngine.apply(state, promote!);
-    expect(state.knights[vertex]!.rank, KnightRank.warden);
+    expect(state.guards[vertex]!.rank, GuardRank.warden);
     conserved(state);
   });
 
@@ -246,7 +246,7 @@ void main() {
     conserved(state);
   });
 
-  test('Knight movement only displaces a weaker public defender', () {
+  test('Guard movement only displaces a weaker public defender', () {
     var state = deal(actions(113), {});
     final edgeId = state.roads.entries
         .firstWhere((e) => e.value == state.active)
@@ -257,22 +257,22 @@ void main() {
     // The test edge is an owned initial road; its far side is unoccupied.
     expect(state.sites[rival], isNull);
     state = state.copyWith(
-      knights: {
-        own: KnightPiece(state.active, KnightRank.warden, true, -1),
-        rival: const KnightPiece(1, KnightRank.sentinel, true, -1),
+      guards: {
+        own: GuardPiece(state.active, GuardRank.warden, true, -1),
+        rival: const GuardPiece(1, GuardRank.sentinel, true, -1),
       },
     );
     final move = bot.choose(state);
-    expect(move, isA<MoveKnight>());
-    expect((move! as MoveKnight).to, rival);
+    expect(move, isA<MoveGuard>());
+    expect((move! as MoveGuard).to, rival);
     state = MatchEngine.apply(state, move);
-    expect(state.knights[rival]!.owner, state.active);
+    expect(state.guards[rival]!.owner, state.active);
     conserved(state);
   });
 
   test('invasion aid uses public gap and passes when victory impossible', () {
     var state = actions(127);
-    // Four upgraded settlements set a public fleet threat of four.
+    // Four upgraded villages set a public fleet threat of four.
     // This preserves the intentional 2/1/4 aid-gap scenarios below.
     state = state.copyWith(
       sites: {
@@ -348,29 +348,32 @@ void main() {
     conserved(depleted);
   });
 
-  test('drought recovery favours Aqueduct but never mints relief directly', () {
-    var state = town(139);
-    final players = state.players.toList();
-    players[state.active] = players[state.active].copyWith(
-      developments: {StrategyDeck.innovation: 2},
-    );
-    players[1] = players[1].copyWith(charterPoints: 4);
-    state = deal(
-      state.copyWith(players: players, dryRolls: {state.active: 1}),
-      {Resource.wheat: 1, Resource.ore: 2, Resource.paper: 2},
-    );
-    final beforeBank = Map<Resource, int>.of(state.bank);
-    final move = AiActionAdapter.decide(
-      AiActionAdapter.observe(state, state.active),
-    );
-    expect(move, isA<DevelopTown>());
-    expect((move! as DevelopTown).track, StrategyDeck.innovation);
-    state = MatchEngine.apply(state, move);
-    expect(state.current.level(StrategyDeck.innovation), 3);
-    expect(state.reliefUsed, isEmpty);
-    expect(state.bank[Resource.wheat], beforeBank[Resource.wheat]! + 1);
-    conserved(state);
-  });
+  test(
+    'drought recovery favours Reservoir but never mints relief directly',
+    () {
+      var state = town(139);
+      final players = state.players.toList();
+      players[state.active] = players[state.active].copyWith(
+        developments: {StrategyDeck.innovation: 2},
+      );
+      players[1] = players[1].copyWith(charterPoints: 4);
+      state = deal(
+        state.copyWith(players: players, dryRolls: {state.active: 1}),
+        {Resource.wheat: 1, Resource.ore: 2, Resource.paper: 2},
+      );
+      final beforeBank = Map<Resource, int>.of(state.bank);
+      final move = AiActionAdapter.decide(
+        AiActionAdapter.observe(state, state.active),
+      );
+      expect(move, isA<DevelopTown>());
+      expect((move! as DevelopTown).track, StrategyDeck.innovation);
+      state = MatchEngine.apply(state, move);
+      expect(state.current.level(StrategyDeck.innovation), 3);
+      expect(state.reliefUsed, isEmpty);
+      expect(state.bank[Resource.wheat], beforeBank[Resource.wheat]! + 1);
+      conserved(state);
+    },
+  );
 
   test('decision cap forces End Turn and finished games stay terminal', () {
     final state = actions(149);

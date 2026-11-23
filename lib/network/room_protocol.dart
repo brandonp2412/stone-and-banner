@@ -20,10 +20,10 @@ abstract final class RoomProtocol {
       BankExchange() ||
       DevelopTown() ||
       FortifyTown() ||
-      RecruitKnight() ||
-      ActivateKnight() ||
-      PromoteKnight() ||
-      MoveKnight() ||
+      RecruitGuard() ||
+      ActivateGuard() ||
+      PromoteGuard() ||
+      MoveGuard() ||
       ResolveInvasion() ||
       EndTurn() ||
       RespondTrade() ||
@@ -211,12 +211,12 @@ abstract final class RoomProtocol {
       rollCount: number('rollCount'),
       banditTile: number('bandit'),
       round: number('round'),
-      longestRoadHolder: data['holder'] as int?,
-      knights: {
+      crownRoadHolder: data['holder'] as int?,
+      guards: {
         for (final k in list('knights'))
-          (k as List)[0] as int: KnightPiece(
+          (k as List)[0] as int: GuardPiece(
             k[1] as int,
-            KnightRank.values.byName(k[2] as String),
+            GuardRank.values.byName(k[2] as String),
             k[3] as bool,
             k[4] as int,
           ),
@@ -306,10 +306,10 @@ abstract final class RoomProtocol {
         StrategyDeck.values.byName(e['track'] as String),
       ),
       'fortify' => FortifyTown(intAt('vertex')),
-      'recruit' => RecruitKnight(intAt('vertex')),
-      'activate' => ActivateKnight(intAt('vertex')),
-      'promote' => PromoteKnight(intAt('vertex')),
-      'knightMove' => MoveKnight(intAt('from'), intAt('to')),
+      'recruit' => RecruitGuard(intAt('vertex')),
+      'activate' => ActivateGuard(intAt('vertex')),
+      'promote' => PromoteGuard(intAt('vertex')),
+      'knightMove' => MoveGuard(intAt('from'), intAt('to')),
       'invasion' => const ResolveInvasion(),
       'cardPlay' => PlayStrategyCard(
         intAt('hand'),

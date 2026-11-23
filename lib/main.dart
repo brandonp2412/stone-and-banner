@@ -951,7 +951,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     SizedBox(height: 8),
                     _Rule(
                       '1 · Claim',
-                      'Place two free Village–Road pairs in snake order. Leave a gap between settlements.',
+                      'Place two free Village–Road pairs in snake order. Leave a gap between villages.',
                     ),
                     _Rule(
                       '2 · Roll',
@@ -963,7 +963,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     ),
                     _Rule(
                       '4 · Win',
-                      'First to 15 VP wins. Villages = 1, Towns = 2, Capitals = 4, longest road = 2.',
+                      'First to 15 Renown wins. Villages = 1, Towns = 2, Capitals = 4, crown road = 2.',
                     ),
                   ],
                 ),
@@ -983,8 +983,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                       'Innovation, Commerce and Governance have five tiers, producing commodities.',
                     ),
                     _Rule(
-                      'Reaver Fleet and Knights',
-                      'Knights defend; fortifications protect Towns during invasions.',
+                      'Reaver Fleet and Guards',
+                      'Guards defend; fortifications protect Towns during invasions.',
                     ),
                     _Rule(
                       'Reactions',
@@ -1002,14 +1002,14 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     SizedBox(height: 8),
                     _Rule(
                       'Basic goods',
-                      'Wood, brick, wheat, sheep and ore pay for roads, structures and Knights.',
+                      'Wood, brick, wheat, sheep and ore pay for roads, structures and Guards.',
                     ),
                     _Rule(
                       'Commodities',
                       'Paper, cloth and coin come from developed Towns and help build Capitals.',
                     ),
                     _Rule(
-                      'Victory Points (VP)',
+                      'Renown',
                       'Reach 15 to win. Charter Points and Guardian’s Honour also count.',
                     ),
                     _Rule(
@@ -1414,7 +1414,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                           const SizedBox(height: 12),
                                           const _Rule(
                                             '1 · Claim',
-                                            'Each seat places two free Village and Road pairs in a snake draft. Leave a gap between settlements.',
+                                            'Each seat places two free Village and Road pairs in a snake draft. Leave a gap between villages.',
                                           ),
                                           const _Rule(
                                             '2 · Roll',
@@ -1426,7 +1426,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                           ),
                                           const _Rule(
                                             '4 · Win',
-                                            'First to 15 Victory Points wins. Village = 1, Town = 2, Capital = 4; the longest road of at least five sides earns 2.',
+                                            'First to 15 Renown wins. Village = 1, Town = 2, Capital = 4; the crown road of at least five sides earns 2.',
                                           ),
                                           const Divider(height: 24),
                                           Column(
@@ -1450,8 +1450,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                                 'Innovation, Commerce and Governance have five tiers each. Developed Towns can produce paper, cloth and coin.',
                                               ),
                                               _Rule(
-                                                'Reaver Fleet and Knights',
-                                                'Activate and promote Knights to defend the realm. Fortifications shelter Towns when an Invasion succeeds.',
+                                                'Reaver Fleet and Guards',
+                                                'Activate and promote Guards to defend the realm. Fortifications shelter Towns when an Invasion succeeds.',
                                               ),
                                               _Rule(
                                                 'Reactions',
@@ -1481,14 +1481,14 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                               ),
                                               _Rule(
                                                 'Basic goods',
-                                                'Wood, brick, wheat, sheep and ore pay for roads, structures and Knights.',
+                                                'Wood, brick, wheat, sheep and ore pay for roads, structures and Guards.',
                                               ),
                                               _Rule(
                                                 'Commodities',
                                                 'Paper, cloth and coin come from developed Towns and help build Capitals.',
                                               ),
                                               _Rule(
-                                                'Victory Points (VP)',
+                                                'Renown',
                                                 'A seat’s score. Reach 15 points to win; Charter Points and Guardian’s Honour also count.',
                                               ),
                                               _Rule(
@@ -1792,7 +1792,7 @@ class _LandingHall extends StatelessWidget {
                 ),
                 SizedBox(height: compactLandscape ? 4 : 8),
                 const Text(
-                  'Build, trade and defend your way to 15 Victory Points.',
+                  'Build, trade and defend your way to 15 Renown.',
                   style: TextStyle(color: Color(0xffabbfc2), fontSize: 13),
                 ),
                 SizedBox(height: compactLandscape ? 10 : 20),

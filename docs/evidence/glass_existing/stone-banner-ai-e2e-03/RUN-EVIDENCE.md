@@ -16,8 +16,8 @@ APK size: 54398538 bytes. SHA-256: `3f57b11e25d17e00780a2a1ceb8348a8f169831c603f
 
 ## Measured 24 matches, seeds 601–624, cap 65 rounds
 
-- Heuristic mean VP: **10.375**.
-- Random opponent mean VP per seat: **2.5416666666666665**.
+- Heuristic mean Renown: **10.375**.
+- Random opponent mean Renown per seat: **2.5416666666666665**.
 - Heuristic wins: **9** of **9** matches that actually finished; remaining **15** unfinished at round cap.
 - Heuristic construction actions in action phase: **154** roads, **101** villages, **418** upgrades, **434** bank exchanges.
 - This is performance against a seeded, whitelisted legal-random policy, **not** a human-strength or 24-game win-rate guarantee.

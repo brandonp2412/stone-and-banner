@@ -59,26 +59,26 @@ void main() {
       roads: roads,
       players: people,
       bank: {...initial.bank, Resource.wood: 17, Resource.brick: 17},
-      longestRoadHolder: 0,
+      crownRoadHolder: 0,
     );
-    expect(MatchEngine.longestRoad(before, 0), 5);
-    expect(MatchEngine.longestRoad(before, 1), 4);
+    expect(MatchEngine.crownRoad(before, 0), 5);
+    expect(MatchEngine.crownRoad(before, 1), 4);
     expect(MatchEngine.legalRoad(before, second[4]), isTrue);
 
     final tied = MatchEngine.apply(before, PlaceRoad(second[4]));
-    expect(MatchEngine.longestRoad(tied, 1), 5);
-    expect(tied.longestRoadHolder, 0);
+    expect(MatchEngine.crownRoad(tied, 1), 5);
+    expect(tied.crownRoadHolder, 0);
     expect(MatchEngine.score(tied, 0), 2);
     expect(MatchEngine.score(tied, 1), 0);
 
     final neutral = before.copyWith(clearRoadHolder: true);
     final unawardedTie = MatchEngine.apply(neutral, PlaceRoad(second[4]));
-    expect(unawardedTie.longestRoadHolder, isNull);
+    expect(unawardedTie.crownRoadHolder, isNull);
 
     expect(MatchEngine.legalRoad(tied, second[5]), isTrue);
     final overtaken = MatchEngine.apply(tied, PlaceRoad(second[5]));
-    expect(MatchEngine.longestRoad(overtaken, 1), 6);
-    expect(overtaken.longestRoadHolder, 1);
+    expect(MatchEngine.crownRoad(overtaken, 1), 6);
+    expect(overtaken.crownRoadHolder, 1);
     expect(MatchEngine.score(overtaken, 0), 0);
     expect(MatchEngine.score(overtaken, 1), 2);
   });

@@ -15,7 +15,7 @@ Offset edgeMidpoint(MatchState state, Size mapSize, int id) {
 }
 
 void main() {
-  test('barbarians scale with upgraded sites, not past raids or pressure', () {
+  test('raiders scale with upgraded sites, not past raids or pressure', () {
     final initial = tableWithSupplies();
     final baseline = initial.copyWith(
       sites: {

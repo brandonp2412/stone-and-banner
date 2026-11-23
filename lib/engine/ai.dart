@@ -63,8 +63,8 @@ class AiStrategySignals {
     required this.reliefUsed,
     required this.tradeRate,
     required this.ownSites,
-    required this.ownKnights,
-    required this.publicKnights,
+    required this.ownGuards,
+    required this.publicGuards,
     required this.fortified,
     required this.levels,
     required this.productionPips,
@@ -75,7 +75,7 @@ class AiStrategySignals {
   final int aidRespondersRemaining, scoreDeficit, dryRolls, tradeRate;
   final bool reliefUsed;
   final Map<int, Structure> ownSites;
-  final Map<int, KnightPiece> ownKnights, publicKnights;
+  final Map<int, GuardPiece> ownGuards, publicGuards;
   final Set<int> fortified;
   final Map<StrategyDeck, int> levels, productionPips;
   final Map<Resource, int> bankStock;
@@ -234,7 +234,7 @@ abstract final class AiActionAdapter {
     );
   }
 
-  /// Use only public settlements, surrounding tiles and visible developments.
+  /// Use only public villages, surrounding tiles and visible developments.
   /// Never ask a rival for a resource they have no normal way of producing.
   /// Public site upgrades reveal which construction goods each seat needs.
   /// No opposing inventory is inspected.
@@ -308,8 +308,8 @@ abstract final class AiActionAdapter {
         }
       }
     }
-    final ownKnights = <int, KnightPiece>{
-      for (final entry in state.knights.entries)
+    final ownGuards = <int, GuardPiece>{
+      for (final entry in state.guards.entries)
         if (entry.value.owner == seat) entry.key: entry.value,
     };
     final scores = <int>[];
@@ -330,8 +330,8 @@ abstract final class AiActionAdapter {
       reliefUsed: state.reliefUsed.contains(seat),
       tradeRate: MatchEngine.tradeRate(state, seat),
       ownSites: Map.unmodifiable(ownSites),
-      ownKnights: Map.unmodifiable(ownKnights),
-      publicKnights: Map.unmodifiable(state.knights),
+      ownGuards: Map.unmodifiable(ownGuards),
+      publicGuards: Map.unmodifiable(state.guards),
       fortified: Set.unmodifiable(state.fortified),
       levels: Map.unmodifiable({
         for (final track in StrategyDeck.values)
@@ -403,10 +403,10 @@ abstract final class AiActionAdapter {
 
     final gap = s.invasionThreat - s.sharedDefence;
     final impending = s.pressure >= 2 && gap > 0;
-    final activates = actions.whereType<ActivateKnight>().toList();
-    final promotes = actions.whereType<PromoteKnight>().toList();
+    final activates = actions.whereType<ActivateGuard>().toList();
+    final promotes = actions.whereType<PromoteGuard>().toList();
     final forts = actions.whereType<FortifyTown>().toList();
-    final recruits = actions.whereType<RecruitKnight>().toList();
+    final recruits = actions.whereType<RecruitGuard>().toList();
     if (impending) {
       if (activates.isNotEmpty) return activates.first;
       // Forts both strengthen defence and absorb a failed invasion hit.
@@ -464,7 +464,7 @@ abstract final class AiActionAdapter {
     }
 
     // Recover construction deficits via *actual* stock-backed bank trades.
-    // Preserve goods already needed for the next reachable VP upgrade.
+    // Preserve goods already needed for the next reachable Renown upgrade.
     final goal = s.ownSites.values.contains(Structure.town)
         ? MatchEngine.capitalCost
         : s.ownSites.values.contains(Structure.village)
@@ -496,17 +496,17 @@ abstract final class AiActionAdapter {
     // Movement has strategic value only if it displaces a weaker rival.
     // Empty-junction shuffling can burn turns without adding defence.
     final displacements = actions
-        .whereType<MoveKnight>()
+        .whereType<MoveGuard>()
         .where(
           (a) =>
-              s.publicKnights.containsKey(a.to) &&
-              s.publicKnights[a.to]!.owner != view.seat,
+              s.publicGuards.containsKey(a.to) &&
+              s.publicGuards[a.to]!.owner != view.seat,
         )
         .toList();
     if (displacements.isNotEmpty) {
       displacements.sort((a, b) {
-        final rank = s.publicKnights[b.to]!.rank.strength.compareTo(
-          s.publicKnights[a.to]!.rank.strength,
+        final rank = s.publicGuards[b.to]!.rank.strength.compareTo(
+          s.publicGuards[a.to]!.rank.strength,
         );
         return rank != 0 ? rank : a.to.compareTo(b.to);
       });
@@ -537,14 +537,14 @@ abstract final class AiActionAdapter {
     }
     for (var vertex = 0; vertex < s.topology.vertices.length; vertex++) {
       if (MatchEngine.legalRecruit(s, vertex)) {
-        actions.add(RecruitKnight(vertex));
+        actions.add(RecruitGuard(vertex));
       }
     }
-    for (final from in s.knights.keys.toList()..sort()) {
-      if (MatchEngine.legalActivate(s, from)) actions.add(ActivateKnight(from));
-      if (MatchEngine.legalPromote(s, from)) actions.add(PromoteKnight(from));
-      for (final to in MatchEngine.legalKnightDestinations(s, from)) {
-        actions.add(MoveKnight(from, to));
+    for (final from in s.guards.keys.toList()..sort()) {
+      if (MatchEngine.legalActivate(s, from)) actions.add(ActivateGuard(from));
+      if (MatchEngine.legalPromote(s, from)) actions.add(PromoteGuard(from));
+      for (final to in MatchEngine.legalGuardDestinations(s, from)) {
+        actions.add(MoveGuard(from, to));
       }
     }
     for (var i = 0; i < s.current.cards.length; i++) {

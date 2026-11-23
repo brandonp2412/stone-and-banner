@@ -88,7 +88,7 @@ void main() {
     },
   );
 
-  test('Mass Suspension chooses a hex and leaves distant Knights active', () {
+  test('Mass Suspension chooses a hex and leaves distant Guards active', () {
     final base = MatchEngine.newGame(['A', 'B', 'C'], 53, cardDeckVersion: 2);
     final tileVertices = base.topology.tileVertices[0];
     final near = tileVertices.first;
@@ -104,9 +104,9 @@ void main() {
     final state = base.copyWith(
       phase: MatchPhase.actions,
       players: players,
-      knights: {
-        near: const KnightPiece(1, KnightRank.sentinel, true, -1),
-        far: const KnightPiece(2, KnightRank.warden, true, -1),
+      guards: {
+        near: const GuardPiece(1, GuardRank.sentinel, true, -1),
+        far: const GuardPiece(2, GuardRank.warden, true, -1),
       },
     );
     final plays = MatchEngine.legalCardPlays(state, 0);
@@ -115,8 +115,8 @@ void main() {
       state,
       plays.firstWhere((option) => option.tile == 0),
     );
-    expect(result.knights[near]!.active, isFalse);
-    expect(result.knights[far]!.active, isTrue);
+    expect(result.guards[near]!.active, isFalse);
+    expect(result.guards[far]!.active, isTrue);
   });
 
   test('undefended invasion offers aid to the active human and bots', () {
@@ -137,18 +137,18 @@ void main() {
     expect(passed.tactical?.responder, 1);
   });
 
-  test('robber interception requires an active knight on robbed hex', () {
+  test('bandit interception requires an active guard on robbed hex', () {
     final base = MatchEngine.newGame(['A', 'B', 'C'], 55);
     final tile = base.topology.tileVertices[0];
     final remote = base.topology.vertices
         .firstWhere((v) => !tile.contains(v.id))
         .id;
     final elsewhere = base.copyWith(
-      knights: {remote: KnightPiece(1, KnightRank.sentinel, true, -1)},
+      guards: {remote: GuardPiece(1, GuardRank.sentinel, true, -1)},
     );
     expect(MatchEngine.canIntercept(elsewhere, 1, tile: 0), isFalse);
     final sameHex = base.copyWith(
-      knights: {tile.first: KnightPiece(1, KnightRank.sentinel, true, -1)},
+      guards: {tile.first: GuardPiece(1, GuardRank.sentinel, true, -1)},
     );
     expect(MatchEngine.canIntercept(sameHex, 1, tile: 0), isTrue);
     expect(
@@ -161,7 +161,7 @@ void main() {
     );
   });
 
-  test('enemy knight blocks road extension and interrupts longest road', () {
+  test('enemy guard blocks road extension and interrupts crown road', () {
     final base = MatchEngine.newGame(['A', 'B', 'C'], 56);
     final vertex = base.topology.vertices.firstWhere((v) => v.edges.length > 1);
     final firstEdge = vertex.edges[0], nextEdge = vertex.edges[1];
@@ -176,11 +176,11 @@ void main() {
     );
     expect(MatchEngine.legalRoad(unblocked, nextEdge), isTrue);
     final blocked = unblocked.copyWith(
-      knights: {vertex.id: KnightPiece(1, KnightRank.sentinel, false, -1)},
+      guards: {vertex.id: GuardPiece(1, GuardRank.sentinel, false, -1)},
     );
     expect(MatchEngine.legalRoad(blocked, nextEdge), isFalse);
     final twoRoads = blocked.copyWith(roads: {firstEdge: 0, nextEdge: 0});
-    expect(MatchEngine.longestRoad(twoRoads, 0), 1);
+    expect(MatchEngine.crownRoad(twoRoads, 0), 1);
   });
 
   test('bot trade targets must be able to produce requested goods', () {

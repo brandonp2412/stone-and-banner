@@ -50,9 +50,9 @@ void main() {
       town,
       town.copyWith(fortified: {v}),
       base.copyWith(
-        knights: {
-          v: const KnightPiece(0, KnightRank.champion, true, -1),
-          v + 1: const KnightPiece(0, KnightRank.warden, true, -1),
+        guards: {
+          v: const GuardPiece(0, GuardRank.champion, true, -1),
+          v + 1: const GuardPiece(0, GuardRank.warden, true, -1),
         },
       ),
     ]) {
@@ -65,8 +65,8 @@ void main() {
       MatchEngine.invasionForecast(town),
       contains('town downgraded to village'),
     );
-    expect(MatchEngine.invasionForecast(town), contains('(-1 VP)'));
-    // A single upgraded settlement now has strength 1, so one Fort
+    expect(MatchEngine.invasionForecast(town), contains('(-1 Renown)'));
+    // A single upgraded village now has strength 1, so one Fort
     // is enough to repel the assault instead of being destroyed.
     expect(
       MatchEngine.invasionForecast(town.copyWith(fortified: {v})),

@@ -197,7 +197,7 @@ void main() {
       );
       s = s.copyWith(
         builders: {...s.builders, 1},
-        knights: {nearby: const KnightPiece(1, KnightRank.sentinel, true, -1)},
+        guards: {nearby: const GuardPiece(1, GuardRank.sentinel, true, -1)},
       );
       s = MatchEngine.apply(s, MoveBandit(tile, victim: 1));
       var updated = s;
@@ -206,12 +206,12 @@ void main() {
       expect(find.text('Bandit interception'), findsOneWidget);
       expect(find.textContaining('Strategy hand'), findsNothing);
       expect(find.textContaining('wood '), findsNothing);
-      await tester.ensureVisible(find.text('Intercept with Knight'));
+      await tester.ensureVisible(find.text('Intercept with Guard'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Intercept with Knight'));
+      await tester.tap(find.text('Intercept with Guard'));
       await tester.pumpAndSettle();
       expect(updated.tactical, isNull);
-      expect(updated.knights[nearby]!.active, isFalse);
+      expect(updated.guards[nearby]!.active, isFalse);
       expect(find.text('Bandit interception'), findsNothing);
     },
   );

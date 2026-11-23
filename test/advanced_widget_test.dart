@@ -74,7 +74,7 @@ void main() {
     expect(find.text('Road'), findsNothing);
   });
 
-  testWidgets('touch a Town Development and recruit Knight on board', (
+  testWidgets('touch a Town Development and recruit Guard on board', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(844, 390);
@@ -117,12 +117,12 @@ void main() {
     await scrollToAction(tester, 'Road');
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Recruit Knight'),
+      find.text('Recruit Guard'),
       100,
       scrollable: find.byType(Scrollable).last,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Recruit Knight'));
+    await tester.tap(find.text('Recruit Guard'));
     await tester.pumpAndSettle();
     final board = find.byKey(const ValueKey('realm-map'));
     // The map stays visible while the action panel scrolls.
@@ -133,7 +133,7 @@ void main() {
       origin + BoardGeometry(size).vertex(s.topology.vertices[vertex]),
     );
     await tester.pumpAndSettle();
-    expect(s.knights[vertex]?.owner, 0);
+    expect(s.guards[vertex]?.owner, 0);
   });
 
   testWidgets('Invasion preview resolves and returns to roll', (tester) async {

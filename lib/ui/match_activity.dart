@@ -187,8 +187,8 @@ class _MatchActivityState extends State<MatchActivity> {
   ) {
     final vertex = switch (event) {
       PlaceVillage() => event.vertex,
-      RecruitKnight() => event.vertex,
-      MoveKnight() => event.to,
+      RecruitGuard() => event.vertex,
+      MoveGuard() => event.to,
       PlaceRoad() =>
         [
               before.topology.edges[event.edge].a,
@@ -209,7 +209,7 @@ class _MatchActivityState extends State<MatchActivity> {
     final cutOff = List.generate(before.players.length, (i) => i).where((seat) {
       if (seat == actor) return false;
       // Occupying a road endpoint denies expansion; a junction also splits
-      // the road even when a different route preserves its longest-road score.
+      // the road even when a different route preserves its crown-road score.
       return junction.edges.any((edge) => before.roads[edge] == seat);
     }).toList()..sort();
     if (cutOff.isEmpty) return null;
@@ -312,7 +312,7 @@ class _MatchActivityState extends State<MatchActivity> {
           if (earned.isNotEmpty) {
             return cue(
               '🌾',
-              'Starting settlement harvest',
+              'Starting village harvest',
               earned.join(', '),
               color: teal,
             );
@@ -323,20 +323,20 @@ class _MatchActivityState extends State<MatchActivity> {
       case UpgradeSite():
       case DevelopTown():
       case FortifyTown():
-      case RecruitKnight():
-      case ActivateKnight():
-      case PromoteKnight():
-      case MoveKnight():
+      case RecruitGuard():
+      case ActivateGuard():
+      case PromoteGuard():
+      case MoveGuard():
         return null;
       case MoveBandit():
-        // Bandit movement and robbery are already animated on the board.
+        // Bandit movement and theft are already animated on the board.
         return null;
       case RespondTactical():
         if (event.choice == TacticalChoice.intercept) {
           return cue(
             '🛡️',
-            '$prefix blocks a robbery',
-            'Knight to the rescue',
+            '$prefix blocks a theft',
+            'Guard to the rescue',
             color: teal,
           );
         }
@@ -370,12 +370,7 @@ class _MatchActivityState extends State<MatchActivity> {
           color: coral,
         );
       case ResolveInvasion():
-        return cue(
-          '🔥',
-          'Barbarian assault!',
-          state.lastInvasion,
-          color: coral,
-        );
+        return cue('🔥', 'Raider assault!', state.lastInvasion, color: coral);
       case BankExchange():
         return cue(
           '🪙',
@@ -463,7 +458,7 @@ class _MatchActivityState extends State<MatchActivity> {
           return cue(
             '😤',
             '$prefix suspends a whole squad!',
-            'Rival Knights on this hex are on involuntary holiday.',
+            'Rival Guards on this hex are on involuntary holiday.',
             color: violet,
           );
         }

@@ -5,7 +5,7 @@
 ## Implemented
 
 - Pure seat-observation strategy/card policy: deterministic useful-target ranking for Innovation, Commerce and Governance; full 54-card catalog iteration; hand-limit discard; no hidden opponent inventories or deck order queried. Strategy draws remain existing seeded reducer events; AI does not choose a hidden draw.
-- Bandit intercept or pass (do not consume a Knight when own inventory is empty), matching Governance counter, clockwise Invasion ore/wheat aid where potentially decisive, explicit pass and event-derived timeout recovery.
+- Bandit intercept or pass (do not consume a Guard when own inventory is empty), matching Governance counter, clockwise Invasion ore/wheat aid where potentially decisive, explicit pass and event-derived timeout recovery.
 - Standing offer evaluation, accept/decline, one nonrecursive 1:1 counter from public escrow, one bounded 1:1 outgoing offer with own surplus. Reducer remains authoritative.
 - Guard against modulo-by-zero when a Bandit window times out/passes with an empty victim inventory. No arbitrary theft target inference.
 - Existing policy entry points (`AiActionAdapter.decide`, `HeuristicAi.choose`) call card/reaction policy; no UI modifications.

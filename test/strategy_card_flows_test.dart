@@ -54,11 +54,11 @@ void main() {
           CardPower.freeRoad => 'Build road on edge ${option.vertex! + 1}',
           CardPower.freeFort => 'Fortify junction ${option.vertex! + 1}',
           CardPower.activate =>
-            'Activate Knight at junction ${option.vertex! + 1}',
+            'Activate Guard at junction ${option.vertex! + 1}',
           CardPower.promote =>
-            'Promote Knight at junction ${option.vertex! + 1}',
+            'Promote Guard at junction ${option.vertex! + 1}',
           CardPower.exhaust =>
-            'Stand down rival Knight at junction ${option.vertex! + 1}',
+            'Stand down rival Guard at junction ${option.vertex! + 1}',
           CardPower.moveBandit =>
             'Move Bandit to hex ${option.tile! + 1} '
                 '(${terrainLabel(initial.board.tiles[option.tile!].land)})',

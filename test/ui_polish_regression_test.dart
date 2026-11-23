@@ -25,7 +25,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'gameplay_hints_enabled': false});
   });
 
-  testWidgets('desktop prefers settlement over knight at shared junction', (
+  testWidgets('desktop prefers village over guard at shared junction', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -37,7 +37,7 @@ void main() {
         .firstWhere(
           (v) =>
               !original.sites.containsKey(v) &&
-              !original.knights.containsKey(v) &&
+              !original.guards.containsKey(v) &&
               !original.topology
                   .neighbours(v)
                   .any(original.sites.containsKey) &&
@@ -69,19 +69,19 @@ void main() {
     await mouse.addPointer(location: Offset.zero);
     await mouse.moveTo(point);
     await tester.pump();
-    expect(find.textContaining('Build a settlement'), findsOneWidget);
+    expect(find.textContaining('Build a village'), findsOneWidget);
     await tester.tapAt(point);
     await tester.pumpAndSettle();
     expect(
       find.ancestor(
-        of: find.textContaining('Build settlement ·'),
+        of: find.textContaining('Build village ·'),
         matching: find.byType(FilledButton),
       ),
       findsOneWidget,
     );
     expect(
       find.ancestor(
-        of: find.textContaining('Build Knight ·'),
+        of: find.textContaining('Build Guard ·'),
         matching: find.byType(OutlinedButton),
       ),
       findsOneWidget,
@@ -199,7 +199,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('blocked robber displays its humiliation on the board', (
+  testWidgets('blocked bandit displays its humiliation on the board', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -226,7 +226,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1150));
     await expectLater(
       find.byKey(const ValueKey('realm-map')),
-      matchesGoldenFile('goldens/robber_denied.png'),
+      matchesGoldenFile('goldens/bandit_denied.png'),
     );
     await tester.pumpWidget(const SizedBox());
   });

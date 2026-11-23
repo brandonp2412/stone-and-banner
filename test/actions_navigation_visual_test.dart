@@ -40,7 +40,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Road'), findsOneWidget);
     expect(find.text('Player trade'), findsNothing);
-    expect(find.text('Knights & Defense'), findsNothing);
+    expect(find.text('Guards & Defense'), findsNothing);
     expect(find.text('Fortify'), findsOneWidget);
     await expectLater(
       find.byType(Scaffold),

@@ -186,10 +186,10 @@ abstract final class AiCardStrategy {
       case CardPower.promote:
         return danger ? 12 : 3;
       case CardPower.exhaust:
-        final knight = view.strategy.publicKnights[play.vertex];
-        return knight != null && knight.owner != view.seat
-            ? knight.rank.strength * (danger ? 2.0 : 1.0) +
-                  view.publicScores[knight.owner] * 0.8
+        final guard = view.strategy.publicGuards[play.vertex];
+        return guard != null && guard.owner != view.seat
+            ? guard.rank.strength * (danger ? 2.0 : 1.0) +
+                  view.publicScores[guard.owner] * 0.8
             : -100;
       case CardPower.moveBandit:
         return 1; // Cannot infer a hidden victim's inventory.

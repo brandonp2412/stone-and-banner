@@ -34,10 +34,10 @@ MatchState _prepared() {
     players: players,
     bank: bank,
     sites: {...s.sites, own: const Site(0, Structure.town)},
-    knights: {
-      own: const KnightPiece(0, KnightRank.sentinel, false, -1),
-      second: const KnightPiece(0, KnightRank.warden, true, -1),
-      rival: const KnightPiece(1, KnightRank.sentinel, true, -1),
+    guards: {
+      own: const GuardPiece(0, GuardRank.sentinel, false, -1),
+      second: const GuardPiece(0, GuardRank.warden, true, -1),
+      rival: const GuardPiece(1, GuardRank.sentinel, true, -1),
     },
   );
 }
@@ -220,7 +220,7 @@ void main() {
         s = _holdId(s, counterId, seat: 1);
         final attack = MatchEngine.legalCardPlays(s, 0).firstWhere(
           (e) => attackId == 'defection'
-              ? s.knights[e.vertex]?.owner == 1
+              ? s.guards[e.vertex]?.owner == 1
               : e.target == 1 && e.receive == Resource.ore,
         );
         final open = MatchEngine.apply(s, attack);
@@ -266,10 +266,10 @@ void main() {
           passed.players.map((p) => p.stores).toList(),
           timed.players.map((p) => p.stores).toList(),
         );
-        expect(passed.knights.keys.toSet(), timed.knights.keys.toSet());
-        for (final vertex in passed.knights.keys) {
-          final a = passed.knights[vertex]!;
-          final b = timed.knights[vertex]!;
+        expect(passed.guards.keys.toSet(), timed.guards.keys.toSet());
+        for (final vertex in passed.guards.keys) {
+          final a = passed.guards[vertex]!;
+          final b = timed.guards[vertex]!;
           expect(
             (a.owner, a.rank, a.active, a.actedTurn),
             (b.owner, b.rank, b.active, b.actedTurn),
