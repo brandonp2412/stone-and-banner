@@ -10,7 +10,9 @@ import argparse
 import asyncio
 import os
 import re
-import time
+import json
+import subprocess
+from urllib.parse import urlparse, unquote
 from pathlib import Path
 
 from patchright.async_api import async_playwright
@@ -20,48 +22,40 @@ async def dismiss_hints(page):
     for _ in range(5):
         got_it = page.get_by_text("Got it", exact=True).first
         if await got_it.count() and await got_it.is_visible():
-            await got_it.click()
+            await got_it.click(force=True)
             await page.wait_for_timeout(200)
         else:
             break
 
 
-async def wait_for_control(page, label, timeout_seconds=100):
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        await dismiss_hints(page)
-        control = page.get_by_text(label, exact=True).first
-        if await control.count() and await control.is_visible():
-            return control
-        await page.wait_for_timeout(650)
-    raise TimeoutError(f"Never reached '{label}'. Visible text: {(await page.locator('body').inner_text())[:1100]}")
-
-
-def junction_score(label):
-    values = [int(x) for x in re.findall(r"\b(2|3|4|5|6|8|9|10|11|12)\b", label.split(":", 1)[1])]
-    return sum(6 - abs(7 - n) for n in values)
-
-
-async def pick_legal_target(page, control_label, prefix):
-    control = await wait_for_control(page, control_label)
-    await control.click()
-    await page.get_by_text("Choose legal board target", exact=True).wait_for(timeout=10000)
-    entries = await page.locator("body").inner_text()
-    candidates = [line for line in entries.splitlines() if re.match(rf"^{prefix} \d+: ", line)]
-    if not candidates:
-        raise RuntimeError(f"No legal {prefix.lower()} shown: {entries[:1500]}")
-    if prefix == "Junction":
-        choice = max(candidates, key=junction_score)
-    else:
-        choice = candidates[0]
-    target_number = re.search(rf"^{prefix} (\d+):", choice).group(1)
-    await page.get_by_text(re.compile(rf"^{prefix} {target_number}:"), exact=False).first.click()
-    await page.wait_for_timeout(350)
-    print(f"Selected {choice}", flush=True)
+def fresh_replay():
+    root = Path(__file__).resolve().parent.parent
+    config_path = root / ".dart_tool/package_config.json"
+    config = json.loads(config_path.read_text())
+    sdk = Path(unquote(urlparse(config["flutterRoot"]).path))
+    dart = sdk / "bin/cache/dart-sdk/bin" / ("dart.exe" if os.name == "nt" else "dart")
+    result = subprocess.run(
+        [str(dart), f"--packages={config_path}", str(root / "tool/make_screenshot_replay.dart")],
+        check=True, capture_output=True, text=True, timeout=120, cwd=root,
+    )
+    replay = result.stdout.strip()
+    json.loads(replay)
+    return replay
 
 
 async def screenshot(page, destination):
     await page.wait_for_timeout(600)
+    visible = await page.locator("body").inner_text()
+    labels = await page.locator("[aria-label]").evaluate_all(
+        "nodes => nodes.map(node => node.getAttribute('aria-label')).join('\\n')"
+    )
+    visible += "\n" + labels
+    forbidden = re.search(
+        r"\b(?:catan|settlements?|knights?|barbarians?|robber|aqueduct|metropolis)\b|longest road|victory points?|progress cards?",
+        visible, re.IGNORECASE,
+    )
+    if forbidden:
+        raise AssertionError(f"Old terminology in {destination}: {forbidden.group()}")
     await page.screenshot(path=str(destination), animations="disabled", full_page=False)
     import struct
     data = destination.read_bytes()
@@ -73,12 +67,14 @@ async def screenshot(page, destination):
 
 async def main(args):
     args.output.mkdir(parents=True, exist_ok=True)
+    replay = args.replay.read_text() if args.replay else fresh_replay()
     async with async_playwright() as p:
         launch = {"headless": True, "args": ["--no-sandbox", "--disable-dev-shm-usage"]}
         if args.chromium:
             launch["executable_path"] = args.chromium
         browser = await p.chromium.launch(**launch)
         context = await browser.new_context(viewport={"width": 1440, "height": 900}, device_scale_factor=1, reduced_motion="reduce")
+        await context.add_init_script("localStorage.setItem('flutter.gameplay_hints_enabled', 'false')")
         page = await context.new_page()
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
@@ -86,24 +82,33 @@ async def main(args):
         await page.locator("flt-semantics-placeholder").evaluate("el => el.click()", timeout=20000)
         await page.get_by_text("New local match", exact=True).wait_for(timeout=30000)
         await screenshot(page, args.output / "home-desktop.png")
+        await page.get_by_text("Learn the rules", exact=True).click()
+        await page.get_by_text("The founding rules", exact=True).wait_for()
+        await screenshot(page, args.output / "rules-desktop.png")
+        await page.reload(wait_until="domcontentloaded")
+        await page.locator("flt-semantics-placeholder").evaluate("el => el.click()")
+        await page.get_by_text("New local match", exact=True).wait_for()
         await page.get_by_text("New local match", exact=True).click()
-        await page.get_by_text("Match setup", exact=True).wait_for(timeout=20000)
-        # Flutter's game-option chips are painted but not exposed as text semantics.
-        # This fixed point is inside the Vs AI chip in the 1440x900 setup layout.
-        await page.mouse.click(340, 292)
-        await page.get_by_text("1 human · 2 computers", exact=True).wait_for(timeout=10000)
-        await page.get_by_text("Start match", exact=True).click()
-        # Wait for playable setup controls, not a presentation-specific tab label.
-        # Introductory tips can obscure the tab until dismissed.
-        # Set up a genuine three-seat match. The AI chooses its own moves; all
-        # settlements and roads for the human are legal actions through the UI.
-        for round_number in range(2):
-            await pick_legal_target(page, "Choose site", "Junction")
-            await pick_legal_target(page, "Choose road", "Road")
-            print(f"Completed starting placement {round_number + 1}", flush=True)
-        await dismiss_hints(page)
+        await page.get_by_text("Match setup", exact=True).wait_for()
+        await screenshot(page, args.output / "setup-desktop.png")
+        # Seed only this newly created browser context. Restoration uses the
+        # production saved-session format; the player's browser is untouched.
+        session = json.dumps({"version": 2, "replay": replay, "computerSeats": []})
+        await page.evaluate("""session => {
+            localStorage.setItem('flutter.stone_banner_local_session_v2', JSON.stringify(session));
+        }""", session)
+        await page.reload(wait_until="domcontentloaded")
+        await page.locator("flt-semantics-placeholder").evaluate("el => el.click()")
+        await page.get_by_text("Continue saved match", exact=True).click()
+        await page.get_by_text("I'm ready", exact=True).click()
         await page.wait_for_timeout(1100)
+        await dismiss_hints(page)
         await screenshot(page, args.output / "match-desktop.png")
+        # These canvas-painted tabs have no text node in web semantics.
+        # Coordinates are inside their centres at the fixed desktop viewport.
+        await page.mouse.click(1395, 80)
+        await screenshot(page, args.output / "realm-desktop.png")
+        await page.mouse.click(1125, 80)
         await page.set_viewport_size({"width": 430, "height": 932})
         await page.wait_for_timeout(700)
         await screenshot(page, args.output / "match-mobile.png")
@@ -111,7 +116,7 @@ async def main(args):
         await page.wait_for_timeout(700)
         await screenshot(page, args.output / "match-landscape.png")
         if errors:
-            print("Page errors:", errors, flush=True)
+            raise RuntimeError(f"Page errors: {errors}")
         await context.close()
         await browser.close()
 
@@ -120,5 +125,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="https://brandonp2412.github.io/stone-and-banner/")
     parser.add_argument("--output", type=Path, default=Path("docs/screenshots"))
+    parser.add_argument("--replay", type=Path, help="Capture this replay instead of generating an independent match")
     parser.add_argument("--chromium", default=os.environ.get("CHROMIUM_EXECUTABLE"))
     asyncio.run(main(parser.parse_args()))

@@ -50,6 +50,7 @@ app.*.map.json
 # Local code-assistant state and generated golden-test failure images
 /.serena/
 /test/failures/
+/tool/failures/
 
 # My todo files
 TODO.md

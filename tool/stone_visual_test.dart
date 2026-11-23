@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
+import 'package:stone_and_banner/ui/resource_icon.dart';
 
 import '../test/action_helpers.dart';
 import '../test/landscape_tabletop_test.dart' show tableWithSupplies;
@@ -12,10 +13,14 @@ void main() {
     final fonts = FontLoader('NotoSans')
       ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     await fonts.load();
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
     tester.view.physicalSize = const Size(393, 852);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.runAsync(loadResourceIcons);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(
@@ -41,10 +46,14 @@ void main() {
     final fonts = FontLoader('NotoSans')
       ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     await fonts.load();
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
     tester.view.physicalSize = const Size(393, 852);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.runAsync(loadResourceIcons);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(
@@ -72,6 +81,9 @@ void main() {
     final fonts = FontLoader('NotoSans')
       ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     await fonts.load();
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
     tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -96,7 +108,9 @@ void main() {
         ),
       ),
     );
+    await tester.runAsync(loadResourceIcons);
     await tester.pumpWidget(app(before));
+    await tester.runAsync(loadResourceIcons);
     await tester.pumpWidget(app(after));
     await tester.pump(const Duration(milliseconds: 400));
     await expectLater(

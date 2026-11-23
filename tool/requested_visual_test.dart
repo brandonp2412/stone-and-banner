@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
+import 'package:stone_and_banner/ui/resource_icon.dart';
 
 import '../test/action_helpers.dart';
 import '../test/landscape_tabletop_test.dart' show tableWithSupplies;
@@ -20,6 +21,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.runAsync(loadResourceIcons);
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),
@@ -57,6 +59,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     var state = tableWithSupplies().copyWith(phase: MatchPhase.roll);
+    await tester.runAsync(loadResourceIcons);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),
@@ -80,6 +83,29 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(state.rollCount, greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('all resource artwork sets', (tester) async {
+    tester.view.physicalSize = const Size(900, 1500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.runAsync(loadResourceIcons);
+    await (FontLoader(
+      'NotoSans',
+    )..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))).load();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),
+        home: const Scaffold(body: SizedBox()),
+      ),
+    );
+    showResourceIconPicker(tester.element(find.byType(SizedBox).first));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('visual_snapshots/icon_packs.png'),
+    );
     expect(tester.takeException(), isNull);
   });
 }
