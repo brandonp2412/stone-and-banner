@@ -171,8 +171,14 @@ void main() {
       );
       sites[vertex.id] = const Site(1, Structure.village);
     }
-    final s = base.copyWith(sites: sites);
+    var s = base.copyWith(sites: sites);
+    // An offer is only attempted on a deterministic subset of turns.
+    for (var round = 1; round <= 100; round++) {
+      s = s.copyWith(round: round);
+      if (AiActionAdapter.observe(s, 0).triesPlayerTrade) break;
+    }
     final view = AiActionAdapter.observe(s, 0);
+    expect(view.triesPlayerTrade, isTrue);
     final offers = view.legalActions.whereType<ProposeTrade>();
     expect(offers.any((o) => o.gives.length > 1 && o.wants.length > 1), isTrue);
     expect(offers.any((o) => o.gives.values.any((n) => n > 1)), isTrue);

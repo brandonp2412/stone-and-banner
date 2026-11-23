@@ -160,7 +160,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   }
 
   int? selectedGuard;
-  Offset? _hoverPosition;
+  final _boardHoverPosition = ValueNotifier<Offset?>(null);
   RollDice? _rollingDice;
   int _diceAnimationSerial = 0;
   late final AnimationController _roadController;
@@ -318,6 +318,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   late final AnimationController _cardsTabController;
   late final AnimationController _cityFallController;
   late final AnimationController _crownRoadController;
+  late final AnimationController _roadBreakController;
+  int? _brokenRoadOwner, _roadBreakVertex;
+  List<int> _brokenRoadRoute = const [];
+  int _roadBeforeBreak = 0, _roadAfterBreak = 0;
+  bool _roadAwardLost = false;
   int? _crownRoadWinner;
   List<int> _crownRoadRoute = const [];
   bool _unseenCard = false;
@@ -435,6 +440,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         )..addStatusListener((status) {
           if (status == AnimationStatus.completed && mounted) {
             setState(() => _fallenCityOwner = null);
+          }
+        });
+    _roadBreakController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 3400),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed && mounted) {
+            setState(() => _brokenRoadOwner = null);
           }
         });
     _crownRoadController =
@@ -1339,6 +1353,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   @override
   void dispose() {
     FocusManager.instance.removeEarlyKeyEventHandler(_handleMainActionKey);
+    _boardHoverPosition.dispose();
     _turnClock?.cancel();
     _newCardTimer?.cancel();
     _roadController.dispose();
@@ -1347,6 +1362,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     _cardsTabController.dispose();
     _cityFallController.dispose();
     _crownRoadController.dispose();
+    _roadBreakController.dispose();
     for (final controller in _panelScroll) {
       controller.dispose();
     }
@@ -1444,6 +1460,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       _crownRoadWinner = null;
       _crownRoadRoute = const [];
       _crownRoadController.reset();
+      _roadBreakController.reset();
+      _brokenRoadOwner = null;
+      _brokenRoadRoute = const [];
+      _roadBreakVertex = null;
       _dismissedHintContext = null;
       _unseenCard = false;
       _newCardNotice = null;
@@ -1509,6 +1529,38 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           ? edge.b
           : edge.a;
       _roadController.forward(from: 0);
+    }
+    final previous = oldWidget.state;
+    if (s.seed == previous.seed && s.events.length > previous.events.length) {
+      final holder = previous.crownRoadHolder;
+      if (holder != null) {
+        final before = MatchEngine.crownRoad(previous, holder);
+        final after = MatchEngine.crownRoad(s, holder);
+        final route = MatchEngine.crownRoadPath(previous, holder);
+        final vertices = {
+          for (final id in route) ...[
+            s.topology.edges[id].a,
+            s.topology.edges[id].b,
+          ],
+        };
+        final blockers = vertices.where(
+          (v) =>
+              s.guards[v] != null &&
+              s.guards[v]!.owner != holder &&
+              previous.guards[v]?.owner != s.guards[v]!.owner,
+        );
+        if (after < before &&
+            blockers.isNotEmpty &&
+            !MediaQuery.disableAnimationsOf(context)) {
+          _brokenRoadOwner = holder;
+          _brokenRoadRoute = route;
+          _roadBreakVertex = blockers.first;
+          _roadBeforeBreak = before;
+          _roadAfterBreak = after;
+          _roadAwardLost = s.crownRoadHolder != holder;
+          _roadBreakController.forward(from: 0);
+        }
+      }
     }
     if (s.seed == oldWidget.state.seed &&
         s.crownRoadHolder != null &&
@@ -1779,7 +1831,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             },
                           ),
                         ),
-                        if ((portrait || _hasTopActivitySpace) &&
+                        if ((portrait || !mobile || _hasTopActivitySpace) &&
                             _mobilePage == null)
                           Positioned(
                             top: 4,
@@ -1814,7 +1866,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                       ? 'portrait-reaction-toast'
                                       : 'top-reaction-toast',
                                 ),
-                                showEmotes: portrait,
+                                showActivity: portrait || _hasTopActivitySpace,
                                 state: s,
                                 viewerSeat: viewerSeat,
                                 computerSeats: widget.computerSeats,
@@ -2027,6 +2079,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               ),
             if (_fallenCityOwner != null)
               Positioned.fill(child: IgnorePointer(child: _cityFallOverlay())),
+            if (_brokenRoadOwner != null)
+              Positioned.fill(child: IgnorePointer(child: _roadBreakOverlay())),
             if (_crownRoadWinner != null)
               Positioned.fill(child: IgnorePointer(child: _crownRoadOverlay())),
             if (gameplayHint != null)
@@ -2053,6 +2107,56 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       ),
     );
   }
+
+  Widget _roadBreakOverlay() => AnimatedBuilder(
+    animation: _roadBreakController,
+    builder: (context, child) {
+      final t = _roadBreakController.value;
+      final fade =
+          (t < .12
+                  ? t / .12
+                  : t > .8
+                  ? (1 - t) / .2
+                  : 1.0)
+              .clamp(0.0, 1.0);
+      return Align(
+        alignment: const Alignment(0, -.65),
+        child: Opacity(
+          opacity: fade,
+          child: Transform.translate(
+            offset: Offset(math.sin(t * math.pi * 28) * 12 * (1 - t), t * 14),
+            child: Container(
+              key: const ValueKey('crown-road-break-animation'),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xf52e181c),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xffff756e), width: 2),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '💔 CROWN ROAD BROKEN',
+                    style: TextStyle(
+                      color: Color(0xffff8c83),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    '${s.players[_brokenRoadOwner!].id}: $_roadBeforeBreak → $_roadAfterBreak roads'
+                    '${_roadAwardLost ? ' · −2 Renown' : ''}',
+                  ),
+                  const Text('One guard. Your grand road, in pieces.'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 
   Widget _crownRoadOverlay() => AnimatedBuilder(
     animation: _crownRoadController,
@@ -2718,7 +2822,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                                 color: seatColors[i],
                                               ),
                                             ),
-                                            if (!portrait)
+                                            if (!portrait &&
+                                                MediaQuery.sizeOf(context)
+                                                        .width <
+                                                    900 &&
+                                                !_hasTopActivitySpace)
                                               Positioned(
                                                 left: 0,
                                                 right: 0,
@@ -2979,138 +3087,149 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     key: _boardHintTarget,
     children: [
       Positioned.fill(
-        child: LayoutBuilder(
-          builder: (context, box) {
-            // Keep the instruction strip outside the interactive map coordinates.
-            final size = Size(
-              box.maxWidth,
-              math.max(
-                1,
-                box.maxHeight - (mobileFullscreen ? 0 : _instructionHeight),
-              ),
-            );
-            final hover = _hoverPosition == null
-                ? null
-                : _boardHover(_hoverPosition!, size);
-            return Align(
-              alignment: Alignment.topCenter,
-              child: SizedBox(
-                width: size.width,
-                height: size.height,
-                child: ClipRect(
-                  child: Semantics(
-                    key: const ValueKey('realm-map'),
-                    label: 'Realm map. $_instruction. $_hint',
-                    child: MouseRegion(
-                      cursor: hover == null
-                          ? SystemMouseCursors.basic
-                          : SystemMouseCursors.click,
-                      onHover: (event) =>
-                          setState(() => _hoverPosition = event.localPosition),
-                      onExit: (_) => setState(() => _hoverPosition = null),
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTapUp: s.tactical == null && !widget.observing
-                            ? (details) => tapBoard(details.localPosition, size)
-                            : null,
-                        child: CustomPaint(
-                          painter: _Painter(
-                            s,
-                            widget.observing || s.tactical != null
-                                ? _Move.inspect
-                                : move,
-                            selectedGuard,
-                            showTargets:
-                                !widget.observing &&
-                                viewerSeat == s.actingSeat &&
-                                s.tactical == null,
-                            hoverBuilds: _hoverPosition != null,
-                            hoveredRoad:
-                                _hoverPosition != null &&
-                                    !widget.observing &&
-                                    viewerSeat == s.actingSeat &&
-                                    s.tactical == null &&
-                                    (move == _Move.road ||
-                                        (move == _Move.inspect &&
-                                            s.phase == MatchPhase.actions))
-                                ? _roadNear(
-                                    _hoverPosition!,
-                                    BoardGeometry(size),
-                                    MatchEngine.legalEdges(s),
-                                  )
-                                : null,
-                            cardRoadTargets: _mapCardEdges,
-                            cardVertexTargets: _mapCardVertices,
-                            cardTileTargets: _mapCardTiles,
-                            animatedRoad: _animatedRoad,
-                            animatedRoadStart: _animatedRoadStart,
-                            roadReveal: _roadReveal,
-                            roadCelebration: _crownRoadController,
-                            highlightedRoads: _crownRoadRoute,
-                            numberPulse: _numberPulseController,
-                            banditBlock: _banditBlockController,
-                            humiliatedBanditTile: _humiliatedBanditTile,
-                          ),
-                          child: SizedBox.expand(
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                if (hover != null)
-                                  Positioned(
-                                    left: (_hoverPosition!.dx + 16).clamp(
-                                      8.0,
-                                      math.max(8.0, size.width - 268),
-                                    ),
-                                    top: (_hoverPosition!.dy + 24).clamp(
-                                      8.0,
-                                      math.max(8.0, size.height - 100),
-                                    ),
-                                    child: IgnorePointer(
-                                      child: Container(
-                                        key: const ValueKey('board-hover-hint'),
-                                        width: 250,
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xff101e25),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+        child: ValueListenableBuilder<Offset?>(
+          valueListenable: _boardHoverPosition,
+          builder: (context, hoverPosition, _) => LayoutBuilder(
+            builder: (context, box) {
+              // Keep pointer motion local to the map, rather than rebuilding the
+              // player bar, action panel, and trade calculations on every event.
+              // Keep the instruction strip outside the interactive map coordinates.
+              final size = Size(
+                box.maxWidth,
+                math.max(
+                  1,
+                  box.maxHeight - (mobileFullscreen ? 0 : _instructionHeight),
+                ),
+              );
+              final hover = hoverPosition == null
+                  ? null
+                  : _boardHover(hoverPosition, size);
+              return Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: size.width,
+                  height: size.height,
+                  child: ClipRect(
+                    child: Semantics(
+                      key: const ValueKey('realm-map'),
+                      label: 'Realm map. $_instruction. $_hint',
+                      child: MouseRegion(
+                        cursor: hover == null
+                            ? SystemMouseCursors.basic
+                            : SystemMouseCursors.click,
+                        onHover: (event) =>
+                            _boardHoverPosition.value = event.localPosition,
+                        onExit: (_) => _boardHoverPosition.value = null,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapUp: s.tactical == null && !widget.observing
+                              ? (details) =>
+                                    tapBoard(details.localPosition, size)
+                              : null,
+                          child: CustomPaint(
+                            painter: _Painter(
+                              s,
+                              widget.observing || s.tactical != null
+                                  ? _Move.inspect
+                                  : move,
+                              selectedGuard,
+                              showTargets:
+                                  !widget.observing &&
+                                  viewerSeat == s.actingSeat &&
+                                  s.tactical == null,
+                              hoverBuilds: hoverPosition != null,
+                              hoveredRoad:
+                                  hoverPosition != null &&
+                                      !widget.observing &&
+                                      viewerSeat == s.actingSeat &&
+                                      s.tactical == null &&
+                                      (move == _Move.road ||
+                                          (move == _Move.inspect &&
+                                              s.phase == MatchPhase.actions))
+                                  ? _roadNear(
+                                      hoverPosition,
+                                      BoardGeometry(size),
+                                      MatchEngine.legalEdges(s),
+                                    )
+                                  : null,
+                              cardRoadTargets: _mapCardEdges,
+                              cardVertexTargets: _mapCardVertices,
+                              cardTileTargets: _mapCardTiles,
+                              animatedRoad: _animatedRoad,
+                              animatedRoadStart: _animatedRoadStart,
+                              roadReveal: _roadReveal,
+                              roadBreak: _roadBreakController,
+                              brokenRoads: _brokenRoadRoute,
+                              roadBreakVertex: _roadBreakVertex,
+                              roadCelebration: _crownRoadController,
+                              highlightedRoads: _crownRoadRoute,
+                              numberPulse: _numberPulseController,
+                              banditBlock: _banditBlockController,
+                              humiliatedBanditTile: _humiliatedBanditTile,
+                            ),
+                            child: SizedBox.expand(
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  if (hover != null)
+                                    Positioned(
+                                      left: (hoverPosition!.dx + 16).clamp(
+                                        8.0,
+                                        math.max(8.0, size.width - 268),
+                                      ),
+                                      top: (hoverPosition.dy + 24).clamp(
+                                        8.0,
+                                        math.max(8.0, size.height - 100),
+                                      ),
+                                      child: IgnorePointer(
+                                        child: Container(
+                                          key: const ValueKey(
+                                            'board-hover-hint',
                                           ),
-                                          border: Border.all(
-                                            color: const Color(0xffd6bd80),
+                                          width: 250,
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xff101e25),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xffd6bd80),
+                                            ),
                                           ),
-                                        ),
-                                        child: Text(
-                                          hover,
-                                          style: const TextStyle(
-                                            color: Color(0xfff5ead3),
-                                            fontSize: 13,
+                                          child: Text(
+                                            hover,
+                                            style: const TextStyle(
+                                              color: Color(0xfff5ead3),
+                                              fontSize: 13,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
+                                  BoardEventEffects(
+                                    eventIndex: s.events.length,
+                                    event: s.events.isEmpty
+                                        ? null
+                                        : s.events.last,
+                                    anchor: _eventAnchor(size),
                                   ),
-                                BoardEventEffects(
-                                  eventIndex: s.events.length,
-                                  event: s.events.isEmpty
-                                      ? null
-                                      : s.events.last,
-                                  anchor: _eventAnchor(size),
-                                ),
-                                if (_rollingDice case final dice?)
-                                  IgnorePointer(
-                                    child: DiceRoll(
-                                      key: ValueKey(_diceAnimationSerial),
-                                      first: dice.first,
-                                      second: dice.second,
-                                      onComplete: () {
-                                        if (mounted &&
-                                            identical(_rollingDice, dice)) {
-                                          setState(() => _rollingDice = null);
-                                        }
-                                      },
+                                  if (_rollingDice case final dice?)
+                                    IgnorePointer(
+                                      child: DiceRoll(
+                                        key: ValueKey(_diceAnimationSerial),
+                                        first: dice.first,
+                                        second: dice.second,
+                                        onComplete: () {
+                                          if (mounted &&
+                                              identical(_rollingDice, dice)) {
+                                            setState(() => _rollingDice = null);
+                                          }
+                                        },
+                                      ),
                                     ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -3118,9 +3237,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
       // Show countdown / raid interval and defence / bandit strength.
@@ -3684,7 +3803,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 _Move.guardMove,
                 Icons.open_with,
                 'Move Guard',
-                'Free · active Guard, once per turn',
+                'Free · active Guard, once per turn\nOne edge along your road; displace a weaker enemy Guard',
                 s.guards.keys.any(
                   (v) =>
                       s.guards[v]!.owner == s.active &&
@@ -5131,6 +5250,9 @@ class _Painter extends CustomPainter {
     this.mode,
     this.selectedGuard, {
     required this.roadReveal,
+    required this.roadBreak,
+    required this.brokenRoads,
+    required this.roadBreakVertex,
     required this.roadCelebration,
     required this.highlightedRoads,
     required this.numberPulse,
@@ -5148,6 +5270,7 @@ class _Painter extends CustomPainter {
          repaint: Listenable.merge([
            roadReveal,
            roadCelebration,
+           roadBreak,
            numberPulse,
            banditBlock,
            resourceIconStyle,
@@ -5164,6 +5287,9 @@ class _Painter extends CustomPainter {
   final int? animatedRoad;
   final int? animatedRoadStart;
   final Animation<double> roadReveal;
+  final Animation<double> roadBreak;
+  final List<int> brokenRoads;
+  final int? roadBreakVertex;
   final Animation<double> roadCelebration;
   final List<int> highlightedRoads;
   final Animation<double> numberPulse;
@@ -5454,6 +5580,33 @@ class _Painter extends CustomPainter {
             ..strokeCap = StrokeCap.round,
         );
       }
+    }
+    if (roadBreak.value > 0 && roadBreak.value < 1 && roadBreakVertex != null) {
+      final t = roadBreak.value;
+      final paint = Paint()
+        ..color = const Color(0xffff554e).withValues(alpha: (1 - t) * .9)
+        ..strokeWidth = 7
+        ..strokeCap = StrokeCap.round;
+      for (final id in brokenRoads) {
+        final edge = state.topology.edges[id];
+        final a = g.vertex(state.topology.vertices[edge.a]);
+        final b = g.vertex(state.topology.vertices[edge.b]);
+        final drift = Offset(0, 18 * t * t);
+        canvas.drawLine(a + drift, Offset.lerp(a, b, .42)! + drift, paint);
+        canvas.drawLine(Offset.lerp(a, b, .58)! + drift, b + drift, paint);
+      }
+      final c = g.vertex(state.topology.vertices[roadBreakVertex!]);
+      final radius = 12 + 22 * t;
+      canvas.drawCircle(
+        c,
+        radius,
+        paint
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
+      canvas.drawLine(c + const Offset(-8, -14), c + const Offset(3, 0), paint);
+      canvas.drawLine(c + const Offset(3, 0), c + const Offset(-3, 4), paint);
+      canvas.drawLine(c + const Offset(-3, 4), c + const Offset(8, 14), paint);
     }
     final legal = <int>{
       if (hoverBuilds) ...MatchEngine.legalVertices(state),

@@ -19,7 +19,7 @@ Use the game’s four panels to plan your turn:
 - **Cards:** Play strategy cards from Innovation, Commerce and Governance. Cards can provide goods, help construction, or disrupt rival plans.
 - **Realm:** Review your holdings and develop your towns through five tiers in each of the three development tracks.
 
-Raids threaten the whole table. Active guards contribute to shared defence; stronger ranks contribute more. Fortifications protect towns, and eligible players can pledge emergency aid when an invasion arrives. A seven moves the Bandit and can trigger discards or theft.
+Raids threaten the whole table. Active guards contribute to shared defence; stronger ranks contribute more. Fortifications protect towns, and eligible players can pledge emergency aid when an invasion arrives. After the first raid, attackers gain one additional strength. Defending can award Guardian’s Honour, up to two Renown per player. A seven moves the Bandit and can trigger discards or theft.
 
 The first player to reach 15 Renown wins. Villages contribute 1, towns 2, and capitals 4. The Crown Road award adds 2 for a qualifying continuous road of at least five edges. Guardian’s Honour and Charter Points also contribute to your score.
 

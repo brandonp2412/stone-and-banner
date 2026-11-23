@@ -315,7 +315,7 @@ class HeuristicAi {
     final ownActiveStrength = ownGuards
         .where((entry) => entry.value.active)
         .fold<int>(0, (total, entry) => total + entry.value.rank.strength);
-    final approachingFleet = MatchEngine.invasionStrength(state) + 1;
+    final approachingFleet = MatchEngine.invasionStrength(state);
     final needDefence = MatchEngine.defenceStrength(state) < approachingFleet;
     final preparing = state.reaverPressure >= 1 || state.round >= 2;
     final ownsTown = state.sites.values.any(

@@ -28,7 +28,7 @@ void main() {
         jsonDecode(MatchEngine.exportReplay(s)) as Map<String, dynamic>;
     payload.remove('balance'); // Historical v1 fixtures have no policy field.
     final imported = MatchEngine.importReplay(jsonEncode(payload));
-    expect(imported.balance.toJson(), MatchBalance.baseline.toJson());
+    expect(imported.balance.toJson(), MatchBalance.legacy.toJson());
     expectConserved(imported);
   });
 

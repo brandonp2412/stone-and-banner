@@ -89,57 +89,67 @@ void main() {
     await mouse.removePointer();
   });
 
-  testWidgets(
-    'large desktop puts smug emote on sender avatar, not over the board',
-    (tester) async {
-      tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = const Size(1440, 900);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      addTearDown(tester.view.resetPhysicalSize);
-      final state = tableWithSupplies();
-      Widget screen(int serial) => MaterialApp(
-        theme: ThemeData(fontFamily: 'NotoSans', brightness: Brightness.dark),
-        home: MatchView(
-          state: state,
-          online: true,
-          viewingSeat: 0,
-          observing: true,
-          onEvent: (_) {},
-          onEmote: (_) {},
-          networkEmote: serial == 0 ? null : '😏',
-          networkEmoteSerial: serial,
-          networkEmoteSeat: 1,
-        ),
-      );
-      await tester.pumpWidget(screen(0));
-      await tester.pumpWidget(screen(1));
-      await tester.pump(const Duration(milliseconds: 450));
-      expect(find.byKey(const ValueKey('player-emote-1')), findsOneWidget);
-      expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is GameEmoteIcon &&
-              widget.emoji == '😏' &&
-              widget.size == 94,
-        ),
-        findsNothing,
-      );
-      expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is GameEmoteIcon &&
-              widget.emoji == '😏' &&
-              widget.size == 17,
-        ),
-        findsOneWidget,
-      );
-      await expectLater(
-        find.byType(MatchView),
-        matchesGoldenFile('goldens/desktop_profile_emote.png'),
-      );
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
+  testWidgets('large desktop shows emotes as toasts below the player tiles', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1440, 900);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final state = tableWithSupplies();
+    Widget screen(int serial) => MaterialApp(
+      theme: ThemeData(fontFamily: 'NotoSans', brightness: Brightness.dark),
+      home: MatchView(
+        state: state,
+        online: true,
+        viewingSeat: 0,
+        observing: true,
+        onEvent: (_) {},
+        onEmote: (_) {},
+        networkEmote: serial == 0 ? null : '😏',
+        networkEmoteSerial: serial,
+        networkEmoteSeat: 1,
+      ),
+    );
+    await tester.pumpWidget(screen(0));
+    await tester.pumpWidget(screen(1));
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(find.byKey(const ValueKey('player-emote-1')), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is GameEmoteIcon &&
+            widget.emoji == '😏' &&
+            widget.size == 94,
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is GameEmoteIcon &&
+            widget.emoji == '😏' &&
+            widget.size == 32,
+      ),
+      findsOneWidget,
+    );
+    final toast = find.byKey(const ValueKey('match-activity-notice'));
+    expect(toast, findsOneWidget);
+    expect(
+      tester.getTopLeft(toast).dy,
+      greaterThan(
+        tester.getBottomLeft(find.byKey(const ValueKey('player-tile-1'))).dy,
+      ),
+    );
+    expect(
+      tester.getCenter(toast).dx,
+      closeTo(
+        tester.getCenter(find.byKey(const ValueKey('top-reaction-toast'))).dx,
+        1,
+      ),
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('small landscape keeps reaction on player profile', (
     tester,

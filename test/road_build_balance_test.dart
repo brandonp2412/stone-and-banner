@@ -15,41 +15,44 @@ Offset edgeMidpoint(MatchState state, Size mapSize, int id) {
 }
 
 void main() {
-  test('raiders scale with upgraded sites, not past raids or pressure', () {
-    final initial = tableWithSupplies();
-    final baseline = initial.copyWith(
-      sites: {
-        for (final entry in initial.sites.entries)
-          entry.key: Site(entry.value.owner, Structure.village),
-      },
-    );
-    expect(MatchEngine.invasionStrength(baseline), 0);
-    final villages = baseline.sites.keys.toList();
-    final town = baseline.copyWith(
-      sites: {
-        ...baseline.sites,
-        villages[0]: Site(baseline.sites[villages[0]]!.owner, Structure.town),
-      },
-      invasions: 21,
-      reaverPressure: 12,
-    );
-    expect(MatchEngine.invasionStrength(town), 1);
-    final capital = town.copyWith(
-      sites: {
-        ...town.sites,
-        villages[1]: Site(town.sites[villages[1]]!.owner, Structure.capital),
-      },
-      invasions: 101,
-      reaverPressure: 25,
-    );
-    expect(MatchEngine.invasionStrength(capital), 2);
-    expect(
-      MatchEngine.invasionStrength(
-        capital.copyWith(invasions: 0, reaverPressure: 0),
-      ),
-      2,
-    );
-  });
+  test(
+    'raiders scale with upgraded sites and get a bonus after first raid',
+    () {
+      final initial = tableWithSupplies();
+      final baseline = initial.copyWith(
+        sites: {
+          for (final entry in initial.sites.entries)
+            entry.key: Site(entry.value.owner, Structure.village),
+        },
+      );
+      expect(MatchEngine.invasionStrength(baseline), 0);
+      final villages = baseline.sites.keys.toList();
+      final town = baseline.copyWith(
+        sites: {
+          ...baseline.sites,
+          villages[0]: Site(baseline.sites[villages[0]]!.owner, Structure.town),
+        },
+        invasions: 21,
+        reaverPressure: 12,
+      );
+      expect(MatchEngine.invasionStrength(town), 2);
+      final capital = town.copyWith(
+        sites: {
+          ...town.sites,
+          villages[1]: Site(town.sites[villages[1]]!.owner, Structure.capital),
+        },
+        invasions: 101,
+        reaverPressure: 25,
+      );
+      expect(MatchEngine.invasionStrength(capital), 3);
+      expect(
+        MatchEngine.invasionStrength(
+          capital.copyWith(invasions: 0, reaverPressure: 0),
+        ),
+        2,
+      );
+    },
+  );
 
   testWidgets('tap owned road to choose extension and build directly', (
     tester,

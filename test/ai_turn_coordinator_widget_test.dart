@@ -1,4 +1,5 @@
 import 'board_target_helpers.dart';
+import 'p2p_trade_turn_ui_test.dart' show botOffersHuman;
 
 import 'dart:convert';
 
@@ -105,6 +106,43 @@ void main() {
     expect(find.text('Computer turn'), findsNothing);
     expect(find.text('Pass the device'), findsNothing);
     expect(find.byTooltip('Choose target'), findsNothing);
+  });
+
+  testWidgets('desktop fast-forward resumes a bot waiting for a trade', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await startAi(tester);
+    final dynamic app = tester.state(find.byType(StoneBannerApp));
+    app.ai.pause();
+    final offered = botOffersHuman();
+    app.setState(() {
+      app.match = offered;
+      app.aiSeats = <int>{1, 2};
+    });
+    app.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(app.ai.isPaused, isTrue);
+    // Dismiss the incoming offer without answering it.
+    final dismiss = find.byKey(const ValueKey('dismiss-incoming-trade'));
+    if (dismiss.evaluate().isNotEmpty) {
+      await tester.tap(dismiss);
+      await tester.pump();
+    }
+    await tester.tap(find.byKey(const ValueKey('fast-forward-bots')));
+    expect(app.ai.isPaused, isFalse);
+    for (var tick = 0; tick < 100 && identical(app.match, offered); tick++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(identical(app.match, offered), isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 31));
   });
 
   testWidgets('leaving board cancels an in-flight bot event', (tester) async {

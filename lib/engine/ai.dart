@@ -46,6 +46,14 @@ class AiTurnView {
   final List<MatchEvent> legalActions;
   final int _seed;
   final AiStrategySignals strategy;
+
+  /// Stable for the whole turn, so taking actions cannot reroll an offer.
+  bool get triesPlayerTrade =>
+      AiActionAdapter._mix(
+            _seed ^ (round * 0x85ebca6b) ^ ((seat + 1) * 0x9e3779b9),
+          ) %
+          100 <
+      25;
 }
 
 /// Public and own-seat signals for advanced planning. No opponent's stores,
@@ -700,7 +708,9 @@ abstract final class AiActionAdapter {
     if (view.phase == MatchPhase.actions) {
       final end = view.legalActions.whereType<EndTurn>().first;
       if (view.actionsSinceRoll >= 8 || key % 5 == 0) return end;
-      final other = view.legalActions.where((e) => e is! EndTurn).toList();
+      final other = view.legalActions
+          .where((e) => e is! EndTurn && e is! ProposeTrade)
+          .toList();
       return other.isEmpty ? end : other[key % other.length];
     }
     return view.legalActions[key % view.legalActions.length];

@@ -33,6 +33,8 @@ void main() {
         (geometry.vertex(state.topology.vertices[edge.a]) +
                 geometry.vertex(state.topology.vertices[edge.b])) /
             2;
+    final hud = find.byKey(const ValueKey('raid-defense-hud'));
+    final hudBeforeHover = tester.widget(hud);
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
     await mouse.moveTo(position);
@@ -40,6 +42,8 @@ void main() {
     expect(find.byKey(const ValueKey('board-hover-hint')), findsOneWidget);
     expect(find.textContaining('Build road ·'), findsWidgets);
     expect(events, 0);
+    // Pointer motion should not rebuild unrelated match UI.
+    expect(identical(tester.widget(hud), hudBeforeHover), isTrue);
     await mouse.moveTo(const Offset(1, 1));
     await tester.pump();
     expect(find.byKey(const ValueKey('board-hover-hint')), findsNothing);

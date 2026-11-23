@@ -15,7 +15,7 @@ void main() {
   test('a sole active defender wins immediately when Honour reaches 15', () {
     final base = tableWithSupplies();
     final players = base.players.toList();
-    players[0] = players[0].copyWith(guardianHonour: 11);
+    players[0] = players[0].copyWith(guardianHonour: 1, charterPoints: 10);
     final state = base.copyWith(
       phase: MatchPhase.invasion,
       invasionAid: 2,

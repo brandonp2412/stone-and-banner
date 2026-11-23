@@ -74,6 +74,7 @@ class P2pRoom extends ChangeNotifier {
   Timer? _botTradeGraceTimer;
   int? _botTradeGraceOfferId;
   int? _botTradeGraceExpiredId;
+  bool _fastForwardingBots = false;
   int _botFailures = 0;
   int _botFailedAtVersion = -1;
   Future<void> get aiSettled => _ai.settled;
@@ -568,7 +569,7 @@ class P2pRoom extends ChangeNotifier {
               )
               .firstOrNull
         : null;
-    if (offer == null) {
+    if (offer == null || _fastForwardingBots) {
       _botTradeGraceTimer?.cancel();
       _botTradeGraceTimer = null;
       _botTradeGraceOfferId = null;
@@ -691,6 +692,7 @@ class P2pRoom extends ChangeNotifier {
   }
 
   void _syncAi() {
+    if (!botsActing) _fastForwardingBots = false;
     final state = _room?.state;
     if (_disposed ||
         !isHost ||
@@ -1073,6 +1075,8 @@ class P2pRoom extends ChangeNotifier {
   void fastForwardBots() {
     if (!connected || !botsActing) return;
     if (isHost) {
+      _fastForwardingBots = true;
+      _syncAi();
       _ai.fastForward();
     } else if (guestPeer != null) {
       _send(guestPeer!, {'op': 'fastForwardBots'});

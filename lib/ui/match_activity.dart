@@ -22,6 +22,7 @@ class MatchActivity extends StatefulWidget {
     this.targetSeat,
     this.emotesOnly = false,
     this.showEmotes = true,
+    this.showActivity = true,
     this.emote,
     this.emoteSerial = 0,
     this.emoteSeat,
@@ -31,7 +32,7 @@ class MatchActivity extends StatefulWidget {
   final int viewerSeat;
   final Set<int> computerSeats;
   final int? targetSeat;
-  final bool emotesOnly, showEmotes;
+  final bool emotesOnly, showEmotes, showActivity;
   final String? emote;
   final int emoteSerial;
   final int? emoteSeat;
@@ -110,7 +111,7 @@ class _MatchActivityState extends State<MatchActivity> {
         });
       }
     }
-    if (widget.emotesOnly) return;
+    if (widget.emotesOnly || !widget.showActivity) return;
     final state = widget.state;
     if (state.events.length <= oldWidget.state.events.length) return;
     final event = state.events.last;

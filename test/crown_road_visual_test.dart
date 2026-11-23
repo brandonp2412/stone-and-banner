@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/engine/board.dart';
+import 'package:stone_and_banner/engine/advanced.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/ui/match_activity.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
@@ -78,6 +79,51 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  for (final reducedMotion in [false, true]) {
+    testWidgets('guard breaks Crown Road; reduced motion $reducedMotion', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({'gameplay_hints_enabled': false});
+      final base = longRoad();
+      final route = MatchEngine.crownRoadPath(base, 0);
+      final a = base.topology.edges[route[1]];
+      final b = base.topology.edges[route[2]];
+      final blocker = {a.a, a.b}.intersection({b.a, b.b}).single;
+      final before = base.copyWith(crownRoadHolder: 0);
+      final after = before.copyWith(
+        clearRoadHolder: true,
+        guards: {blocker: const GuardPiece(1, GuardRank.sentinel, true, 0)},
+        events: [...before.events, MoveGuard(0, blocker)],
+      );
+      expect(MatchEngine.crownRoad(after, 0), 3);
+      Widget app(MatchState state) => MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(disableAnimations: reducedMotion),
+          child: MatchView(state: state, onEvent: (_) {}),
+        ),
+      );
+      await tester.pumpWidget(app(before));
+      await tester.pump();
+      await tester.pumpWidget(app(after));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        find.byKey(const ValueKey('crown-road-break-animation')),
+        reducedMotion ? findsNothing : findsOneWidget,
+      );
+      if (!reducedMotion) {
+        expect(find.text('💔 CROWN ROAD BROKEN'), findsOneWidget);
+        expect(find.text('A: 5 → 3 roads · −2 Renown'), findsOneWidget);
+      }
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('crown-road-break-animation')),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets('bot offer does not generate duplicate activity toast', (
     tester,

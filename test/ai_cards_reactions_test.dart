@@ -58,6 +58,17 @@ MatchState showProduction(
   return state.copyWith(sites: sites);
 }
 
+// Offer-policy tests use a turn whose deterministic chance roll succeeds.
+MatchState tradeTurn(MatchState state) {
+  for (var round = 1; round < 1000; round++) {
+    final candidate = state.copyWith(round: round);
+    if (AiActionAdapter.observe(candidate, candidate.active).triesPlayerTrade) {
+      return candidate;
+    }
+  }
+  throw StateError('No trading turn found');
+}
+
 void conserve(MatchState state) {
   for (final resource in Resource.values) {
     final total =
@@ -365,12 +376,49 @@ void main() {
     });
   }
 
+  test('useful offers have a bounded turn chance without action rerolls', () {
+    var state = fixture().copyWith(
+      sites: {0: const Site(0, Structure.village)},
+    );
+    state = stock(state, 0, {Resource.wood: 2});
+    state = showProduction(state, 1, [Resource.wheat, Resource.ore]);
+    var offers = 0;
+    for (var round = 1; round <= 400; round++) {
+      final turn = state.copyWith(round: round);
+      final view = AiActionAdapter.observe(turn, 0);
+      final proposal = AiCardStrategy.propose(view);
+      if (proposal != null) offers++;
+      expect(proposal != null, view.triesPlayerTrade);
+      final afterAction = AiActionAdapter.observe(
+        turn.copyWith(events: [...turn.events, const EndTurn()]),
+        0,
+      );
+      expect(afterAction.triesPlayerTrade, view.triesPlayerTrade);
+      expect(AiCardStrategy.propose(afterAction)?.toJson(), proposal?.toJson());
+      if (!view.triesPlayerTrade) {
+        expect(AiActionAdapter.decide(view), isNot(isA<ProposeTrade>()));
+      }
+    }
+    expect(offers, inInclusiveRange(70, 130));
+  });
+
+  test('recipient appeal requires that recipient to produce the payment', () {
+    var state = fixture().copyWith(
+      sites: {0: const Site(0, Structure.village)},
+    );
+    state = stock(state, 0, {Resource.wood: 2});
+    state = tradeTurn(state);
+    // No opponent has productive sites, so there is no plausible supplier.
+    expect(AiCardStrategy.propose(AiActionAdapter.observe(state, 0)), isNull);
+  });
+
   test('bot trades reward recipients instead of making one-sided asks', () {
     var state = fixture().copyWith(
       sites: {0: const Site(0, Structure.village)},
     );
     state = stock(state, 0, {Resource.wood: 2});
     state = showProduction(state, 1, [Resource.wheat, Resource.ore]);
+    state = tradeTurn(state);
     final view = AiActionAdapter.observe(state, 0);
     final offer = AiCardStrategy.propose(view);
     expect(offer, isA<ProposeTrade>());
@@ -407,6 +455,7 @@ void main() {
     );
     proposing = stock(proposing, 0, {Resource.wood: 2});
     proposing = showProduction(proposing, 1, [Resource.wheat, Resource.ore]);
+    proposing = tradeTurn(proposing);
     final view = AiActionAdapter.observe(proposing, 0);
     final offer = AiCardStrategy.propose(view);
     expect(offer, isA<ProposeTrade>());

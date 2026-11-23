@@ -88,6 +88,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   Timer? _localTradeGraceTimer;
   int? _localTradeOfferId;
   int? _localTradeExpiredId;
+  bool _fastForwardingBots = false;
   int _localAiFailedVersion = -1;
   int _localAiFailures = 0;
 
@@ -106,7 +107,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
               )
               .firstOrNull
         : null;
-    if (offer == null) {
+    if (offer == null || _fastForwardingBots) {
       _localTradeGraceTimer?.cancel();
       _localTradeGraceTimer = null;
       _localTradeOfferId = null;
@@ -175,7 +176,15 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         aiSeats.contains(AiTurnCoordinator.actingSeat(s, aiSeats.contains));
   }
 
+  void _fastForwardBots() {
+    if (!aiActing) return;
+    _fastForwardingBots = true;
+    _syncAi();
+    ai.fastForward();
+  }
+
   void _syncAi() {
+    if (!aiActing || page != Page.board) _fastForwardingBots = false;
     if (mounted &&
         _canRun &&
         page == Page.board &&
@@ -1254,7 +1263,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                         Navigator.of(context).canPop() == false &&
                         FocusManager.instance.primaryFocus?.context?.widget
                             is! EditableText) {
-                      ai.fastForward();
+                      _fastForwardBots();
                       return KeyEventResult.handled;
                     }
                     if (event is KeyDownEvent &&
@@ -1366,7 +1375,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                         : current.actingSeat,
                                     observing: aiActing,
                                     onFastForward: aiActing
-                                        ? ai.fastForward
+                                        ? _fastForwardBots
                                         : null,
                                     tradeReplyAllowed:
                                         oneHumanMatch &&

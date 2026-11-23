@@ -1118,9 +1118,16 @@ class MatchEngine {
   /// The fleet is as strong as the number of upgraded villages in play.
   /// Pressure determines *when* it attacks, not how hard it hits; a Village
   /// contributes nothing, and repeated invasions do not snowball its strength.
-  static int invasionStrength(MatchState s) => s.sites.values
-      .where((site) => site.structure != Structure.village)
-      .length;
+  static int invasionStrength(MatchState s) {
+    final towns = s.sites.values
+        .where((site) => site.structure != Structure.village)
+        .length;
+    // The first raid is the introductory difficulty. Subsequent raids need
+    // stronger defence; no towns still means there is nothing to raid.
+    return towns == 0
+        ? 0
+        : towns + (s.invasions > 0 ? s.balance.raidBonusAfterFirst : 0);
+  }
 
   /// Uses the same immutable resolution as the recorded event. Aid may still
   /// change this forecast while a tactical window is open.
@@ -1874,7 +1881,10 @@ class MatchEngine {
       final leaders = contributions.keys
           .where((i) => peak > 0 && contributions[i] == peak)
           .toList();
-      if (leaders.length == 1) {
+      if (leaders.length == 1 &&
+          (s.balance.guardianHonourCap == 0 ||
+              s.players[leaders.single].guardianHonour <
+                  s.balance.guardianHonourCap)) {
         final index = leaders.single;
         final players = List<PlayerState>.of(s.players);
         players[index] = players[index].copyWith(
@@ -1884,8 +1894,9 @@ class MatchEngine {
         report =
             'Defended $strength–$threat. ${players[index].id} earns Guardian\'s Honour (+1 Renown).';
       } else {
-        report =
-            'Defended $strength–$threat. No sole Guard leader; no Honour awarded.';
+        report = leaders.length == 1
+            ? 'Defended $strength–$threat. ${s.players[leaders.single].id} has reached the Guardian\'s Honour limit; no more Renown awarded.'
+            : 'Defended $strength–$threat. No sole Guard leader; no Honour awarded.';
       }
     } else {
       final targets =

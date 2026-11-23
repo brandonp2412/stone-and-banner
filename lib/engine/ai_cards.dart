@@ -106,19 +106,30 @@ abstract final class AiCardStrategy {
         view.publicOffers.where((o) => o.canRespond(view.seat)).toList()
           ..sort((a, b) => a.id.compareTo(b.id));
     if (offers.isEmpty) return null;
-    final offer = offers.first;
-    final accepts = view.legalActions.whereType<RespondTrade>().where(
-      (e) => e.offerId == offer.id && e.accept,
-    );
-    // A clear surplus of goods is a windfall even when today's build goal
-    // values the outgoing single good more highly than the incoming bundle.
-    final surplus =
-        offer.gives.values.fold<int>(0, (a, b) => a + b) -
-        offer.wants.values.fold<int>(0, (a, b) => a + b);
-    if (accepts.isNotEmpty &&
-        (_bundleGain(view, offer.wants, offer.gives) > 0.5 || surplus >= 2)) {
-      return accepts.first;
+    // Check every visible offer instead of automatically declining the oldest
+    // one while a newer, mutually useful offer waits behind it.
+    final profitable = <(RespondTrade, double)>[];
+    for (final offer in offers) {
+      final acceptance = view.legalActions.whereType<RespondTrade>().where(
+        (e) => e.offerId == offer.id && e.accept,
+      );
+      if (acceptance.isEmpty) continue;
+      final gain = _bundleGain(view, offer.wants, offer.gives);
+      final surplus =
+          offer.gives.values.fold<int>(0, (a, b) => a + b) -
+          offer.wants.values.fold<int>(0, (a, b) => a + b);
+      if (gain > 0.5 || surplus >= 2) {
+        profitable.add((acceptance.first, gain + surplus * 0.25));
+      }
     }
+    if (profitable.isNotEmpty) {
+      profitable.sort((a, b) {
+        final diff = b.$2.compareTo(a.$2);
+        return diff != 0 ? diff : a.$1.offerId!.compareTo(b.$1.offerId!);
+      });
+      return profitable.first.$1;
+    }
+    final offer = offers.first;
     if (!offer.isCounter) {
       final counters = view.legalActions
           .whereType<ProposeTrade>()
@@ -250,6 +261,10 @@ abstract final class AiCardStrategy {
     double appealFor(int seat) {
       final goal = view.publicGoals[seat];
       final production = view.publicProduction[seat];
+      // The same recipient must plausibly supply the payment and benefit.
+      if (offer.wants.keys.any((good) => !(production[good] ?? false))) {
+        return -1000;
+      }
       double value(Resource good) {
         final usefulForBuild = (goal[good] ?? 0) > 0;
         final produces = production[good] ?? false;
@@ -275,6 +290,7 @@ abstract final class AiCardStrategy {
 
   static MatchEvent? propose(AiTurnView view) {
     if (view.phase != MatchPhase.actions ||
+        !view.triesPlayerTrade ||
         view.actionsSinceRoll > 3 ||
         view.publicOffers.any((o) => o.proposer == view.seat)) {
       return null;
@@ -288,6 +304,13 @@ abstract final class AiCardStrategy {
               // Do not flood everybody with requests for equally valued goods.
               offer.gives.values.fold<int>(0, (a, b) => a + b) >
                   offer.wants.values.fold<int>(0, (a, b) => a + b) &&
+              // Retain goods needed for our next build, even when receiving
+              // a different missing good would increase aggregate utility.
+              offer.gives.entries.every(
+                (entry) =>
+                    (view.ownGoods[entry.key] ?? 0) - entry.value >=
+                    (_goal(view)[entry.key] ?? 0),
+              ) &&
               _bundleGain(view, offer.gives, offer.wants) > 0.5 &&
               _recipientAppeal(view, offer) > 0.75,
         )
