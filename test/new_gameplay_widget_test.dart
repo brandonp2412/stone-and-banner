@@ -240,7 +240,7 @@ void main() {
     );
     expect(segment, findsOneWidget);
     final controlsBefore = tester.getRect(segment);
-    final giveBefore = tester.getRect(find.text('YOU GIVE'));
+    final giveBefore = tester.getRect(find.text('YOU GIVE').first);
     if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
       await tester.runAsync(
         () => capture(tester, '/tmp/stone-trade-player-ui.png'),
@@ -249,7 +249,7 @@ void main() {
     await tester.tap(find.text('Bank').last);
     await tester.pump(const Duration(milliseconds: 420));
     final controlsAfter = tester.getRect(segment);
-    final giveAfter = tester.getRect(find.text('YOU GIVE'));
+    final giveAfter = tester.getRect(find.text('YOU GIVE').first);
     expect((controlsAfter.left - controlsBefore.left).abs(), lessThan(1));
     expect((controlsAfter.width - controlsBefore.width).abs(), lessThan(1));
     expect((giveAfter.top - giveBefore.top).abs(), lessThan(1));

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
+import 'package:stone_and_banner/ui/resource_icon.dart';
 
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
 
@@ -14,6 +15,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final showMatch = ValueNotifier(true);
     addTearDown(showMatch.dispose);
+    await tester.runAsync(loadResourceIcons);
     await tester.pumpWidget(
       MaterialApp(
         home: ValueListenableBuilder<bool>(
@@ -53,6 +55,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     var leaveRequests = 0;
+    await tester.runAsync(loadResourceIcons);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),

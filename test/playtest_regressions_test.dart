@@ -28,8 +28,15 @@ void main() {
       expect(find.byType(Dialog), findsNothing);
       await tester.tap(find.text('Player trade'));
       await tester.pumpAndSettle();
-      expect(find.text('Quantity'), findsNWidgets(2));
-      expect(find.byTooltip('Increase quantity'), findsNWidgets(2));
+      final giveWood = find.byKey(const ValueKey('trade-give-wood'));
+      final getWheat = find.byKey(const ValueKey('trade-get-wheat'));
+      expect(tester.widget<InkWell>(giveWood).onTap, isNotNull);
+      expect(tester.widget<InkWell>(getWheat).onTap, isNotNull);
+      await tester.tap(giveWood);
+      await tester.tap(getWheat);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Remove one wood from offer'), findsOneWidget);
+      expect(find.byTooltip('Remove one wheat from request'), findsOneWidget);
       expect(find.textContaining('escrow', findRichText: true), findsNothing);
       expect(tester.takeException(), isNull);
     },

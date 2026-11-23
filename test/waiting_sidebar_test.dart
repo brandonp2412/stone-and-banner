@@ -35,13 +35,12 @@ void main() {
         expect(find.text('Trade'), findsOneWidget);
         await tester.tap(find.text('Trade'));
         await tester.pumpAndSettle();
-        expect(
-          find.text('Player trade'),
-          mobile ? findsNothing : findsOneWidget,
-          reason: mobile
-              ? 'Mobile tabs stay inert outside the player’s turn'
-              : 'Desktop tabs stay navigable outside the player’s turn',
-        );
+        expect(find.text('Player trade'), findsOneWidget);
+        final offerButton = find.byKey(const ValueKey('create-player-offer'));
+        expect(tester.widget<FilledButton>(offerButton).onPressed, isNull);
+        await tester.tap(offerButton);
+        await tester.pumpAndSettle();
+        expect(find.byType(Dialog), findsNothing);
         expect(events, isEmpty);
         await tester.pumpWidget(view(false));
         await tester.pumpAndSettle();

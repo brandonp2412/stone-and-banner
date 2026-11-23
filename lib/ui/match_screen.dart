@@ -4749,38 +4749,47 @@ class _TradeComposerState extends State<_TradeComposer> {
                 style: const TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
               ),
             ),
-          if (bank && widget.onKindSelected != null && !compactLandscape)
-            Padding(
-              padding: EdgeInsets.zero,
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Exchanges',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+          if (widget.onKindSelected != null && !compactLandscape)
+            Visibility(
+              visible: bank,
+              maintainState: true,
+              maintainAnimation: true,
+              maintainSize: true,
+              child: Padding(
+                padding: EdgeInsets.zero,
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Exchanges',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    key: const ValueKey('bank-bundles-minus'),
-                    tooltip: 'Fewer exchanges',
-                    onPressed: bankTimes > 1
-                        ? () => setState(() => bankTimes--)
-                        : null,
-                    icon: const Icon(Icons.remove_circle_outline),
-                  ),
-                  Text('$bankTimes', key: const ValueKey('bank-bundle-count')),
-                  IconButton(
-                    key: const ValueKey('bank-bundles-plus'),
-                    tooltip: 'More exchanges',
-                    onPressed:
-                        bankTimes < 99 &&
-                            available >= rate * (bankTimes + 1) &&
-                            bankAvailable >= receipt * (bankTimes + 1)
-                        ? () => setState(() => bankTimes++)
-                        : null,
-                    icon: const Icon(Icons.add_circle_outline),
-                  ),
-                ],
+                    IconButton(
+                      key: const ValueKey('bank-bundles-minus'),
+                      tooltip: 'Fewer exchanges',
+                      onPressed: bankTimes > 1
+                          ? () => setState(() => bankTimes--)
+                          : null,
+                      icon: const Icon(Icons.remove_circle_outline),
+                    ),
+                    Text(
+                      '$bankTimes',
+                      key: const ValueKey('bank-bundle-count'),
+                    ),
+                    IconButton(
+                      key: const ValueKey('bank-bundles-plus'),
+                      tooltip: 'More exchanges',
+                      onPressed:
+                          bankTimes < 99 &&
+                              available >= rate * (bankTimes + 1) &&
+                              bankAvailable >= receipt * (bankTimes + 1)
+                          ? () => setState(() => bankTimes++)
+                          : null,
+                      icon: const Icon(Icons.add_circle_outline),
+                    ),
+                  ],
+                ),
               ),
             ),
           LayoutBuilder(
