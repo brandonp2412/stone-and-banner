@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 /// A contextual explanation that leaves the surrounding layout in place.
 class FocusHint extends StatefulWidget {
   const FocusHint({
@@ -118,7 +120,7 @@ class _FocusHintState extends State<FocusHint> {
                   ),
                   child: Material(
                     elevation: 12,
-                    color: const Color(0xff20363e),
+                    color: gameColor(context, const Color(0xff20363e)),
                     borderRadius: BorderRadius.circular(16),
                     child: SingleChildScrollView(
                       child: Padding(
@@ -135,7 +137,10 @@ class _FocusHintState extends State<FocusHint> {
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xffefd6a3),
+                                      color: gameColor(
+                                        context,
+                                        const Color(0xffefd6a3),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -151,7 +156,10 @@ class _FocusHintState extends State<FocusHint> {
                               style: TextStyle(
                                 fontSize: 14,
                                 height: 1.4,
-                                color: Color(0xffdce8e9),
+                                color: gameColor(
+                                  context,
+                                  const Color(0xffdce8e9),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 12),

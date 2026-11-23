@@ -28,6 +28,8 @@ void main() {
     }
     await tester.tap(find.text('Vs bots'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Easy'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('3 bots'));
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
@@ -47,6 +49,12 @@ void main() {
     expect(
       tester
           .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '3 bots'))
+          .selected,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Easy'))
           .selected,
       isTrue,
     );

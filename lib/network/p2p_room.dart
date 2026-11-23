@@ -262,7 +262,7 @@ class P2pRoom extends ChangeNotifier {
 
   void _retrySignalling() {
     if (_disposed || !isHost || _signallingRetry?.isActive == true) return;
-    final seconds = (2 << _signallingFailures.clamp(0, 4)).clamp(2, 32);
+    final seconds = (2 << _signallingFailures.clamp(0, 6)).clamp(2, 32);
     _signallingFailures++;
     _signallingRetry = Timer(Duration(seconds: seconds), () {
       _signallingRetry = null;
@@ -498,7 +498,7 @@ class P2pRoom extends ChangeNotifier {
       _invited.where((id) => !_peerSeats.containsKey(id)).length;
 
   int get availableBotSeats =>
-      (capacity - players.length - pendingInvites).clamp(0, 4);
+      (capacity - players.length - pendingInvites).clamp(0, 6);
 
   bool get canStart =>
       isHost &&
@@ -915,7 +915,7 @@ class P2pRoom extends ChangeNotifier {
       // or the newly connected guest incorrectly evicts a reserved bot.
       _peerSeats[peer] = number;
       if (botCount > capacity - room.seats.length - pendingInvites) {
-        botCount = (capacity - room.seats.length - pendingInvites).clamp(0, 4);
+        botCount = (capacity - room.seats.length - pendingInvites).clamp(0, 6);
       }
       _planBotSeats();
       message = null;

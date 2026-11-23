@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 /// Presentation only: the caller supplies the engine's saved dice result.
 class DiceRoll extends StatefulWidget {
   const DiceRoll({
@@ -103,8 +105,14 @@ class _DiceRollState extends State<DiceRoll>
                                       ? (i == 0 ? widget.first : widget.second)
                                       : 1 + ((t * 30).floor() + i * 3) % 6,
                                   i == 0
-                                      ? const Color(0xffefd6a3)
-                                      : const Color(0xff70d8bf),
+                                      ? gameColor(
+                                          context,
+                                          const Color(0xffefd6a3),
+                                        )
+                                      : gameColor(
+                                          context,
+                                          const Color(0xff70d8bf),
+                                        ),
                                 ),
                               ),
                             ),
@@ -122,7 +130,7 @@ class _DiceRollState extends State<DiceRoll>
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0x9914242b),
+                      color: gameColor(context, const Color(0x9914242b)),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -133,7 +141,7 @@ class _DiceRollState extends State<DiceRoll>
                           : 'Rolling…',
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(
-                            color: Colors.white,
+                            color: gameColor(context, Colors.white),
                             shadows: const [
                               Shadow(blurRadius: 4, color: Colors.black),
                             ],

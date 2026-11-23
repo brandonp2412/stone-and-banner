@@ -2,6 +2,8 @@ import 'labels.dart';
 
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 import '../engine/board.dart';
 import 'resource_icon.dart';
 
@@ -33,13 +35,13 @@ class TradeLeg extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const gold = Color(0xffe5c183);
-    const cyan = Color(0xff73d9c0);
+    final gold = gameColor(context, const Color(0xffe5c183));
+    final cyan = gameColor(context, const Color(0xff73d9c0));
     final accent = highlight ? cyan : gold;
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xff1e343d),
+        color: gameColor(context, const Color(0xff1e343d)),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: accent.withValues(alpha: .5)),
       ),
@@ -59,7 +61,10 @@ class TradeLeg extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             hint,
-            style: const TextStyle(color: Color(0xffaec5c9), fontSize: 11),
+            style: TextStyle(
+              color: gameColor(context, const Color(0xffaec5c9)),
+              fontSize: 11,
+            ),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -85,13 +90,15 @@ class TradeLeg extends StatelessWidget {
                         ? FontWeight.w800
                         : FontWeight.w500,
                     color: good == resource
-                        ? const Color(0xff182b32)
-                        : const Color(0xffc6d7d9),
+                        ? gameColor(context, const Color(0xff182b32))
+                        : gameColor(context, const Color(0xffc6d7d9)),
                   ),
-                  backgroundColor: const Color(0xff2b4249),
+                  backgroundColor: gameColor(context, const Color(0xff2b4249)),
                   selectedColor: accent,
                   side: BorderSide(
-                    color: good == resource ? accent : const Color(0xff38535b),
+                    color: good == resource
+                        ? accent
+                        : gameColor(context, const Color(0xff38535b)),
                   ),
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -153,7 +160,10 @@ class TradeLeg extends StatelessWidget {
             const SizedBox(height: 5),
             Text(
               'Available: $available',
-              style: const TextStyle(color: Color(0xffaec5c9), fontSize: 11),
+              style: TextStyle(
+                color: gameColor(context, const Color(0xffaec5c9)),
+                fontSize: 11,
+              ),
             ),
           ],
         ],

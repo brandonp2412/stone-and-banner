@@ -613,7 +613,7 @@ class MatchEngine {
     int raidInterval = 6,
     List<int>? turnOrder,
   }) {
-    _require(names.length >= 3 && names.length <= 4, 'Choose 3 or 4 players.');
+    _require(names.length >= 3 && names.length <= 6, 'Choose 3–6 players.');
     _require(
       names.every((n) => n.trim().isNotEmpty) &&
           names.toSet().length == names.length,

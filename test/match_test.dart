@@ -42,8 +42,8 @@ void main() {
     }
   });
 
-  test('3–4 seat snake drafts: spacing, one village and one town, two roads, replay', () {
-    for (final count in [3, 4]) {
+  test('3–6 seat snake drafts: spacing, one village and one town, two roads, replay', () {
+    for (final count in [3, 4, 5, 6]) {
       final s = draft(20261027 + count, count);
       expect(s.phase, MatchPhase.roll);
       expect(s.active, 0);

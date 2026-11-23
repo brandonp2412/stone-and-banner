@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 import '../engine/match.dart';
 
 /// Fleet approach and shared defence, including pledged emergency aid.
@@ -18,12 +20,14 @@ class InvasionMeter extends StatelessWidget {
         ? 'Invasion now'
         : 'Invasion in $remaining ${remaining == 1 ? 'round' : 'rounds'}';
     final fleetColor = arriving || remaining == 1
-        ? const Color(0xffff977f)
-        : const Color(0xffffd08a);
+        ? gameColor(context, const Color(0xffff977f))
+        : gameColor(context, const Color(0xffffd08a));
     final have = MatchEngine.defenceStrength(state) + state.invasionAid;
     final need = MatchEngine.invasionStrength(state);
     final ready = have >= need;
-    final color = ready ? const Color(0xff40d5b4) : const Color(0xffffc477);
+    final color = ready
+        ? gameColor(context, const Color(0xff40d5b4))
+        : gameColor(context, const Color(0xffffc477));
     final status = need == 0
         ? 'Villages are safe'
         : ready

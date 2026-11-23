@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 import '../engine/board.dart';
 import '../engine/match.dart';
 
@@ -98,14 +100,16 @@ class _ResourceHarvestState extends State<ResourceHarvest>
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xff294c43),
+                          color: gameColor(context, const Color(0xff294c43)),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xff70d8bf)),
+                          border: Border.all(
+                            color: gameColor(context, const Color(0xff70d8bf)),
+                          ),
                         ),
                         child: Text(
                           '+${entry.value} ${entry.key.name}',
-                          style: const TextStyle(
-                            color: Color(0xffeafff5),
+                          style: TextStyle(
+                            color: gameColor(context, const Color(0xffeafff5)),
                             fontWeight: FontWeight.bold,
                           ),
                         ),

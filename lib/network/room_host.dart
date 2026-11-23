@@ -25,7 +25,7 @@ class HostedRoom {
     this.capacity,
     this.boardSeed, {
     this.shuffleTurns = false,
-  }) : assert(capacity == 3 || capacity == 4),
+  }) : assert(capacity >= 3 && capacity <= 6),
        // 52 random bits: safe as a JS integer on Flutter web as well as native.
        // JavaScript bit shifts truncate to 32 bits, so do not use << 32.
        secretSeed =
@@ -34,7 +34,7 @@ class HostedRoom {
 
   HostedRoom.restored(this.id, this.capacity, this.boardSeed, this.secretSeed)
     : shuffleTurns = false,
-      assert(capacity == 3 || capacity == 4);
+      assert(capacity >= 3 && capacity <= 6);
 
   final String id;
   final int capacity, boardSeed, secretSeed;
@@ -297,7 +297,7 @@ class HostedRoom {
     final boardSeed = data['boardSeed'] as int;
     final secretSeed = data['secretSeed'] as int;
     if (!RegExp(r'^[0-9A-F]{8}$').hasMatch(id) ||
-        (capacity != 3 && capacity != 4)) {
+        (capacity < 3 || capacity > 6)) {
       throw const FormatException('Invalid LAN room identity.');
     }
     final room = HostedRoom.restored(id, capacity, boardSeed, secretSeed);
@@ -391,7 +391,7 @@ class LanRoomRegistry {
     String name, {
     bool shuffleTurns = false,
   }) {
-    if (capacity != 3 && capacity != 4) throw StateError('Use 3–4 seats.');
+    if (capacity < 3 || capacity > 6) throw StateError('Use 3–6 seats.');
     if (rooms.length >= 64) throw StateError('Host is at room capacity.');
     String code;
     do {

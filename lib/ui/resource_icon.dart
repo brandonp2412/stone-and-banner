@@ -3,6 +3,9 @@ import 'dart:ui' as ui;
 import 'compact_layout.dart';
 
 import 'package:flutter/material.dart';
+
+import 'game_colors.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -107,6 +110,17 @@ class ResourceIcon extends StatelessWidget {
             width: size,
             height: size,
             fit: BoxFit.contain,
+            // Silhouette packs use pale gold artwork for the dark board.
+            // Give their UI previews and inventory icons a readable light ink.
+            color:
+                Theme.of(context).brightness == Brightness.light &&
+                    {
+                      ResourceIconStyle.gameIcons,
+                      ResourceIconStyle.pictogrammers,
+                    }.contains(style ?? selected)
+                ? const Color(0xff755018)
+                : null,
+            colorBlendMode: BlendMode.srcIn,
             filterQuality: FilterQuality.medium,
           ),
         ),
@@ -155,8 +169,8 @@ Future<void> showResourceIconPicker(BuildContext context) => showDialog<void>(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Material(
                     color: selected == style
-                        ? const Color(0xff354b50)
-                        : const Color(0xff182c34),
+                        ? gameColor(context, const Color(0xff354b50))
+                        : gameColor(context, const Color(0xff182c34)),
                     borderRadius: BorderRadius.circular(10),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
@@ -208,11 +222,6 @@ Future<void> showResourceIconPicker(BuildContext context) => showDialog<void>(
                     ),
                   ),
                 ),
-              const Text(
-                'Wood · Brick · Wheat · Sheep · Ore · Paper · Cloth · Coin',
-                style: TextStyle(fontSize: 11),
-              ),
-              const SizedBox(height: 8),
               TextButton(
                 onPressed: () => showLicensePage(
                   context: context,

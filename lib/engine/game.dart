@@ -124,8 +124,8 @@ class GameEngine {
 
   static GameState newGame(List<String> ids) {
     require(
-      ids.length >= 2 && ids.length <= 4,
-      'Stone & Banner supports 2–4 local players.',
+      ids.length >= 2 && ids.length <= 6,
+      'Stone & Banner supports 2–6 local players.',
     );
     require(
       ids.every((id) => id.trim().isNotEmpty) &&

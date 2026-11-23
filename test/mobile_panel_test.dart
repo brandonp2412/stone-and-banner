@@ -100,18 +100,24 @@ void main() {
     }
   }
 
-  testWidgets('portrait wraps player cards into two readable rows', (
-    tester,
-  ) async {
+  testWidgets('portrait scrolls player cards horizontally', (tester) async {
     await showMobileMatch(tester, const Size(393, 852));
     final first = tester.getRect(find.byKey(const ValueKey('player-tile-0')));
-    final second = tester.getRect(
-      find.byKey(const ValueKey('player-tile-1')),
-    );
+    final second = tester.getRect(find.byKey(const ValueKey('player-tile-1')));
     final third = tester.getRect(find.byKey(const ValueKey('player-tile-2')));
     expect(second.top, closeTo(first.top, 1));
-    expect(third.top, greaterThan(first.top + 30));
-    expect(third.right, lessThanOrEqualTo(393));
+    expect(third.top, closeTo(first.top, 1));
+    expect(third.right, greaterThan(393));
+    await tester.drag(
+      find.byKey(const ValueKey('player-tile-1')),
+      const Offset(-300, 0),
+    );
+    await tester.pumpAndSettle();
+    final scrolledThird = tester.getRect(
+      find.byKey(const ValueKey('player-tile-2')),
+    );
+    expect(scrolledThird.left, lessThan(third.left));
+    expect(scrolledThird.top, closeTo(third.top, 1));
     final react = tester.getRect(find.byTooltip('React'));
     final raid = tester.getRect(find.byKey(const ValueKey('raid-defense-hud')));
     expect(react.top, greaterThan(third.bottom));

@@ -6,6 +6,22 @@ import 'board.dart';
 import 'game.dart';
 import 'match.dart';
 
+/// Hard preserves the original tuned policy. Older saves default to Hard.
+enum BotDifficulty {
+  easy('Easy', 2),
+  medium('Medium', 4),
+  hard('Hard', 8);
+
+  const BotDifficulty(this.label, this.actionLimit);
+  final String label;
+  final int actionLimit;
+
+  static BotDifficulty parse(Object? value) => values.firstWhere(
+    (difficulty) => difficulty.name == value,
+    orElse: () => hard,
+  );
+}
+
 /// Exposes only actions validated by the pure match engine. The bot never
 /// invents placements, exchanges or dice outcomes.
 class AiLegalActions {
@@ -46,7 +62,12 @@ class AiLegalActions {
 /// Reads the public board, scores and own hand only. Opponent hands, cards and
 /// future events are deliberately excluded from scoring.
 class HeuristicAi {
-  const HeuristicAi({this.track = StrategyDeck.commerce});
+  const HeuristicAi({
+    this.track = StrategyDeck.commerce,
+    this.difficulty = BotDifficulty.hard,
+  });
+
+  final BotDifficulty difficulty;
 
   final StrategyDeck track;
 
@@ -122,7 +143,14 @@ class HeuristicAi {
         final quality = value(b).compareTo(value(a));
         return quality != 0 ? quality : id(a).compareTo(id(b));
       });
-    return sorted.first;
+    // Lower levels consider a small band of good choices, without selecting
+    // arbitrary legal moves. The index is stable across repeated decisions.
+    final rank = switch (difficulty) {
+      BotDifficulty.easy => 2,
+      BotDifficulty.medium => 1,
+      BotDifficulty.hard => 0,
+    };
+    return sorted[math.min(rank, sorted.length - 1)];
   }
 
   // Stable variety keeps replays deterministic while varying aggressive turns.
@@ -303,7 +331,7 @@ class HeuristicAi {
 
   MatchEvent _action(MatchState state, AiLegalActions legal) {
     final view = AiActionAdapter.observe(state, state.active);
-    if (view.actionsSinceRoll >= 8) return const EndTurn();
+    if (view.actionsSinceRoll >= difficulty.actionLimit) return const EndTurn();
     final answer = AiCardStrategy.incomingOffer(view);
     if (answer != null) return answer;
 

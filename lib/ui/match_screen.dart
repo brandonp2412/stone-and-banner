@@ -7,6 +7,9 @@ import 'dart:async';
 import 'compact_layout.dart';
 
 import 'package:flutter/material.dart';
+
+import 'game_colors.dart';
+
 import 'package:flutter/services.dart';
 
 import 'dock_label_layout.dart';
@@ -52,6 +55,8 @@ const seatColors = [
   Color(0xffffc477),
   Color(0xffd5a6f7),
   Color(0xff8ebdff),
+  Color(0xffff8299),
+  Color(0xffe4df75),
 ];
 const landColors = [
   Color(0xff437c60),
@@ -1729,7 +1734,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         if (!didPop && mobile && _mobilePage != null) _backMobile();
       },
       child: Material(
-        color: const Color(0xff101e25),
+        color: gameColor(context, const Color(0xff101e25)),
         child: Stack(
           children: [
             SafeArea(
@@ -1757,7 +1762,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                   SizedBox(
                                     width: railWidth,
                                     child: Material(
-                                      color: const Color(0xff182a31),
+                                      color: gameColor(
+                                        context,
+                                        const Color(0xff182a31),
+                                      ),
                                       child: Column(
                                         children: [
                                           if (s.tactical == null ||
@@ -1947,11 +1955,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 child: Center(
                   child: Card(
                     key: const ValueKey('choose-card-target-on-map'),
-                    color: const Color(0xff584322),
+                    color: gameColor(context, const Color(0xff584322)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15),
-                      side: const BorderSide(
-                        color: Color(0xffffe092),
+                      side: BorderSide(
+                        color: gameColor(context, const Color(0xffffe092)),
                         width: 2,
                       ),
                     ),
@@ -1963,18 +1971,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.place_rounded,
-                            color: Color(0xffffe092),
+                            color: gameColor(context, const Color(0xffffe092)),
                           ),
                           const SizedBox(width: 7),
                           Flexible(
                             child: Text(
                               _mapCardTargetMessage,
                               maxLines: 2,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
+                              style: TextStyle(fontWeight: FontWeight.w800),
                             ),
                           ),
                           IconButton(
@@ -2001,7 +2007,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   child: Material(
                     key: const ValueKey('card-received-banner'),
                     elevation: 12,
-                    color: const Color(0xff60451d),
+                    color: gameColor(context, const Color(0xff60451d)),
                     borderRadius: BorderRadius.circular(18),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(18),
@@ -2019,9 +2025,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.auto_awesome_rounded,
-                              color: Color(0xffffe092),
+                              color: gameColor(
+                                context,
+                                const Color(0xffffe092),
+                              ),
                               size: 29,
                             ),
                             const SizedBox(width: 12),
@@ -2030,25 +2039,31 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'NEW STRATEGY CARD!',
                                     style: TextStyle(
-                                      color: Color(0xffffe092),
+                                      color: gameColor(
+                                        context,
+                                        const Color(0xffffe092),
+                                      ),
                                       fontWeight: FontWeight.w900,
                                       fontSize: 16,
                                     ),
                                   ),
                                   Text(
                                     _newCardNotice!,
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: gameColor(context, Colors.white),
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  const Text(
+                                  Text(
                                     'Tap to view in Cards',
                                     style: TextStyle(
-                                      color: Color(0xfff9db9a),
+                                      color: gameColor(
+                                        context,
+                                        const Color(0xfff9db9a),
+                                      ),
                                       fontSize: 11,
                                     ),
                                   ),
@@ -2129,17 +2144,20 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               key: const ValueKey('crown-road-break-animation'),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xf52e181c),
+                color: gameColor(context, const Color(0xf52e181c)),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xffff756e), width: 2),
+                border: Border.all(
+                  color: gameColor(context, const Color(0xffff756e)),
+                  width: 2,
+                ),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     '💔 CROWN ROAD BROKEN',
                     style: TextStyle(
-                      color: Color(0xffff8c83),
+                      color: gameColor(context, const Color(0xffff8c83)),
                       fontSize: 19,
                       fontWeight: FontWeight.w900,
                     ),
@@ -2178,9 +2196,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             child: DecoratedBox(
               key: const ValueKey('crown-road-award-animation'),
               decoration: BoxDecoration(
-                color: const Color(0xf5222b32),
+                color: gameColor(context, const Color(0xf5222b32)),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xffffd680), width: 2),
+                border: Border.all(
+                  color: gameColor(context, const Color(0xffffd680)),
+                  width: 2,
+                ),
                 boxShadow: const [
                   BoxShadow(color: Color(0x99000000), blurRadius: 24),
                 ],
@@ -2193,17 +2214,17 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       '🏆 CROWN ROAD!',
                       style: TextStyle(
-                        color: Color(0xffffde93),
+                        color: gameColor(context, const Color(0xffffde93)),
                         fontSize: 19,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
                     Text(
                       '${s.players[_crownRoadWinner!].id} · +2 Renown',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -2244,10 +2265,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 child: DecoratedBox(
                   key: const ValueKey('rival-city-fall-animation'),
                   decoration: BoxDecoration(
-                    color: const Color(0xff183931),
+                    color: gameColor(context, const Color(0xff183931)),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: const Color(0xff7fe4b8),
+                      color: gameColor(context, const Color(0xff7fe4b8)),
                       width: 2,
                     ),
                     boxShadow: const [
@@ -2270,15 +2291,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                         Text(
                           '${_fallenCityOwner!} lost a city!',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 19,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        const Text(
+                        Text(
                           'The royal property market has collapsed.',
                           style: TextStyle(
-                            color: Color(0xffbde7d4),
+                            color: gameColor(context, const Color(0xffbde7d4)),
                             fontSize: 13,
                           ),
                         ),
@@ -2295,7 +2316,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         opacity: fade,
         child: Container(
           key: const ValueKey('city-fall-animation'),
-          color: const Color(0xff3c0715).withValues(alpha: .72),
+          color: gameColor(
+            context,
+            const Color(0xff3c0715),
+          ).withValues(alpha: .72),
           child: Center(
             child: Transform.translate(
               offset: Offset(shake, math.sin(t * 22) * 5),
@@ -2310,9 +2334,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(24),
-                    color: const Color(0xff1b101b),
+                    color: gameColor(context, const Color(0xff1b101b)),
                     border: Border.all(
-                      color: const Color(0xffff6c43),
+                      color: gameColor(context, const Color(0xffff6c43)),
                       width: 3,
                     ),
                     boxShadow: [
@@ -2328,9 +2352,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                       const Text('⚡  🔥  ⚡', style: TextStyle(fontSize: 38)),
                       Transform.rotate(
                         angle: math.sin(t * 38) * (1 - t) * .23,
-                        child: const Icon(
+                        child: Icon(
                           Icons.castle_rounded,
-                          color: Color(0xffff8861),
+                          color: gameColor(context, const Color(0xffff8861)),
                           size: 84,
                         ),
                       ),
@@ -2340,8 +2364,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             ? 'YOUR CITY HAS FALLEN!'
                             : "${_fallenCityOwner!.toUpperCase()}'S CITY HAS FALLEN!",
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Color(0xffffd6a3),
+                        style: TextStyle(
+                          color: gameColor(context, const Color(0xffffd6a3)),
                           fontSize: 25,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 1.4,
@@ -2353,16 +2377,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             ? 'Your proud banners burn. The entire realm mocks your defeat.'
                             : 'The invaders grind another proud city into dust.',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Color(0xffffb8aa),
+                        style: TextStyle(
+                          color: gameColor(context, const Color(0xffffb8aa)),
                           fontSize: 15,
                         ),
                       ),
                       const SizedBox(height: 10),
                       Text(
                         '−$_fallenCityVp VICTORY ${_fallenCityVp == 1 ? 'POINT' : 'POINTS'}',
-                        style: const TextStyle(
-                          color: Color(0xffff6555),
+                        style: TextStyle(
+                          color: gameColor(context, const Color(0xffff6555)),
                           fontSize: 21,
                           fontWeight: FontWeight.w900,
                         ),
@@ -2405,7 +2429,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     style: FilledButton.styleFrom(
       minimumSize: const Size(0, 42),
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      textStyle: const TextStyle(fontSize: 13),
+      textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontSize: 13),
     ),
     icon: const Icon(Icons.fast_forward),
     label: const Text('Fast-forward bots'),
@@ -2420,9 +2444,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       style: OutlinedButton.styleFrom(
         minimumSize: Size.zero,
         padding: const EdgeInsets.symmetric(horizontal: 8),
-        textStyle: const TextStyle(fontSize: 13),
-        backgroundColor: const Color(0xf0182a31),
-        foregroundColor: const Color(0xffe5c183),
+        textStyle: Theme.of(context).textTheme.labelLarge
+            ?.copyWith(fontSize: 13),
+        backgroundColor: gameColor(context, const Color(0xf0182a31)),
+        foregroundColor: gameColor(context, const Color(0xffe5c183)),
       ),
       onPressed: _openMobileActions,
       icon: const Icon(Icons.layers_outlined),
@@ -2436,7 +2461,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         children: [
           if (s.tactical == null || widget.observing)
             Material(
-              color: const Color(0xff182a31),
+              color: gameColor(context, const Color(0xff182a31)),
               child: Row(
                 children: [
                   IconButton(
@@ -2498,14 +2523,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                           vertical: 7,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xe014242b),
+                          color: gameColor(context, const Color(0xe014242b)),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           widget.waitingMessage!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xffdce8e9),
+                            color: gameColor(context, const Color(0xffdce8e9)),
                           ),
                         ),
                       ),
@@ -2662,7 +2687,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             padding: const EdgeInsets.only(bottom: 5),
             child: Text(
               'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}',
-              style: const TextStyle(fontSize: 11, color: Color(0xffa8bfc0)),
+              style: TextStyle(
+                fontSize: 11,
+                color: gameColor(context, const Color(0xffa8bfc0)),
+              ),
             ),
           ),
         ),
@@ -2677,11 +2705,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         if (_tab == 0 &&
             s.phase != MatchPhase.setupVillage &&
             s.phase != MatchPhase.setupRoad)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 10),
             child: Text(
               'Choose a piece, then tap a highlighted spot on the map.',
-              style: TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+              style: TextStyle(
+                fontSize: 12,
+                color: gameColor(context, const Color(0xffabbfc2)),
+              ),
             ),
           ),
         ..._visiblePanelContents(s.phase),
@@ -2717,7 +2748,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       final size = MediaQuery.sizeOf(context);
       final portrait = size.height > size.width && bounds.maxWidth < 600;
       final height = portrait
-          ? 106.0
+          ? math.max(
+              52.0,
+              MediaQuery.textScalerOf(context).scale(12) * 1.2 + 18,
+            )
           : math.max(
               bounds.maxWidth < 900
                   ? bounds.maxWidth < 720
@@ -2730,8 +2764,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   MediaQuery.textScalerOf(context).scale(10) * 1.2 +
                   18,
             );
-      // Large accessibility text needs full-width cards rather than a
-      // squeezed two-column grid. The portrait list can scroll vertically.
+      // Give large accessibility text full-width cards in the horizontal list.
       final singleColumn =
           portrait &&
           (bounds.maxWidth < 340 ||
@@ -2761,9 +2794,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               ),
             Expanded(
               child: SingleChildScrollView(
-                scrollDirection: portrait ? Axis.vertical : Axis.horizontal,
-                child: Wrap(
-                  runSpacing: portrait ? 2 : 0,
+                scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
                     for (final i in [
                       viewerSeat,
@@ -2793,13 +2825,22 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                               ),
                               decoration: BoxDecoration(
                                 color: i == s.active
-                                    ? seatColors[i].withValues(alpha: .13)
-                                    : const Color(0xff1c2e35),
+                                    ? gameColor(
+                                        context,
+                                        seatColors[i],
+                                      ).withValues(alpha: .13)
+                                    : gameColor(
+                                        context,
+                                        const Color(0xff1c2e35),
+                                      ),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
                                   color: i == s.active
-                                      ? seatColors[i]
-                                      : const Color(0xff30434a),
+                                      ? gameColor(context, seatColors[i])
+                                      : gameColor(
+                                          context,
+                                          const Color(0xff30434a),
+                                        ),
                                 ),
                               ),
                               child: Stack(
@@ -2819,7 +2860,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                                     ? Icons.flag_rounded
                                                     : Icons.shield_outlined,
                                                 size: portrait ? 16 : 20,
-                                                color: seatColors[i],
+                                                color: gameColor(
+                                                  context,
+                                                  seatColors[i],
+                                                ),
                                               ),
                                             ),
                                             if (!portrait &&
@@ -2870,7 +2914,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                               s.players[i].id,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 12,
                                                 height: 1.2,
                                                 fontWeight: FontWeight.w700,
@@ -2891,8 +2935,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                                   fontSize: 10,
                                                   height: 1.2,
                                                   color: i == s.active
-                                                      ? seatColors[i]
-                                                      : const Color(0xffa6b6ba),
+                                                      ? gameColor(
+                                                          context,
+                                                          seatColors[i],
+                                                        )
+                                                      : gameColor(
+                                                          context,
+                                                          const Color(
+                                                            0xffa6b6ba,
+                                                          ),
+                                                        ),
                                                 ),
                                               ),
                                           ],
@@ -2908,19 +2960,25 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                           '${MatchEngine.score(s, i)}',
                                           textAlign: TextAlign.right,
                                           style: TextStyle(
-                                            color: seatColors[i],
+                                            color: gameColor(
+                                              context,
+                                              seatColors[i],
+                                            ),
                                             fontSize: portrait ? 14 : 20,
                                             fontWeight: FontWeight.w800,
                                           ),
                                         ),
                                       ),
                                       if (!portrait)
-                                        const Text(
+                                        Text(
                                           ' /15',
                                           style: TextStyle(
                                             fontSize: 10,
                                             height: 1.2,
-                                            color: Color(0xffa6b6ba),
+                                            color: gameColor(
+                                              context,
+                                              const Color(0xffa6b6ba),
+                                            ),
                                           ),
                                         ),
                                     ],
@@ -3189,18 +3247,27 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                           width: 250,
                                           padding: const EdgeInsets.all(10),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xff101e25),
+                                            color: gameColor(
+                                              context,
+                                              const Color(0xff101e25),
+                                            ),
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
                                             border: Border.all(
-                                              color: const Color(0xffd6bd80),
+                                              color: gameColor(
+                                                context,
+                                                const Color(0xffd6bd80),
+                                              ),
                                             ),
                                           ),
                                           child: Text(
                                             hover,
-                                            style: const TextStyle(
-                                              color: Color(0xfff5ead3),
+                                            style: TextStyle(
+                                              color: gameColor(
+                                                context,
+                                                const Color(0xfff5ead3),
+                                              ),
                                               fontSize: 13,
                                             ),
                                           ),
@@ -3261,9 +3328,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   ? const EdgeInsets.symmetric(horizontal: 9, vertical: 5)
                   : const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
-                color: const Color(0xf014242b),
+                color: gameColor(context, const Color(0xf014242b)),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xff365159)),
+                border: Border.all(
+                  color: gameColor(context, const Color(0xff365159)),
+                ),
               ),
               child: Semantics(
                 label:
@@ -3272,10 +3341,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       'Raid Defense',
                       style: TextStyle(
-                        color: Color(0xffefd6a3),
+                        color: gameColor(context, const Color(0xffefd6a3)),
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                         height: 1.1,
@@ -3284,11 +3353,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     const SizedBox(height: 3),
                     Text(
                       'Raid ${s.raidInterval - s.reaverPressure.clamp(0, s.raidInterval)} / ${s.raidInterval} rounds',
-                      style: const TextStyle(fontSize: 11, height: 1.15),
+                      style: TextStyle(fontSize: 11, height: 1.15),
                     ),
                     Text(
                       'Defence ${MatchEngine.defenceStrength(s) + s.invasionAid} / ${MatchEngine.invasionStrength(s)}',
-                      style: const TextStyle(fontSize: 11, height: 1.15),
+                      style: TextStyle(fontSize: 11, height: 1.15),
                     ),
                   ],
                 ),
@@ -3310,23 +3379,25 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xf014242b),
+                color: gameColor(context, const Color(0xf014242b)),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xff61716a)),
+                border: Border.all(
+                  color: gameColor(context, const Color(0xff61716a)),
+                ),
               ),
               child: Column(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.casino_outlined,
                     size: 18,
-                    color: Color(0xffe5c183),
+                    color: gameColor(context, const Color(0xffe5c183)),
                   ),
                   Text(
                     '${s.dice}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xffefd6a3),
+                      color: gameColor(context, const Color(0xffefd6a3)),
                     ),
                   ),
                 ],
@@ -3355,9 +3426,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           height: _instructionHeight,
           child: Container(
             padding: const EdgeInsets.fromLTRB(12, 5, 6, 5),
-            decoration: const BoxDecoration(
-              color: Color(0xff14242b),
-              border: Border(top: BorderSide(color: Color(0xff34464a))),
+            decoration: BoxDecoration(
+              color: gameColor(context, const Color(0xff14242b)),
+              border: Border(
+                top: BorderSide(
+                  color: gameColor(context, const Color(0xff34464a)),
+                ),
+              ),
             ),
             child: Row(
               children: [
@@ -3370,21 +3445,21 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                         _instruction,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           height: 1.2,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xffefd6a3),
+                          color: gameColor(context, const Color(0xffefd6a3)),
                         ),
                       ),
                       Text(
                         _hint,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           height: 1.2,
-                          color: Color(0xffabbfc2),
+                          color: gameColor(context, const Color(0xffabbfc2)),
                         ),
                       ),
                     ],
@@ -3451,19 +3526,19 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     color: index == 2
                         ? Color.lerp(
                             _tab == index
-                                ? const Color(0xff2c4145)
+                                ? gameColor(context, const Color(0xff2c4145))
                                 : Colors.transparent,
-                            const Color(0xff786039),
+                            gameColor(context, const Color(0xff786039)),
                             _cardsTabPulse * 0.7,
                           )
                         : _tab == index
-                        ? const Color(0xff2c4145)
+                        ? gameColor(context, const Color(0xff2c4145))
                         : null,
                     border: Border(
                       bottom: BorderSide(
                         width: 2,
                         color: _tab == index
-                            ? const Color(0xffe5c183)
+                            ? gameColor(context, const Color(0xffe5c183))
                             : Colors.transparent,
                       ),
                     ),
@@ -3485,8 +3560,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                 _tab == index ||
                                     (index == 2 &&
                                         _cardsTabController.isAnimating)
-                                ? const Color(0xffefd6a3)
-                                : const Color(0xffa6b6ba),
+                                ? gameColor(context, const Color(0xffefd6a3))
+                                : gameColor(context, const Color(0xffa6b6ba)),
                           ),
                         ),
                       ),
@@ -3498,8 +3573,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             fontSize: 9,
                             fontWeight: FontWeight.w900,
                             color: Color.lerp(
-                              const Color(0xffffdb7d),
-                              Colors.white,
+                              gameColor(context, const Color(0xffffdb7d)),
+                              gameColor(context, Colors.white),
                               _cardsTabPulse,
                             ),
                           ),
@@ -3509,8 +3584,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                         style: TextStyle(
                           fontSize: 10,
                           color: _tab == index
-                              ? const Color(0xffefd6a3)
-                              : const Color(0xffa6b6ba),
+                              ? gameColor(context, const Color(0xffefd6a3))
+                              : gameColor(context, const Color(0xffa6b6ba)),
                         ),
                       ),
                     ],
@@ -3530,16 +3605,19 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 19,
             fontWeight: FontWeight.w700,
-            color: Color(0xffefd6a3),
+            color: gameColor(context, const Color(0xffefd6a3)),
           ),
         ),
         const SizedBox(height: 4),
         Text(
           subtitle,
-          style: const TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+          style: TextStyle(
+            fontSize: 12,
+            color: gameColor(context, const Color(0xffabbfc2)),
+          ),
         ),
       ],
     ),
@@ -3563,12 +3641,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           minimumSize: const Size.fromHeight(52),
           alignment: Alignment.centerLeft,
           backgroundColor: choice == action
-              ? const Color(0xff354e4b)
-              : const Color(0xff20343c),
+              ? gameColor(context, const Color(0xff354e4b))
+              : gameColor(context, const Color(0xff20343c)),
           side: BorderSide(
             color: choice == action
-                ? const Color(0xffe5c183)
-                : const Color(0xff40565b),
+                ? gameColor(context, const Color(0xffe5c183))
+                : gameColor(context, const Color(0xff40565b)),
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -3593,10 +3671,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                  Text(name, style: TextStyle(fontWeight: FontWeight.w700)),
                   // Measure every changing cost at this width and text scale.
                   // Discounts and rebuilding must not move subsequent actions.
                   Stack(
@@ -3619,9 +3694,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                           maintainState: true,
                           child: Text(
                             label,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: Color(0xffabbfc2),
+                              color: gameColor(
+                                context,
+                                const Color(0xffabbfc2),
+                              ),
                             ),
                           ),
                         ),
@@ -3664,7 +3742,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         children: [
           Text(
             widget.observing ? 'Waiting for players' : 'Your turn',
-            style: const TextStyle(color: Color(0xffe5c183)),
+            style: TextStyle(
+              color: gameColor(context, const Color(0xffe5c183)),
+            ),
           ),
           Text(
             s.players[s.tactical?.responder ?? s.active].id,
@@ -3675,7 +3755,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             widget.waitingMessage ?? '',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12),
+            style: TextStyle(fontSize: 12),
           ),
         ],
       ),
@@ -3713,7 +3793,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 ? Icons.holiday_village_rounded
                 : Icons.route_rounded,
             size: 48,
-            color: seatColors[s.active],
+            color: gameColor(context, seatColors[s.active]),
           ),
           const SizedBox(height: 12),
           Text(
@@ -3725,9 +3805,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Glowing marks show every legal placement. You can also choose a target from the list below the map.',
-            style: TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+            style: TextStyle(
+              fontSize: 12,
+              color: gameColor(context, const Color(0xffabbfc2)),
+            ),
           ),
         ],
         if (phase != MatchPhase.setupVillage &&
@@ -3842,9 +3925,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           ),
 
         if (phase == MatchPhase.bandit)
-          const Text(
+          Text(
             'Choose a different hex. Any theft and response will be resolved before building.',
-            style: TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+            style: TextStyle(
+              fontSize: 12,
+              color: gameColor(context, const Color(0xffabbfc2)),
+            ),
           ),
       ];
     }
@@ -3869,9 +3955,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               : () => setState(() => _mobilePage = null),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           "Paper funds Innovation upgrades; cloth funds Commerce; coin funds Governance.",
-          style: TextStyle(color: Color(0xffbac9cc), fontSize: 12),
+          style: TextStyle(
+            color: gameColor(context, const Color(0xffbac9cc)),
+            fontSize: 12,
+          ),
         ),
       ];
     }
@@ -3905,7 +3994,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           'Cloth (${s.players[viewerSeat].stores[Resource.cloth] ?? 0}) · '
           'Coin (${s.players[viewerSeat].stores[Resource.coin] ?? 0})  —  '
           '${s.sites.values.any((site) => site.owner == viewerSeat && site.structure != Structure.village) ? 'Choose a track below.' : 'Upgrade a village to a Town first (2 wheat · 3 ore).'}',
-          style: const TextStyle(fontSize: 12, color: Color(0xffbac9cc)),
+          style: TextStyle(
+            fontSize: 12,
+            color: gameColor(context, const Color(0xffbac9cc)),
+          ),
         ),
       ),
       if (s.players[viewerSeat].level(StrategyDeck.innovation) < 5)
@@ -3984,45 +4076,52 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                           children: [
                             Text(
                               '${track.name.toUpperCase()} · $level/5',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: TextStyle(fontWeight: FontWeight.w700),
                             ),
                             Text(
                               level < 5
                                   ? 'Next: ${track.tiers[level]}'
                                   : 'Complete',
-                              style: const TextStyle(fontSize: 12),
+                              style: TextStyle(fontSize: 12),
                             ),
                             Text(
                               level == 0
                                   ? 'Unlocks ${track.commodity.displayName} from Towns beside ${terrainLabel(track.sourceLand)}.'
                                   : 'Towns beside ${terrainLabel(track.sourceLand)} produce ${track.commodity.displayName} instead of one ${track.sourceLand.produces!.name}.',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Color(0xffadc4c6),
+                                color: gameColor(
+                                  context,
+                                  const Color(0xffadc4c6),
+                                ),
                               ),
                             ),
                             if (level < 5) ...[
                               const SizedBox(height: 5),
                               Text(
                                 'Cost: ${_costLabel(cost)}',
-                                style: const TextStyle(fontSize: 12),
+                                style: TextStyle(fontSize: 12),
                               ),
                               if (!ownsTown)
-                                const Text(
+                                Text(
                                   'Build a Town first to unlock developments.',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Color(0xffe5c183),
+                                    color: gameColor(
+                                      context,
+                                      const Color(0xffe5c183),
+                                    ),
                                   ),
                                 )
                               else if (missing.isNotEmpty)
                                 Text(
                                   'Need: $missing',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 11,
-                                    color: Color(0xffe5c183),
+                                    color: gameColor(
+                                      context,
+                                      const Color(0xffe5c183),
+                                    ),
                                   ),
                                 ),
                             ],
@@ -4057,8 +4156,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
 
   Widget _turnAction() => Container(
     padding: EdgeInsets.symmetric(horizontal: 10, vertical: _compact ? 2 : 10),
-    decoration: const BoxDecoration(
-      border: Border(top: BorderSide(color: Color(0xff34464a))),
+    decoration: BoxDecoration(
+      border: Border(
+        top: BorderSide(color: gameColor(context, const Color(0xff34464a))),
+      ),
     ),
     child: SizedBox(width: double.infinity, child: _turnButton()),
   );
@@ -4089,11 +4190,20 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               padding: compact
                   ? const EdgeInsets.symmetric(horizontal: 10)
                   : null,
-              textStyle: compact ? const TextStyle(fontSize: 13) : null,
-              disabledBackgroundColor: const Color(0xff425963),
-              disabledForegroundColor: const Color(0xfff4eee2),
-              backgroundColor: const Color(0xffe5c183),
-              foregroundColor: const Color(0xff28271e),
+              textStyle: compact
+                  ? Theme.of(context).textTheme.labelLarge
+                        ?.copyWith(fontSize: 13)
+                  : null,
+              disabledBackgroundColor: gameColor(
+                context,
+                const Color(0xff425963),
+              ),
+              disabledForegroundColor: gameColor(
+                context,
+                const Color(0xfff4eee2),
+              ),
+              backgroundColor: gameColor(context, const Color(0xffe5c183)),
+              foregroundColor: gameColor(context, const Color(0xff28271e)),
             ),
             onPressed: _turnActionCallback,
             icon: Icon(
@@ -4131,9 +4241,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   : s.phase == MatchPhase.finished
                   ? 'Done'
                   : 'Choose on map',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'NotoSans',
-                color: Color(0xff172b33),
+                color: gameColor(context, const Color(0xff172b33)),
               ),
             ),
           ),
@@ -4159,7 +4269,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               anchor: anchorHarvest ? _resourceAnchors[r] : null,
               count: inventoryOwner.stores[r] ?? 0,
               seat: widget.viewingSeat ?? viewerSeat,
-              color: _goodColor(r),
+              color: gameColor(context, _goodColor(r)),
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 padding: EdgeInsets.symmetric(
@@ -4167,10 +4277,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   vertical: horizontal ? 4 : 0,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xff20323a),
+                  color: gameColor(context, const Color(0xff20323a)),
                   borderRadius: BorderRadius.circular(8),
                   border: Border(
-                    top: BorderSide(color: _goodColor(r), width: 3),
+                    top: BorderSide(
+                      color: gameColor(context, _goodColor(r)),
+                      width: 3,
+                    ),
                   ),
                 ),
                 child: Flex(
@@ -4220,9 +4333,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           ) *
           (portrait ? 2 : 1),
       padding: EdgeInsets.symmetric(horizontal: 8, vertical: tight ? 4 : 6),
-      decoration: const BoxDecoration(
-        color: Color(0xff101e25),
-        border: Border(top: BorderSide(color: Color(0xff34464a))),
+      decoration: BoxDecoration(
+        color: gameColor(context, const Color(0xff101e25)),
+        border: Border(
+          top: BorderSide(color: gameColor(context, const Color(0xff34464a))),
+        ),
       ),
       child: Stack(
         clipBehavior: Clip.none,
@@ -4244,10 +4359,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     ),
                     padding: EdgeInsets.zero,
                     onPressed: () => showResourceIconPicker(context),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.palette_outlined,
                       size: 20,
-                      color: Color(0xffe5c183),
+                      color: gameColor(context, const Color(0xffe5c183)),
                     ),
                   ),
                   if (portrait)
@@ -4816,14 +4931,17 @@ class _TradeComposerState extends State<_TradeComposer> {
                   : target == -1
                   ? 'Everyone can accept. Private hands stay hidden.'
                   : 'Only ${s.players[target].id} can accept. Private hands stay hidden.',
-              style: const TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+              style: TextStyle(
+                fontSize: 12,
+                color: gameColor(context, const Color(0xffabbfc2)),
+              ),
             ),
             const SizedBox(height: 11),
             if (!bank && widget.counter == null) ...[
-              const Text(
+              Text(
                 'OFFER TO',
                 style: TextStyle(
-                  color: Color(0xffe5c183),
+                  color: gameColor(context, const Color(0xffe5c183)),
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 1.3,
@@ -4865,7 +4983,10 @@ class _TradeComposerState extends State<_TradeComposer> {
                 key: const ValueKey('trade-summary-stable'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: gameColor(context, const Color(0xffabbfc2)),
+                ),
               ),
             ),
           if (widget.onKindSelected != null && !compactLandscape)
@@ -5018,7 +5139,7 @@ class _TradeComposerState extends State<_TradeComposer> {
                         bank
                             ? 'Give $required ${give.displayName}'
                             : 'Give ${gives.isEmpty ? "…" : tradeBundleText(gives)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -5028,7 +5149,7 @@ class _TradeComposerState extends State<_TradeComposer> {
                         bank
                             ? 'Get ${receipt * bankTimes} ${take.displayName}'
                             : 'Get ${wants.isEmpty ? "…" : tradeBundleText(wants)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -5116,13 +5237,13 @@ class _TacticalPanel extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           label,
-          style: const TextStyle(
-            color: Color(0xffe5c183),
+          style: TextStyle(
+            color: gameColor(context, const Color(0xffe5c183)),
             fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(height: 8),
-        Text(detail, style: const TextStyle(fontSize: 12)),
+        Text(detail, style: TextStyle(fontSize: 12)),
         const SizedBox(height: 8),
         if (w.kind == TacticalKind.invasion)
           InvasionMeter(
@@ -5183,7 +5304,7 @@ class _TacticalPanel extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           'Response allowance: ${state.reactionsUsed.contains(responder) ? 'spent' : 'available'}',
-          style: const TextStyle(fontSize: 11),
+          style: TextStyle(fontSize: 11),
         ),
         if (!online)
           TextButton(
@@ -5976,30 +6097,7 @@ class _Painter extends CustomPainter {
       Land.ridges => Resource.ore,
       Land.barren => null,
     };
-    if (resource == null) {
-      // Only the barren terrain decoration follows the board projection.
-      canvas.save();
-      canvas.scale(g.horizontalFactor, g.verticalFactor);
-      final dune = Paint()
-        ..color = const Color(0xffe9cf91).withValues(alpha: .4)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = r * .035;
-      for (final y in [-.5, .5]) {
-        canvas.drawPath(
-          Path()
-            ..moveTo(c.dx - r * .55, c.dy + r * y)
-            ..quadraticBezierTo(
-              c.dx,
-              c.dy + r * (y - .25),
-              c.dx + r * .55,
-              c.dy + r * y,
-            ),
-          dune,
-        );
-      }
-      canvas.restore();
-      return;
-    }
+    if (resource == null) return;
     for (final side in [-1.0, 1.0]) {
       paintResourceIcon(
         canvas,

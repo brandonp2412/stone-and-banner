@@ -70,7 +70,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
         roomCode.text = prefs.getString('lanJoinCode') ?? roomCode.text;
         host = kIsWeb ? false : (prefs.getBool('lanHost') ?? host);
         final count = prefs.getInt('lanSeats');
-        if (count == 3 || count == 4) seats = count!;
+        if (count != null && count >= 3 && count <= 6) seats = count;
         _restoring = false;
       }
       savedRoom = prefs.getString('lanRoom');
@@ -370,16 +370,20 @@ class _LanRoomPageState extends State<LanRoomPage> {
           ),
           const SizedBox(height: 14),
           if (host) ...[
-            SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 3, label: Text('3 players')),
-                ButtonSegment(value: 4, label: Text('4 players')),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final count in [3, 4, 5, 6])
+                  ChoiceChip(
+                    label: Text('$count players'),
+                    selected: seats == count,
+                    onSelected: (_) {
+                      setState(() => seats = count);
+                      _saveSettings();
+                    },
+                  ),
               ],
-              selected: {seats},
-              onSelectionChanged: (value) {
-                setState(() => seats = value.first);
-                _saveSettings();
-              },
             ),
             const SizedBox(height: 14),
             const Text(

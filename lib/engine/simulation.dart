@@ -287,8 +287,8 @@ class BalanceSimulation {
     int maxRounds = 65,
     List<BalanceBot>? lineup,
   }) {
-    if (seats < 3 || seats > 4 || maxRounds < 1) {
-      throw ArgumentError('3–4 seats and positive round cap required.');
+    if (seats < 3 || seats > 6 || maxRounds < 1) {
+      throw ArgumentError('3–6 seats and positive round cap required.');
     }
     if (lineup != null && lineup.length != seats) {
       throw ArgumentError('Lineup must contain exactly one bot per seat.');

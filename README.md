@@ -2,7 +2,7 @@
 
 Build villages, trade goods and defend your realm from raids. Grow your villages into towns and capitals, command guards, and compete with friends or bots to reach 15 Renown.
 
-**[Play in your browser](https://brandonp2412.github.io/stone-and-banner/)** · **[Download for Android](https://github.com/brandonp2412/stone-and-banner/releases)**
+**[Play in your browser](https://brandonp2412.github.io/stone-and-banner/)** · **[Download for Android, Windows or Linux](https://github.com/brandonp2412/stone-and-banner/releases)**
 
 ![A three-player match with roads, villages and towns on the hex board](docs/screenshots/match-desktop.png)
 
@@ -62,6 +62,22 @@ Use `flutter run -d linux` for the native Linux app. Run checks with:
 flutter analyze
 flutter test
 ```
+
+## Release builds
+
+Push a `v*` tag (for example, `v0.8.6`) to build and publish a GitHub release with:
+
+- Android APKs for `armeabi-v7a`, `arm64-v8a` and `x86_64`.
+- A Windows x64 ZIP containing the executable, DLLs and data.
+- A Linux x64 ZIP containing the executable, libraries and data.
+
+Extract the entire desktop ZIP before running `stone_and_banner.exe` on Windows
+or `./stone_and_banner` on Linux. Linux builds use Ubuntu 22.04 and require GTK 3
+at runtime. Android builds currently use the project's debug signing configuration.
+
+Run **Build releases** manually in GitHub Actions to build downloadable artifacts.
+Manual runs on a `v*` tag also publish the release assets. All three platform builds
+must succeed before assets are published.
 
 ## Refresh the screenshots
 

@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 import '../engine/match.dart';
 
 /// Full-screen, non-dismissible result ceremony. Pure presentation: no match
@@ -80,14 +82,14 @@ class _MatchEndModalState extends State<MatchEndModal>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     'STONE & BANNER  /  MATCH COMPLETE',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 10,
                       letterSpacing: 1.25,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xffb5c9c8),
+                      color: gameColor(context, const Color(0xffb5c9c8)),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -136,19 +138,19 @@ class _MatchEndModalState extends State<MatchEndModal>
                     key: const ValueKey('match-finale-winner'),
                     textAlign: TextAlign.center,
                     softWrap: true,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                      color: gameColor(context, Colors.white),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '$points / 15 Renown  ·  Round ${widget.state.round}',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xffb5c9c8),
+                      color: gameColor(context, const Color(0xffb5c9c8)),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -167,11 +169,11 @@ class _MatchEndModalState extends State<MatchEndModal>
                         decoration: BoxDecoration(
                           color: index == widget.winner
                               ? accent.withValues(alpha: .15)
-                              : const Color(0x9920313a),
+                              : gameColor(context, const Color(0x9920313a)),
                           border: Border.all(
                             color: index == widget.winner
                                 ? accent
-                                : const Color(0xff45616a),
+                                : gameColor(context, const Color(0xff45616a)),
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -189,7 +191,7 @@ class _MatchEndModalState extends State<MatchEndModal>
                               child: Text(
                                 widget.state.players[index].id,
                                 softWrap: true,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -203,7 +205,10 @@ class _MatchEndModalState extends State<MatchEndModal>
                                 fontWeight: FontWeight.w900,
                                 color: index == widget.winner
                                     ? accent
-                                    : const Color(0xffafc6c8),
+                                    : gameColor(
+                                        context,
+                                        const Color(0xffafc6c8),
+                                      ),
                               ),
                             ),
                           ],
@@ -233,7 +238,7 @@ class _MatchEndModalState extends State<MatchEndModal>
             label: const Text('View board'),
             style: FilledButton.styleFrom(
               backgroundColor: accent,
-              foregroundColor: const Color(0xff17242b),
+              foregroundColor: gameColor(context, const Color(0xff17242b)),
               minimumSize: const Size.fromHeight(44),
             ),
           ),
@@ -245,8 +250,8 @@ class _MatchEndModalState extends State<MatchEndModal>
               icon: const Icon(Icons.home_rounded, size: 20),
               label: const Text('Home'),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xff243b43),
-                foregroundColor: const Color(0xffe4eff0),
+                backgroundColor: gameColor(context, const Color(0xff243b43)),
+                foregroundColor: gameColor(context, const Color(0xffe4eff0)),
                 minimumSize: const Size.fromHeight(44),
               ),
             ),
@@ -258,7 +263,7 @@ class _MatchEndModalState extends State<MatchEndModal>
 
   @override
   Widget build(BuildContext context) {
-    final accent = widget.victory ? gold : dusk;
+    final accent = gameColor(context, widget.victory ? gold : dusk);
     final winnerName = widget.state.players[widget.winner].id;
     final points = MatchEngine.score(widget.state, widget.winner);
     final available = MediaQuery.sizeOf(context);
@@ -270,9 +275,9 @@ class _MatchEndModalState extends State<MatchEndModal>
         : math.min(compact ? 283.0 : 310.0, available.height - 22);
     return Stack(
       children: [
-        const ModalBarrier(
+        ModalBarrier(
           key: ValueKey('match-finale-barrier'),
-          color: Color(0xd90a131a),
+          color: gameColor(context, const Color(0xd90a131a)),
           dismissible: false,
         ),
         Center(
@@ -317,15 +322,33 @@ class _MatchEndModalState extends State<MatchEndModal>
                               center: const Alignment(-.65, -.25),
                               radius: 1.4,
                               colors: widget.victory
-                                  ? const [
-                                      Color(0xff315248),
-                                      Color(0xff192e38),
-                                      Color(0xff101d29),
+                                  ? [
+                                      gameColor(
+                                        context,
+                                        const Color(0xff315248),
+                                      ),
+                                      gameColor(
+                                        context,
+                                        const Color(0xff192e38),
+                                      ),
+                                      gameColor(
+                                        context,
+                                        const Color(0xff101d29),
+                                      ),
                                     ]
-                                  : const [
-                                      Color(0xff3b304e),
-                                      Color(0xff202b3c),
-                                      Color(0xff111d2c),
+                                  : [
+                                      gameColor(
+                                        context,
+                                        const Color(0xff3b304e),
+                                      ),
+                                      gameColor(
+                                        context,
+                                        const Color(0xff202b3c),
+                                      ),
+                                      gameColor(
+                                        context,
+                                        const Color(0xff111d2c),
+                                      ),
                                     ],
                             ),
                             border: Border.all(
@@ -458,8 +481,11 @@ class _MatchEndModalState extends State<MatchEndModal>
                                     Text(
                                       'STONE & BANNER  /  MATCH COMPLETE',
                                       maxLines: 1,
-                                      style: const TextStyle(
-                                        color: Color(0xffaebfc0),
+                                      style: TextStyle(
+                                        color: gameColor(
+                                          context,
+                                          const Color(0xffaebfc0),
+                                        ),
                                         letterSpacing: 1.3,
                                         fontWeight: FontWeight.w700,
                                         fontSize: 10,
@@ -503,14 +529,17 @@ class _MatchEndModalState extends State<MatchEndModal>
                                       style: TextStyle(
                                         fontSize: compact ? 13 : 16,
                                         fontWeight: FontWeight.w700,
-                                        color: Colors.white,
+                                        color: gameColor(context, Colors.white),
                                       ),
                                     ),
                                     Text(
                                       '$points / 15 Renown  ·  Round ${widget.state.round}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 10,
-                                        color: Color(0xffb5c9c8),
+                                        color: gameColor(
+                                          context,
+                                          const Color(0xffb5c9c8),
+                                        ),
                                       ),
                                       maxLines: 1,
                                     ),
@@ -552,14 +581,20 @@ class _MatchEndModalState extends State<MatchEndModal>
                                                             ? accent.withValues(
                                                                 alpha: .16,
                                                               )
-                                                            : const Color(
-                                                                0x9920313a,
+                                                            : gameColor(
+                                                                context,
+                                                                const Color(
+                                                                  0x9920313a,
+                                                                ),
                                                               ),
                                                         border: Border.all(
                                                           color: leading
                                                               ? accent
-                                                              : const Color(
-                                                                  0xff45616a,
+                                                              : gameColor(
+                                                                  context,
+                                                                  const Color(
+                                                                    0xff45616a,
+                                                                  ),
                                                                 ),
                                                         ),
                                                         borderRadius:
@@ -593,13 +628,13 @@ class _MatchEndModalState extends State<MatchEndModal>
                                                               overflow:
                                                                   TextOverflow
                                                                       .ellipsis,
-                                                              style:
-                                                                  const TextStyle(
-                                                                    fontSize:
-                                                                        10,
-                                                                    color: Colors
-                                                                        .white,
-                                                                  ),
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                                color: gameColor(
+                                                                  context,
+                                                                  Colors.white,
+                                                                ),
+                                                              ),
                                                             ),
                                                           ),
                                                           const SizedBox(
@@ -614,8 +649,11 @@ class _MatchEndModalState extends State<MatchEndModal>
                                                                       .w900,
                                                               color: leading
                                                                   ? accent
-                                                                  : const Color(
-                                                                      0xffafc6c8,
+                                                                  : gameColor(
+                                                                      context,
+                                                                      const Color(
+                                                                        0xffafc6c8,
+                                                                      ),
                                                                     ),
                                                             ),
                                                           ),
@@ -645,8 +683,9 @@ class _MatchEndModalState extends State<MatchEndModal>
                                             label: const Text('View board'),
                                             style: FilledButton.styleFrom(
                                               backgroundColor: accent,
-                                              foregroundColor: const Color(
-                                                0xff17242b,
+                                              foregroundColor: gameColor(
+                                                context,
+                                                const Color(0xff17242b),
                                               ),
                                               padding:
                                                   const EdgeInsets.symmetric(
@@ -671,17 +710,22 @@ class _MatchEndModalState extends State<MatchEndModal>
                                             ),
                                             label: const Text('Home'),
                                             style: FilledButton.styleFrom(
-                                              backgroundColor: const Color(
-                                                0xff243b43,
+                                              backgroundColor: gameColor(
+                                                context,
+                                                const Color(0xff243b43),
                                               ),
-                                              foregroundColor: const Color(
-                                                0xffe4eff0,
+                                              foregroundColor: gameColor(
+                                                context,
+                                                const Color(0xffe4eff0),
                                               ),
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(14),
-                                                side: const BorderSide(
-                                                  color: Color(0xff6b939a),
+                                                side: BorderSide(
+                                                  color: gameColor(
+                                                    context,
+                                                    const Color(0xff6b939a),
+                                                  ),
                                                 ),
                                               ),
                                               padding:

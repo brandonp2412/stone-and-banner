@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 import '../engine/board.dart';
 import 'labels.dart';
 import 'resource_icon.dart';
@@ -47,16 +49,22 @@ class ResourceTransfer extends StatelessWidget {
           tooltip: '${remove ? 'Return' : 'Add'} one ${good.displayName}',
           onPressed: enabled ? () => change(good, remove ? -1 : 1) : null,
           backgroundColor: remove
-              ? accent.withValues(alpha: .2)
-              : const Color(0xff2b4249),
-          side: BorderSide(color: remove ? accent : const Color(0xff38535b)),
+              ? gameColor(context, accent).withValues(alpha: .2)
+              : gameColor(context, const Color(0xff2b4249)),
+          side: BorderSide(
+            color: remove
+                ? gameColor(context, accent)
+                : gameColor(context, const Color(0xff38535b)),
+          ),
         );
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xff1e343d),
+        color: gameColor(context, const Color(0xff1e343d)),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: accent.withValues(alpha: .5)),
+        border: Border.all(
+          color: gameColor(context, accent).withValues(alpha: .5),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,7 +72,10 @@ class ResourceTransfer extends StatelessWidget {
         children: [
           Text(
             title,
-            style: TextStyle(color: accent, fontWeight: FontWeight.w800),
+            style: TextStyle(
+              color: gameColor(context, accent),
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 6),
           const Text('Tap to add', style: TextStyle(fontSize: 11)),

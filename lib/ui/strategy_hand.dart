@@ -7,6 +7,8 @@ import 'compact_layout.dart';
 
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 import '../engine/cards.dart';
 import '../engine/game.dart';
 import '../engine/match.dart';
@@ -223,7 +225,7 @@ class StrategyHand extends StatelessWidget {
                 Text(
                   card.track.name.toUpperCase(),
                   style: TextStyle(
-                    color: _trackColors[card.track],
+                    color: gameColor(context, _trackColors[card.track]!),
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),
@@ -471,19 +473,21 @@ class StrategyHand extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xff20343c),
+                    color: gameColor(context, const Color(0xff20343c)),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xff40565b)),
+                    border: Border.all(
+                      color: gameColor(context, const Color(0xff40565b)),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.style_outlined,
                         size: 28,
-                        color: Color(0xffe5c183),
+                        color: gameColor(context, const Color(0xffe5c183)),
                       ),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -495,7 +499,10 @@ class StrategyHand extends StatelessWidget {
                               'Develop Town tracks to unlock card draws.',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Color(0xffabbfc2),
+                                color: gameColor(
+                                  context,
+                                  const Color(0xffabbfc2),
+                                ),
                               ),
                             ),
                           ],
@@ -558,19 +565,21 @@ class StrategyHand extends StatelessWidget {
                                 state.current.cards[i].definition.description,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: Color(0xffc2d2d2),
+                                  color: gameColor(
+                                    context,
+                                    const Color(0xffc2d2d2),
+                                  ),
                                 ),
                               ),
                               Text(
                                 state.current.cards[i].track.name,
                                 style: TextStyle(
-                                  color:
-                                      _trackColors[state
-                                          .current
-                                          .cards[i]
-                                          .track],
+                                  color: gameColor(
+                                    context,
+                                    _trackColors[state.current.cards[i].track]!,
+                                  ),
                                 ),
                               ),
                             ],

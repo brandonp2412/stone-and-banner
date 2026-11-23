@@ -345,14 +345,19 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      SegmentedButton<int>(
-                        selected: {seats},
-                        segments: const [
-                          ButtonSegment(value: 3, label: Text('3 players')),
-                          ButtonSegment(value: 4, label: Text('4 players')),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          for (final count in [3, 4, 5, 6])
+                            ChoiceChip(
+                              label: Text('$count players'),
+                              selected: seats == count,
+                              onSelected: (_) {
+                                setState(() => seats = count);
+                              },
+                            ),
                         ],
-                        onSelectionChanged: (v) =>
-                            setState(() => seats = v.first),
                       ),
                       const SizedBox(height: 8),
                       FilledButton.icon(
@@ -488,13 +493,19 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
               'Create a room and share one invite link with your friends.',
             ),
             const SizedBox(height: 9),
-            SegmentedButton<int>(
-              selected: {seats},
-              segments: const [
-                ButtonSegment(value: 3, label: Text('3 players')),
-                ButtonSegment(value: 4, label: Text('4 players')),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final count in [3, 4, 5, 6])
+                  ChoiceChip(
+                    label: Text('$count players'),
+                    selected: seats == count,
+                    onSelected: (_) {
+                      setState(() => seats = count);
+                    },
+                  ),
               ],
-              onSelectionChanged: (v) => setState(() => seats = v.first),
             ),
             const SizedBox(height: 12),
             FilledButton.icon(

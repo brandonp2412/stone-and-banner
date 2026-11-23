@@ -7,6 +7,9 @@ import 'package:flutter/foundation.dart';
 import 'ui/compact_layout.dart';
 
 import 'package:flutter/material.dart';
+
+import 'ui/game_colors.dart';
+
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,8 +26,8 @@ import 'ui/resource_icon.dart';
 import 'ui/p2p_room_page.dart';
 import 'network/p2p_transport.dart';
 
-MatchEvent? _chooseComputerEvent(MatchState state) =>
-    const HeuristicAi().choose(state);
+MatchEvent? _chooseComputerEvent((MatchState, BotDifficulty) input) =>
+    HeuristicAi(difficulty: input.$2).choose(input.$1);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +71,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   late final AiTurnCoordinator ai;
   Set<int> aiSeats = <int>{};
   Set<int> savedAiSeats = <int>{};
+  BotDifficulty botDifficulty = BotDifficulty.hard;
+  BotDifficulty matchBotDifficulty = BotDifficulty.hard;
+  BotDifficulty savedBotDifficulty = BotDifficulty.hard;
   bool computerOpponents = false;
   int aiOpponentCount = 2; // Solo play by default when Vs bots is chosen.
 
@@ -242,7 +248,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       isComputerSeat: (seat) => aiSeats.contains(seat),
       // Give each committed computer action room for its on-screen animation.
       delay: const Duration(milliseconds: 2400),
-      decide: (state) => compute(_chooseComputerEvent, state),
+      decide: (state) =>
+          compute(_chooseComputerEvent, (state, matchBotDifficulty)),
       onError: _onLocalAiFailure,
     );
     for (final name in names) {
@@ -272,12 +279,15 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             final data = jsonDecode(raw) as Map<String, dynamic>;
             _restoringSetup = true;
             setState(() {
-              if (data['seats'] == 3 || data['seats'] == 4) {
+              if (data['seats'] is int &&
+                  data['seats'] >= 3 &&
+                  data['seats'] <= 6) {
                 seats = data['seats'] as int;
               }
               if (data['computerOpponents'] is bool) {
                 computerOpponents = data['computerOpponents'] as bool;
               }
+              botDifficulty = BotDifficulty.parse(data['botDifficulty']);
               final count = data['aiOpponentCount'];
               if (count is int && count > 0 && count < seats) {
                 aiOpponentCount = count;
@@ -302,6 +312,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       }
       var replay = prefs.getString(_savedMatchKey);
       var restoredAiSeats = <int>{};
+      var restoredDifficulty = BotDifficulty.hard;
       final session = prefs.getString(_savedSessionKey);
       if (session != null) {
         try {
@@ -313,6 +324,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
               ids is List &&
               ids.every((id) => id is int && id >= 0)) {
             replay = encoded;
+            restoredDifficulty = BotDifficulty.parse(data['botDifficulty']);
             restoredAiSeats = ids.cast<int>().toSet();
           }
         } on Object {
@@ -323,6 +335,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         setState(() {
           savedReplay = replay;
           savedAiSeats = restoredAiSeats;
+          savedBotDifficulty = restoredDifficulty;
         });
         // Do not interrupt navigation if storage finishes loading late.
         if (replay != null && page == Page.home) resume(automatic: true);
@@ -345,6 +358,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       'seats': seats,
       'computerOpponents': computerOpponents,
       'aiOpponentCount': aiOpponentCount,
+      'botDifficulty': botDifficulty.name,
     });
     _saveTail = _saveTail.then((_) async {
       try {
@@ -362,10 +376,12 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     final replay = MatchEngine.exportReplay(state);
     savedReplay = replay;
     savedAiSeats = {...aiSeats};
+    savedBotDifficulty = matchBotDifficulty;
     final session = jsonEncode({
       'version': 2,
       'replay': replay,
       'computerSeats': (aiSeats.toList()..sort()),
+      'botDifficulty': matchBotDifficulty.name,
     });
     // Serialize writes: a slower prior event must never replace a newer replay.
     _saveTail = _saveTail.then((_) async {
@@ -437,6 +453,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       setState(() {
         match = loaded;
         aiSeats = computerSeats;
+        matchBotDifficulty = savedBotDifficulty;
         aiMoveCount = 0;
         aiError = null;
         page = Page.board;
@@ -455,7 +472,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   bool handoff = false;
   int seats = 3;
   final names = [
-    for (var i = 1; i <= 4; i++) TextEditingController(text: 'Player $i'),
+    for (var i = 1; i <= 6; i++) TextEditingController(text: 'Player $i'),
   ];
 
   @override
@@ -552,6 +569,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       ai.pause();
       setState(() {
         match = s;
+        matchBotDifficulty = botDifficulty;
         aiSeats = computerOpponents
             ? {for (var i = firstComputer; i < seats; i++) i}
             : <int>{};
@@ -727,15 +745,18 @@ class _StoneBannerAppState extends State<StoneBannerApp>
               style: Theme.of(context).textTheme.headlineSmall,
             ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Choose who plays. All opponents run locally.',
-            style: TextStyle(fontSize: 12, color: Color(0xffabbfc2)),
+            style: TextStyle(
+              fontSize: 12,
+              color: gameColor(context, const Color(0xffabbfc2)),
+            ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Game options',
             style: TextStyle(
-              color: Color(0xffefd6a3),
+              color: gameColor(context, const Color(0xffefd6a3)),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -762,7 +783,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             spacing: 8,
             runSpacing: 4,
             children: [
-              for (final count in [3, 4])
+              for (final count in [3, 4, 5, 6])
                 ChoiceChip(
                   label: Text('$count players'),
                   selected: seats == count,
@@ -808,9 +829,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     ),
                     Text(
                       '$humanSeats ${humanSeats == 1 ? 'human' : 'humans'} · $aiOpponentCount ${aiOpponentCount == 1 ? 'computer' : 'computers'}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xffabbfc2),
+                        color: gameColor(context, const Color(0xffabbfc2)),
                       ),
                     ),
                   ],
@@ -835,14 +856,38 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                     ],
                   ),
                 ],
+                if (computerOpponents) ...[
+                  const SizedBox(height: 12),
+                  const Text('Bot difficulty'),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final level in BotDifficulty.values)
+                        ChoiceChip(
+                          label: Text(level.label),
+                          selected: botDifficulty == level,
+                          onSelected: (_) =>
+                              _updateSetup(() => botDifficulty = level),
+                        ),
+                    ],
+                  ),
+                  Text(switch (botDifficulty) {
+                    BotDifficulty.easy =>
+                      'Relaxed play with fewer actions per turn.',
+                    BotDifficulty.medium =>
+                      'More active play with less precise planning.',
+                    BotDifficulty.hard =>
+                      'Full strategy and longer action sequences.',
+                  }),
+                ],
                 if (!isCompactLandscape(context)) ...[
                   const SizedBox(height: 8),
                   Text(
                     computerOpponents
                         ? '$humanSeats ${humanSeats == 1 ? 'human' : 'humans'} · $aiOpponentCount ${aiOpponentCount == 1 ? 'computer' : 'computers'}'
                         : '$seats humans · pass the device between turns',
-                    style: const TextStyle(
-                      color: Color(0xffabbfc2),
+                    style: TextStyle(
+                      color: gameColor(context, const Color(0xffabbfc2)),
                       fontSize: 12,
                     ),
                   ),
@@ -909,7 +954,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       );
       return Material(
         key: const ValueKey('stone-setup-page'),
-        color: const Color(0xff101e25),
+        color: gameColor(context, const Color(0xff101e25)),
         child: SafeArea(
           child: bounds.maxWidth >= 600
               ? Row(
@@ -1534,7 +1579,10 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                         if (page == Page.board && handoff && current != null)
                           Positioned.fill(
                             child: Material(
-                              color: const Color(0xff101e25),
+                              color: gameColor(
+                                context,
+                                const Color(0xff101e25),
+                              ),
                               child: Center(
                                 child: SingleChildScrollView(
                                   padding: const EdgeInsets.all(20),
@@ -1550,10 +1598,13 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                           children: [
                                             Row(
                                               children: [
-                                                const Icon(
+                                                Icon(
                                                   Icons.lock_outline,
                                                   size: 44,
-                                                  color: Color(0xffe5c183),
+                                                  color: gameColor(
+                                                    context,
+                                                    const Color(0xffe5c183),
+                                                  ),
                                                 ),
                                                 const SizedBox(width: 20),
                                                 Expanded(
@@ -1796,13 +1847,16 @@ class _LandingHall extends StatelessWidget {
                   style: TextStyle(
                     fontSize: compactLandscape ? 23 : 27,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xffefd6a3),
+                    color: gameColor(context, const Color(0xffefd6a3)),
                   ),
                 ),
                 SizedBox(height: compactLandscape ? 4 : 8),
-                const Text(
+                Text(
                   'Build, trade and defend your way to 15 Renown.',
-                  style: TextStyle(color: Color(0xffabbfc2), fontSize: 13),
+                  style: TextStyle(
+                    color: gameColor(context, const Color(0xffabbfc2)),
+                    fontSize: 13,
+                  ),
                 ),
                 SizedBox(height: compactLandscape ? 10 : 20),
                 if (onContinue != null) ...[
@@ -1861,13 +1915,13 @@ class _LandingHall extends StatelessWidget {
                 ),
                 if (!compactLandscape) ...[
                   const SizedBox(height: 12),
-                  const Text(
-                    'OFFLINE PLAY  ·  LOCAL BOTS  ·  3–4 SEATS',
+                  Text(
+                    'OFFLINE PLAY  ·  LOCAL BOTS  ·  3–6 SEATS',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 10,
                       letterSpacing: 1.3,
-                      color: Color(0xff8fa9ac),
+                      color: gameColor(context, const Color(0xff8fa9ac)),
                     ),
                   ),
                 ],
@@ -1879,7 +1933,7 @@ class _LandingHall extends StatelessWidget {
       final desktop = box.maxWidth >= 1200 && box.maxHeight >= 650;
       return Material(
         key: const ValueKey('stone-home-page'),
-        color: const Color(0xff101e25),
+        color: gameColor(context, const Color(0xff101e25)),
         child: SafeArea(
           child: desktop
               ? Padding(
@@ -1899,19 +1953,22 @@ class _LandingHall extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.all(24),
                               child: Text(
                                 'WELCOME TO THE TABLE',
                                 style: TextStyle(
-                                  color: Color(0xff8fa9ac),
+                                  color: gameColor(
+                                    context,
+                                    const Color(0xff8fa9ac),
+                                  ),
                                   letterSpacing: 2,
                                   fontSize: 12,
                                 ),
                               ),
                             ),
                             Expanded(child: menu),
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.all(24),
                               child: Row(
                                 children: [
@@ -1921,7 +1978,10 @@ class _LandingHall extends StatelessWidget {
                                     child: Text(
                                       'Your match saves automatically on this device.',
                                       style: TextStyle(
-                                        color: Color(0xffabbfc2),
+                                        color: gameColor(
+                                          context,
+                                          const Color(0xffabbfc2),
+                                        ),
                                       ),
                                     ),
                                   ),

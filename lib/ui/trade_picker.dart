@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 import '../engine/board.dart';
 import 'labels.dart';
 import 'resource_icon.dart';
@@ -25,8 +27,8 @@ class TradePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).height < 500;
-    const gold = Color(0xffe5c183);
-    const mint = Color(0xff73d9c0);
+    final gold = gameColor(context, const Color(0xffe5c183));
+    final mint = gameColor(context, const Color(0xff73d9c0));
     Widget quantity(Resource good, bool giving) {
       final count = (giving ? gives : wants)[good] ?? 0;
       final step = bank ? (giving ? rates[good] : receipts[good]) ?? 1 : 1;
@@ -47,10 +49,12 @@ class TradePicker extends StatelessWidget {
         decoration: BoxDecoration(
           color: count > 0
               ? color.withValues(alpha: .18)
-              : const Color(0xff192b32),
+              : gameColor(context, const Color(0xff192b32)),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: count > 0 ? color : const Color(0xff3a4c53),
+            color: count > 0
+                ? color
+                : gameColor(context, const Color(0xff3a4c53)),
           ),
         ),
         child: Row(
@@ -89,7 +93,7 @@ class TradePicker extends StatelessWidget {
                       style: TextStyle(
                         color: enabled || count > 0
                             ? color
-                            : const Color(0xff63737a),
+                            : gameColor(context, const Color(0xff63737a)),
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
                       ),
@@ -122,9 +126,9 @@ class TradePicker extends StatelessWidget {
                 ),
                 Text(
                   '${holdings[good] ?? 0} in hand',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
-                    color: Color(0xffa8b9bd),
+                    color: gameColor(context, const Color(0xffa8b9bd)),
                   ),
                 ),
               ],
@@ -139,12 +143,15 @@ class TradePicker extends StatelessWidget {
     Widget column(List<Resource> goods) => Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Row(
+        Row(
           children: [
             Expanded(
               child: Text(
                 'RESOURCE',
-                style: TextStyle(fontSize: 10, color: Color(0xffa8b9bd)),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: gameColor(context, const Color(0xffa8b9bd)),
+                ),
               ),
             ),
             SizedBox(

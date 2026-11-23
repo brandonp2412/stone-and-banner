@@ -3,6 +3,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'game_colors.dart';
+
 import '../engine/board.dart';
 import 'labels.dart';
 import '../engine/match.dart';
@@ -77,7 +79,7 @@ class _MatchActivityState extends State<MatchActivity> {
         seat: seat,
         isEmote: true,
         detail: '',
-        color: const Color(0xff67dbbf),
+        color: gameColor(context, const Color(0xff67dbbf)),
       ),
     );
     _dismiss = Timer(const Duration(seconds: 3), () {
@@ -535,9 +537,11 @@ class _MatchActivityState extends State<MatchActivity> {
                         : cue.title,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: const Color(0xff172a33),
+                        color: gameColor(context, const Color(0xff172a33)),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: cue.color),
+                        border: Border.all(
+                          color: gameColor(context, cue.color),
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
@@ -559,7 +563,7 @@ class _MatchActivityState extends State<MatchActivity> {
                                             : cue.detail,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 10,
                                           height: 1.05,
                                           fontWeight: FontWeight.w600,
@@ -592,10 +596,10 @@ class _MatchActivityState extends State<MatchActivity> {
                       const SizedBox(height: 5),
                       Text(
                         widget.state.players[cue.seat].id,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w900,
-                          color: Colors.white,
+                          color: gameColor(context, Colors.white),
                           shadows: [Shadow(blurRadius: 9, color: Colors.black)],
                         ),
                       ),
@@ -634,9 +638,11 @@ class _ActivityCard extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
     key: const ValueKey('match-activity-notice'),
     decoration: BoxDecoration(
-      color: const Color(0xff172a33),
+      color: gameColor(context, const Color(0xff172a33)),
       borderRadius: BorderRadius.circular(22),
-      border: Border.all(color: cue.color.withValues(alpha: .65)),
+      border: Border.all(
+        color: gameColor(context, cue.color).withValues(alpha: .65),
+      ),
       boxShadow: const [
         BoxShadow(
           color: Color(0x9a000000),
@@ -687,7 +693,7 @@ class _ActivityCard extends StatelessWidget {
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.5,
-                      color: cue.color,
+                      color: gameColor(context, cue.color),
                     ),
                   ),
                 Text(
@@ -696,7 +702,7 @@ class _ActivityCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: gameColor(context, Colors.white),
                     fontSize: MediaQuery.sizeOf(context).width < 900 ? 12 : 15,
                   ),
                 ),
@@ -706,7 +712,7 @@ class _ActivityCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: const Color(0xffc7d8d9),
+                      color: gameColor(context, const Color(0xffc7d8d9)),
                       fontSize: MediaQuery.sizeOf(context).width < 900
                           ? 10
                           : 12,
