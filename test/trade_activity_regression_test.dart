@@ -78,6 +78,61 @@ void main() {
     expect(s.offers.length, 1);
   });
 
+  testWidgets('human-only or declined-bot offers are awaiting a reply', (
+    tester,
+  ) async {
+    Future<void> show(TradeProposal offer, Set<int> bots) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TradeMarket(
+              state: funded().copyWith(offers: [offer]),
+              computerSeats: bots,
+              viewerSeat: 0,
+              onBank: () {},
+              onOffer: () {},
+              onCounter: (_) {},
+              onEvent: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await show(
+      const TradeProposal(1, 0, 1, Resource.wood, 1, Resource.brick, 1),
+      {2},
+    );
+    expect(find.text('Your offer is awaiting a reply.'), findsOneWidget);
+    expect(find.text('YOUR PENDING OFFER'), findsOneWidget);
+    await show(
+      const TradeProposal(2, 0, -1, Resource.wood, 1, Resource.brick, 1),
+      {},
+    );
+    expect(find.text('Your offer is awaiting a reply.'), findsOneWidget);
+    await show(
+      const TradeProposal(
+        3,
+        0,
+        -1,
+        Resource.wood,
+        1,
+        Resource.brick,
+        1,
+        declinedBy: {2},
+      ),
+      {2},
+    );
+    expect(find.text('Your offer is awaiting a reply.'), findsOneWidget);
+    await show(
+      const TradeProposal(4, 0, -1, Resource.wood, 1, Resource.brick, 1),
+      {2},
+    );
+    expect(find.text('Thinking about your offer…'), findsOneWidget);
+    expect(find.text('CONSIDERING YOUR OFFER'), findsOneWidget);
+  });
+
   testWidgets('incoming offer provides accept, decline, counter actions', (
     tester,
   ) async {

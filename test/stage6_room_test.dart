@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/ai_turn_coordinator.dart';
 import 'package:stone_and_banner/engine/board.dart';
+import 'package:stone_and_banner/engine/balance.dart';
 import 'package:stone_and_banner/engine/cards.dart';
 import 'package:stone_and_banner/engine/game.dart';
 import 'package:stone_and_banner/engine/match.dart';
@@ -16,6 +17,28 @@ void main() {
     room.start(0);
     return room;
   }
+
+  test('public room view preserves active balance and builder eligibility', () {
+    final state =
+        MatchEngine.newGame(
+          ['Ada', 'Ben', 'Cora'],
+          42,
+          balance: const MatchBalance(raidBonusAfterFirst: 2, marketRate: 4),
+          cardDeckVersion: 2,
+        ).copyWith(
+          builders: {0, 2},
+          invasions: 1,
+          sites: {0: const Site(0, Structure.town)},
+        );
+    final decoded = RoomProtocol.readView(RoomProtocol.view(state, 1));
+    expect(decoded.balance.toJson(), state.balance.toJson());
+    expect(decoded.builders, state.builders);
+    expect(decoded.cardDeckVersion, state.cardDeckVersion);
+    expect(
+      MatchEngine.invasionStrength(decoded),
+      MatchEngine.invasionStrength(state),
+    );
+  });
 
   test('lobby occupancy, identity and creator-only start', () {
     final registry = LanRoomRegistry();

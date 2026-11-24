@@ -7,7 +7,6 @@ import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/network/room_protocol.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
-import 'package:stone_and_banner/ui/resource_icon.dart';
 
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
 import 'resource_discard_test.dart' show seven;
@@ -108,7 +107,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(ResourceIcon).first);
+    await tester.tap(find.byKey(const ValueKey('resource-tile-wood')));
     await tester.pumpAndSettle();
     expect(find.text('Exchanges'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('bank-bundles-plus')));

@@ -68,6 +68,9 @@ class TradeMarket extends StatelessWidget {
     final outgoing = onlyIncomingOfferId == null
         ? state.offers.where((o) => o.proposer == viewerSeat).toList()
         : <TradeProposal>[];
+    final botsConsidering = outgoing.any(
+      (offer) => computerSeats.any(offer.canRespond),
+    );
     final feedback = latestTradeFeedback(state, viewer: viewerSeat);
     final lastVisibleResponse = state.events.reversed
         .whereType<RespondTrade>()
@@ -147,12 +150,7 @@ class TradeMarket extends StatelessWidget {
           Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-              outgoing.any(
-                    (o) =>
-                        (o.target == -1 ||
-                        computerSeats.isNotEmpty ||
-                        computerSeats.contains(o.target)),
-                  )
+              botsConsidering
                   ? 'Thinking about your offer…'
                   : 'Your offer is awaiting a reply.',
               style: TextStyle(color: gameColor(context, gold), fontSize: 12),
@@ -180,14 +178,7 @@ class TradeMarket extends StatelessWidget {
           const SizedBox(height: 9),
           _heading(
             context,
-            outgoing.any(
-                  (o) =>
-                      (o.target == -1 ||
-                      computerSeats.isNotEmpty ||
-                      computerSeats.contains(o.target)),
-                )
-                ? 'CONSIDERING YOUR OFFER'
-                : 'YOUR PENDING OFFER',
+            botsConsidering ? 'CONSIDERING YOUR OFFER' : 'YOUR PENDING OFFER',
             Icons.schedule_outlined,
           ),
           for (final offer in outgoing)

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../engine/advanced.dart';
+import '../engine/balance.dart';
 import '../engine/board.dart';
 import '../engine/cards.dart';
 import '../engine/game.dart';
@@ -59,6 +60,7 @@ abstract final class RoomProtocol {
     final data =
         jsonDecode(MatchEngine.snapshot(state)) as Map<String, dynamic>;
     data['seed'] = 0; // The secret seed governs dice, theft and hidden decks.
+    data['cardDeckVersion'] = state.cardDeckVersion;
     data['boardTiles'] = [
       for (final t in state.board.tiles)
         [t.position.q, t.position.r, t.land.name, t.productionNumber],
@@ -191,6 +193,11 @@ abstract final class RoomProtocol {
           int.parse(entry.key): entry.value as int,
       },
       seed: 0,
+      balance: data['balance'] is Map<String, dynamic>
+          ? MatchBalance.fromJson(data['balance'] as Map<String, dynamic>)
+          : MatchBalance.baseline,
+      cardDeckVersion: data['cardDeckVersion'] as int? ?? 1,
+      builders: (data['builders'] as List? ?? const []).cast<int>().toSet(),
       board: board,
       topology: BoardTopology(board),
       players: players,
