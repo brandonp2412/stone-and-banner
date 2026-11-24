@@ -1,11 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/match.dart';
+import 'package:stone_and_banner/ui/match_screen.dart';
+
+import 'advanced_test.dart' show draft, fund;
 
 import 'landscape_tabletop_test.dart' show display, tableWithSupplies;
 
 void main() {
-  testWidgets('affordable village explains why no site is legal', (
+  testWidgets('bandit victim selection can be cancelled without moving', (
+    tester,
+  ) async {
+    var state = draft(55).copyWith(active: 1, phase: MatchPhase.actions);
+    state = fund(state, 1, MatchEngine.effectiveRoadCost(state));
+    state = MatchEngine.apply(
+      state,
+      PlaceRoad(MatchEngine.legalEdges(state).first),
+    );
+    state = state.copyWith(active: 0, phase: MatchPhase.bandit);
+    final tile = List.generate(state.board.tiles.length, (i) => i).firstWhere(
+      (i) =>
+          i != state.banditTile &&
+          MatchEngine.banditVictims(state, i).contains(1),
+    );
+    final events = <MatchEvent>[];
+    await display(tester, const Size(844, 390), state, onEvent: events.add);
+    final map = find.byKey(const ValueKey('realm-map'));
+    final point =
+        tester.getTopLeft(map) +
+        BoardGeometry(tester.getSize(map))
+            .tile(state.board.tiles[tile].position);
+    for (final cancelByTap in [false, true]) {
+      await tester.tapAt(point);
+      await tester.pumpAndSettle();
+      expect(find.text('Bandit · choose who to rob'), findsOneWidget);
+      if (cancelByTap) {
+        await tester.tapAt(const Offset(1, 1));
+      } else {
+        await tester.tap(find.text('Cancel'));
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Bandit · choose who to rob'), findsNothing);
+      expect(events, isEmpty);
+    }
+    await tester.tapAt(point);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, state.players[1].id));
+    await tester.pumpAndSettle();
+    expect(events.single, isA<MoveBandit>());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('affordable village without a legal site is disabled', (
     tester,
   ) async {
     final state = tableWithSupplies().copyWith(roads: <int, int>{});
@@ -13,7 +59,15 @@ void main() {
     await display(tester, const Size(844, 390), state);
     await tester.tap(find.byKey(const ValueKey('mobile-open-actions')));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Extend a road first'), findsOneWidget);
+    expect(find.byTooltip('Extend a road first'), findsNothing);
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Village'),
+          )
+          .onPressed,
+      isNull,
+    );
     expect(tester.takeException(), isNull);
   });
 

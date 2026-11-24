@@ -165,7 +165,9 @@ class Dock {
   const Dock(this.edge, this.resource);
   final BoardEdge edge;
   final Resource? resource;
-  String get label => resource == null ? '3:1' : '${resource!.name} 2:1';
+  String get label => resource == null
+      ? '3:1'
+      : '${resource == Resource.wool ? 'sheep' : resource!.name} 2:1';
 }
 
 class BoardTopology {

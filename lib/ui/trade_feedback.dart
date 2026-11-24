@@ -38,7 +38,7 @@ String? tradeFeedbackForResponse(
       '${tradeBundleText(proposal.wants)}';
   return response.accept
       ? '$recipient accepted the trade: $terms.'
-      : '$recipient declined the trade: $terms. Reserved goods returned.';
+      : '$recipient declined the trade: $terms.';
 }
 
 /// The events log is authoritative; proposal ownership is recoverable from
@@ -61,7 +61,8 @@ int tradeProposerForEvent(MatchState state, int index) {
   var seat = state.active;
   for (var i = state.events.length - 1; i > index; i--) {
     if (state.events[i] is EndTurn) {
-      seat = (seat - 1 + state.players.length) % state.players.length;
+      final order = state.turnOrder;
+      seat = order[(order.indexOf(seat) - 1 + order.length) % order.length];
     }
   }
   return seat;

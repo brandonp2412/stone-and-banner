@@ -5,6 +5,19 @@ import 'package:stone_and_banner/engine/game.dart';
 import 'package:stone_and_banner/engine/match.dart';
 
 void main() {
+  test('sheep is the displayed name but wool remains the replay key', () {
+    expect(
+      tradeBundleText({Resource.wheat: 1, Resource.wool: 2}),
+      '1 wheat + 2 sheep',
+    );
+    expect(encodeTradeBundle({Resource.wool: 2}), {'wool': 2});
+    final s = MatchEngine.newGame(['A', 'B', 'C'], 55);
+    expect(
+      s.topology.docks.firstWhere((d) => d.resource == Resource.wool).label,
+      'sheep 2:1',
+    );
+  });
+
   test('coastal docks grant owner-specific and good-specific rates', () {
     final base = MatchEngine.newGame(['A', 'B', 'C'], 55);
     final docks = base.topology.docks;

@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show FontLoader, rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
+import 'package:stone_and_banner/ui/resource_icon.dart';
 
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
 
@@ -28,11 +29,13 @@ void main() {
         ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
         ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
       await fonts.load();
+      await tester.runAsync(loadResourceIcons);
       final boundary = GlobalKey();
       await tester.pumpWidget(
         RepaintBoundary(
           key: boundary,
           child: MaterialApp(
+            debugShowCheckedModeBanner: false,
             theme: ThemeData(
               brightness: Brightness.dark,
               fontFamily: 'NotoSans',

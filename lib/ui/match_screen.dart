@@ -7,13 +7,13 @@ import 'dart:async';
 import 'compact_layout.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsProperties;
 
 import 'game_colors.dart';
 
 import 'package:flutter/services.dart';
 
 import 'dock_label_layout.dart';
-import 'dock_leader_paths.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,6 +26,7 @@ import 'strategy_hand.dart';
 import 'labels.dart';
 import 'resource_harvest.dart';
 import 'resource_icon.dart';
+import 'resource_label.dart';
 import 'trade_market.dart';
 import 'trade_picker.dart';
 import 'focus_hint.dart';
@@ -76,11 +77,13 @@ class MatchView extends StatefulWidget {
     this.tradeReplyAllowed = false,
     this.online = false,
     this.onlineView,
+    this.onlineTurnSeconds,
     this.viewingSeat,
     this.computerSeats = const <int>{},
     this.visibleSeat,
     this.waitingMessage,
     this.onFastForward,
+    this.fastForwardingBots = false,
     this.onHome,
     this.onLeaveRoom,
     this.onRules,
@@ -98,12 +101,14 @@ class MatchView extends StatefulWidget {
   /// Off-turn trade recipients can answer offers without acquiring turn control.
   final bool tradeReplyAllowed;
   final bool online;
+  final int? onlineTurnSeconds;
   final Map<String, dynamic>? onlineView;
   final int? viewingSeat;
   final Set<int> computerSeats;
   final int? visibleSeat;
   final String? waitingMessage;
   final VoidCallback? onFastForward;
+  final bool fastForwardingBots;
   final VoidCallback? onHome, onLeaveRoom, onRules;
   final Future<void> Function()? onSettings;
   final bool pauseInBackground;
@@ -167,6 +172,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   int? selectedGuard;
   final _boardHoverPosition = ValueNotifier<Offset?>(null);
   RollDice? _rollingDice;
+  bool _skipBotDice = false;
   int _diceAnimationSerial = 0;
   late final AnimationController _roadController;
   late final Animation<double> _roadReveal;
@@ -213,6 +219,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   final _realmHintTarget = GlobalKey();
   final _actionsHintTarget = GlobalKey();
   final _boardHintTarget = GlobalKey();
+  final _turnHintTarget = GlobalKey();
   final _panelHintTarget = GlobalKey();
   final _tabHintTargets = List.generate(3, (_) => GlobalKey());
 
@@ -284,6 +291,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     final onMap = !mobile || _mobilePage == null;
     final target = hint.id == 'town'
         ? (mobile && onMap ? _actionsHintTarget : _realmHintTarget)
+        : hint.id == 'roll' || hint.id == 'invasion'
+        ? (onMap ? _turnHintTarget : _panelHintTarget)
         : s.tactical != null
         ? _panelHintTarget
         : ['trade', 'cards', 'realm', 'actions'].contains(hint.id)
@@ -340,7 +349,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     FocusManager.instance.addEarlyKeyEventHandler(_handleMainActionKey);
-    _secondsLeft = widget.online ? 150 : 90;
+    _secondsLeft = widget.onlineTurnSeconds ?? (widget.online ? 150 : 90);
     unawaited(loadResourceIcons());
     unawaited(_loadHints());
     _scheduleIncomingTrade();
@@ -660,6 +669,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               const Text('Choose which resource to take:'),
               for (final entry in choices.entries)
                 ListTile(
+                  leading: ResourceIcon(entry.key, size: 24),
                   title: Text(entry.key.displayName),
                   onTap: () => Navigator.pop(dialogContext, entry.value),
                 ),
@@ -704,7 +714,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       context: context,
       builder: (context) => CompactAlertDialog(
         title: const Text('Build this road?'),
-        content: Text('Cost: $cost'),
+        content: ResourceLabel('Cost: $cost', showNames: true),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -728,9 +738,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       context: context,
       builder: (context) => CompactAlertDialog(
         title: const Text('Extend your road?'),
-        content: Text(
-          'Cost: ${_costLabel(MatchEngine.effectiveRoadCost(s))}. '
-          '${available ? 'Choose a glowing open edge to connect to your network.' : 'No affordable road placements are available this turn.'}',
+        content: ResourceLabel(
+          'Cost: ${_costLabel(MatchEngine.effectiveRoadCost(s))}',
+          showNames: true,
         ),
         actions: [
           TextButton(
@@ -962,13 +972,17 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       } else {
         final chosen = await showDialog<int>(
           context: context,
-          barrierDismissible: false,
+          barrierDismissible: true,
           builder: (context) => CompactAlertDialog(
             title: const Text('Bandit · choose who to rob'),
             content: const Text(
               'Choose a neighbour. The good is drawn from their hand using the saved seed.',
             ),
             actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
               for (final n in victims)
                 TextButton(
                   onPressed: () => Navigator.pop(context, n),
@@ -995,8 +1009,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               title: Text(
                 '${entry.value.rank.name} Guard · strength ${entry.value.rank.strength}',
               ),
-              content: Text(
-                '${entry.value.active ? 'Active' : 'Inactive'} · Upgrade cost: ${entry.value.rank == GuardRank.champion ? 'Maximum rank' : _costLabel(MatchEngine.promotionCost(entry.value.rank))}. Upgrading requires an active Guard that has not acted this turn.',
+              content: ResourceLabel(
+                '${entry.value.active ? 'Active' : 'Inactive'} · Upgrade cost: ${entry.value.rank == GuardRank.champion ? 'Maximum rank' : _costLabel(MatchEngine.promotionCost(entry.value.rank))}.',
               ),
               actions: [
                 TextButton(
@@ -1018,7 +1032,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                       Navigator.pop(dialogContext);
                       send(ActivateGuard(vertex));
                     },
-                    child: Text(
+                    child: ResourceLabel(
                       'Activate · ${_costLabel(MatchEngine.activateCost)}',
                     ),
                   ),
@@ -1047,7 +1061,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               title: Text(
                 upgrade ? 'Upgrade village?' : 'Build at this junction',
               ),
-              content: Text(
+              content: ResourceLabel(
                 upgrade
                     ? _upgradeCostLabel()
                     : 'Choose what to build at junction ${vertex + 1}.',
@@ -1067,7 +1081,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   FilledButton(
                     onPressed: () =>
                         Navigator.pop(context, PlaceVillage(vertex)),
-                    child: Text(
+                    child: ResourceLabel(
                       'Build village · ${_costLabel(MatchEngine.villageCost)}',
                     ),
                   ),
@@ -1076,7 +1090,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     key: const ValueKey('build-guard-at-junction'),
                     onPressed: () =>
                         Navigator.pop(context, RecruitGuard(vertex)),
-                    child: Text(
+                    child: ResourceLabel(
                       'Build Guard · ${_costLabel(s.players[viewerSeat].level(StrategyDeck.governance) >= 4 ? {Resource.wool: 1} : MatchEngine.recruitCost)}',
                     ),
                   ),
@@ -1184,7 +1198,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   ? MediaQuery.sizeOf(context).height
                   : math.min(
                       MediaQuery.sizeOf(context).height - (fromTray ? 90 : 32),
-                      fromTray ? 460.0 : 430.0,
+                      500.0,
                     ),
               child: _TradeComposer(
                 state: counter == null ? s : s.copyWith(active: viewerSeat),
@@ -1480,16 +1494,31 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         (s.phase == MatchPhase.finished && s.seed != oldWidget.state.seed)) {
       _endModalDismissed = false;
     }
-    final rolled = s.events
-        .skip(oldWidget.state.events.length)
-        .any((event) => event is RollDice);
+    final skipping =
+        _skipBotDice ||
+        widget.fastForwardingBots ||
+        oldWidget.fastForwardingBots;
+    final newEvents = s.seed == oldWidget.state.seed
+        ? s.events.skip(oldWidget.state.events.length).toList()
+        : <MatchEvent>[];
+    final rollIndex = newEvents.lastIndexWhere((event) => event is RollDice);
+    final roll = rollIndex < 0 ? null : newEvents[rollIndex] as RollDice;
+    final rolled =
+        roll != null &&
+        (!skipping ||
+            (!widget.computerSeats.contains(s.active) &&
+                !newEvents
+                    .skip(rollIndex + 1)
+                    .any((event) => event is EndTurn)));
     if (rolled) {
-      _rollingDice = s.events
-          .skip(oldWidget.state.events.length)
-          .whereType<RollDice>()
-          .last;
+      _rollingDice = roll;
       _diceAnimationSerial++;
+    } else if (s.seed != oldWidget.state.seed ||
+        (skipping && roll != null) ||
+        (widget.fastForwardingBots && !oldWidget.fastForwardingBots)) {
+      _rollingDice = null;
     }
+    if (widget.onFastForward == null) _skipBotDice = false;
     if (rolled && !MediaQuery.disableAnimationsOf(context)) {
       _numberPulseController.forward(from: 0);
     }
@@ -1607,8 +1636,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if (oldWidget.state.turnSerial != s.turnSerial ||
         oldWidget.state.active != s.active ||
         oldWidget.state.actingSeat != s.actingSeat) {
-      _secondsLeft = widget.online ? 150 : 90;
+      _secondsLeft = widget.onlineTurnSeconds ?? (widget.online ? 150 : 90);
       _expiredEventCount = null;
+    }
+    if (widget.onlineTurnSeconds != null) {
+      _secondsLeft = widget.onlineTurnSeconds!;
     }
     if (oldWidget.state.events.length != s.events.length ||
         oldWidget.state.active != s.active) {
@@ -1622,14 +1654,20 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
   }
 
-  String get _instruction => s.tactical != null
+  String get _instruction =>
+      widget.online && widget.observing && s.phase != MatchPhase.finished
+      ? 'Waiting for players'
+      : s.tactical != null
       ? 'A response is pending'
       : switch (s.phase) {
           MatchPhase.setupVillage =>
             s.setupStep < s.players.length
                 ? 'Place your village'
                 : 'Place your town',
-          MatchPhase.setupRoad => 'Connect your village',
+          MatchPhase.setupRoad =>
+            s.setupStep < s.players.length
+                ? 'Connect your village'
+                : 'Connect your town',
           MatchPhase.roll => '',
           MatchPhase.bandit => 'Move the Bandit',
           MatchPhase.invasion => 'Defend the realm',
@@ -1650,12 +1688,18 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           },
         };
 
-  String get _hint => s.tactical != null
+  String get _hint =>
+      widget.online && widget.observing && s.phase != MatchPhase.finished
+      ? widget.waitingMessage ?? ''
+      : s.tactical != null
       ? 'Resolve this response to continue the turn'
       : switch (s.phase) {
           MatchPhase.setupVillage =>
             'Tap a glowing junction · first placements are free',
-          MatchPhase.setupRoad => 'Tap a glowing edge beside your new village',
+          MatchPhase.setupRoad =>
+            s.setupStep < s.players.length
+                ? 'Tap a glowing edge beside your new village'
+                : 'Tap a glowing edge beside your new town',
           MatchPhase.roll => '',
           MatchPhase.bandit => 'Tap another hex, then choose a neighbour',
           MatchPhase.invasion => 'Review the fleet and your shared defence',
@@ -1839,6 +1883,37 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             },
                           ),
                         ),
+                        // Keep the roll above the changing turn layout so a
+                        // bot-to-human handoff cannot remount its animation.
+                        if (_rollingDice case final dice?)
+                          Positioned.fill(
+                            key: ValueKey('dice-overlay-$_diceAnimationSerial'),
+                            child: IgnorePointer(
+                              child: LayoutBuilder(
+                                builder: (context, bounds) {
+                                  final width = bounds.maxWidth;
+                                  final rail = mobile
+                                      ? 0.0
+                                      : width >= 1200 && bounds.maxHeight >= 550
+                                      ? (width * .25).clamp(320.0, 420.0)
+                                      : math.min(320.0, width * .48);
+                                  return Padding(
+                                    padding: EdgeInsets.only(right: rail),
+                                    child: DiceRoll(
+                                      first: dice.first,
+                                      second: dice.second,
+                                      onComplete: () {
+                                        if (mounted &&
+                                            identical(_rollingDice, dice)) {
+                                          setState(() => _rollingDice = null);
+                                        }
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
                         if ((portrait || !mobile || _hasTopActivitySpace) &&
                             _mobilePage == null)
                           Positioned(
@@ -2116,7 +2191,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 ),
               ),
             if (s.phase == MatchPhase.finished && !_endModalDismissed)
-              Positioned.fill(child: _finishOverlay()),
+              Positioned.fill(
+                key: ValueKey('match-finale-overlay-${s.seed}'),
+                child: _finishOverlay(),
+              ),
           ],
         ),
       ),
@@ -2406,7 +2484,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     final champion = MatchEngine.winner(s) ?? s.active;
     // Hot-seat games celebrate every human winner. In solo play, the winner
     // being an AI is defeat. Remote matches use the local viewing seat.
-    final won = widget.online && widget.viewingSeat != null
+    final won = widget.viewingSeat != null
         ? champion == widget.viewingSeat
         : widget.computerSeats.isEmpty ||
               !widget.computerSeats.contains(champion);
@@ -2425,7 +2503,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
 
   Widget _fastForwardButton() => FilledButton.icon(
     key: const ValueKey('fast-forward-bots'),
-    onPressed: widget.onFastForward,
+    onPressed: () {
+      setState(() {
+        _skipBotDice = true;
+        _rollingDice = null;
+      });
+      widget.onFastForward?.call();
+    },
     style: FilledButton.styleFrom(
       minimumSize: const Size(0, 42),
       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -2702,19 +2786,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         )
       else ...[
         _waitingStatus(),
-        if (_tab == 0 &&
-            s.phase != MatchPhase.setupVillage &&
-            s.phase != MatchPhase.setupRoad)
-          Padding(
-            padding: EdgeInsets.only(bottom: 10),
-            child: Text(
-              'Choose a piece, then tap a highlighted spot on the map.',
-              style: TextStyle(
-                fontSize: 12,
-                color: gameColor(context, const Color(0xffabbfc2)),
-              ),
-            ),
-          ),
         ..._visiblePanelContents(s.phase),
       ],
     ],
@@ -2778,7 +2849,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                       2
           : math.max(
               124.0 * MediaQuery.textScalerOf(context).scale(12) / 12,
-              (bounds.maxWidth - 50) / s.players.length - 6,
+              (bounds.maxWidth - 50 - (widget.onLeaveRoom != null ? 48 : 0)) /
+                      s.players.length -
+                  6,
             );
       return Container(
         height: height,
@@ -2920,7 +2993,26 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                                 fontWeight: FontWeight.w700,
                                               ),
                                             ),
-                                            if (!portrait)
+                                            if (!portrait &&
+                                                i == s.active &&
+                                                i != winner &&
+                                                width < 180)
+                                              FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                alignment: Alignment.centerLeft,
+                                                child: Text(
+                                                  '${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    height: 1.2,
+                                                    color: gameColor(
+                                                      context,
+                                                      seatColors[i],
+                                                    ),
+                                                  ),
+                                                ),
+                                              )
+                                            else if (!portrait)
                                               Text(
                                                 i == winner
                                                     ? 'Winner'
@@ -3179,6 +3271,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             _boardHoverPosition.value = event.localPosition,
                         onExit: (_) => _boardHoverPosition.value = null,
                         child: GestureDetector(
+                          // A single accessibility tap for the entire canvas
+                          // loses the pointer's board coordinates on web.
+                          // Retain the descriptive Semantics wrapper above,
+                          // but leave coordinate-based taps to the gesture.
+                          excludeFromSemantics: true,
                           behavior: HitTestBehavior.opaque,
                           onTapUp: s.tactical == null && !widget.observing
                               ? (details) =>
@@ -3281,20 +3378,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                         : s.events.last,
                                     anchor: _eventAnchor(size),
                                   ),
-                                  if (_rollingDice case final dice?)
-                                    IgnorePointer(
-                                      child: DiceRoll(
-                                        key: ValueKey(_diceAnimationSerial),
-                                        first: dice.first,
-                                        second: dice.second,
-                                        onComplete: () {
-                                          if (mounted &&
-                                              identical(_rollingDice, dice)) {
-                                            setState(() => _rollingDice = null);
-                                          }
-                                        },
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),
@@ -3632,9 +3715,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   ) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Tooltip(
-      message: action == _Move.village && MatchEngine.legalVertices(s).isEmpty
-          ? 'Extend a road first'
-          : '$name · $cost',
+      message: '$name · $cost',
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -3692,8 +3773,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                           maintainSize: true,
                           maintainAnimation: true,
                           maintainState: true,
-                          child: Text(
+                          child: ResourceLabel(
                             label,
+                            adaptive: true,
                             style: TextStyle(
                               fontSize: 11,
                               color: gameColor(
@@ -3806,7 +3888,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 8),
           Text(
-            'Glowing marks show every legal placement. You can also choose a target from the list below the map.',
+            'Tap a glowing mark on the map.',
             style: TextStyle(
               fontSize: 12,
               color: gameColor(context, const Color(0xffabbfc2)),
@@ -3950,9 +4032,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           onCounter: offer,
           onEvent: send,
           viewerSeat: viewerSeat,
-          onReturnToBoard: _mobilePage == null
-              ? null
-              : () => setState(() => _mobilePage = null),
         ),
         const SizedBox(height: 8),
         Text(
@@ -3965,11 +4044,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       ];
     }
     if (tab == 2) {
-      if (phase == MatchPhase.roll && MediaQuery.sizeOf(context).width < 900) {
-        return [
-          const Text('Roll the dice before playing your strategy cards.'),
-        ];
-      }
       return [
         StrategyHand(
           allowActions: !widget.observing && s.active == viewerSeat,
@@ -3989,11 +4063,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       _heading('Your realm', 'Develop Towns to unlock advanced goods.'),
       Padding(
         padding: const EdgeInsets.only(bottom: 5),
-        child: Text(
-          'Paper (${s.players[viewerSeat].stores[Resource.paper] ?? 0}) · '
-          'Cloth (${s.players[viewerSeat].stores[Resource.cloth] ?? 0}) · '
-          'Coin (${s.players[viewerSeat].stores[Resource.coin] ?? 0})  —  '
-          '${s.sites.values.any((site) => site.owner == viewerSeat && site.structure != Structure.village) ? 'Choose a track below.' : 'Upgrade a village to a Town first (2 wheat · 3 ore).'}',
+        child: ResourceLabel(
+          '${s.players[viewerSeat].stores[Resource.paper] ?? 0} paper · '
+          '${s.players[viewerSeat].stores[Resource.cloth] ?? 0} cloth · '
+          '${s.players[viewerSeat].stores[Resource.coin] ?? 0} coin',
+          adaptive: true,
           style: TextStyle(
             fontSize: 12,
             color: gameColor(context, const Color(0xffbac9cc)),
@@ -4047,22 +4121,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 final cost = level == 5
                     ? <Resource, int>{}
                     : MatchEngine.developmentCost(s, track, level + 1);
-                final missing = cost.entries
-                    .where(
-                      (entry) =>
-                          (s.players[viewerSeat].stores[entry.key] ?? 0) <
-                          entry.value,
-                    )
-                    .map(
-                      (entry) =>
-                          '${entry.value - (s.players[viewerSeat].stores[entry.key] ?? 0)} ${entry.key.displayName}',
-                    )
-                    .join(', ');
-                final ownsTown = s.sites.values.any(
-                  (site) =>
-                      site.owner == viewerSeat &&
-                      site.structure != Structure.village,
-                );
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Tooltip(
@@ -4087,7 +4145,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             Text(
                               level == 0
                                   ? 'Unlocks ${track.commodity.displayName} from Towns beside ${terrainLabel(track.sourceLand)}.'
-                                  : 'Towns beside ${terrainLabel(track.sourceLand)} produce ${track.commodity.displayName} instead of one ${track.sourceLand.produces!.name}.',
+                                  : 'Towns beside ${terrainLabel(track.sourceLand)} produce ${track.commodity.displayName} instead of one ${track.sourceLand.produces!.displayName}.',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: gameColor(
@@ -4098,32 +4156,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             ),
                             if (level < 5) ...[
                               const SizedBox(height: 5),
-                              Text(
+                              ResourceLabel(
                                 'Cost: ${_costLabel(cost)}',
+                                adaptive: true,
                                 style: TextStyle(fontSize: 12),
                               ),
-                              if (!ownsTown)
-                                Text(
-                                  'Build a Town first to unlock developments.',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: gameColor(
-                                      context,
-                                      const Color(0xffe5c183),
-                                    ),
-                                  ),
-                                )
-                              else if (missing.isNotEmpty)
-                                Text(
-                                  'Need: $missing',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: gameColor(
-                                      context,
-                                      const Color(0xffe5c183),
-                                    ),
-                                  ),
-                                ),
                             ],
                             const SizedBox(height: 6),
                             OutlinedButton(
@@ -4183,7 +4220,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           s.phase == MatchPhase.bandit
       ? const SizedBox.shrink()
       : Tooltip(
-          message: s.phase == MatchPhase.actions ? 'End turn' : _instruction,
+          message: s.phase == MatchPhase.roll
+              ? 'Roll'
+              : s.phase == MatchPhase.actions
+              ? 'Done'
+              : _instruction,
+          key: _turnHintTarget,
           child: FilledButton.icon(
             style: FilledButton.styleFrom(
               minimumSize: Size(0, compact ? 42 : 48),
@@ -4219,13 +4261,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
             label: Text(
               s.phase == MatchPhase.roll
-                  ? 'Roll dice'
+                  ? 'Roll'
                   : s.phase == MatchPhase.invasion
                   ? compact
                         ? 'Resolve'
                         : 'Resolve Invasion'
                   : s.phase == MatchPhase.actions
-                  ? 'End turn'
+                  ? 'Done'
                   : s.phase == MatchPhase.setupVillage
                   ? compact
                         ? 'Site'
@@ -5135,7 +5177,7 @@ class _TradeComposerState extends State<_TradeComposer> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     spacing: 6,
                     children: [
-                      Text(
+                      ResourceLabel(
                         bank
                             ? 'Give $required ${give.displayName}'
                             : 'Give ${gives.isEmpty ? "…" : tradeBundleText(gives)}',
@@ -5145,7 +5187,7 @@ class _TradeComposerState extends State<_TradeComposer> {
                         ),
                       ),
                       const Icon(Icons.arrow_forward_rounded, size: 16),
-                      Text(
+                      ResourceLabel(
                         bank
                             ? 'Get ${receipt * bankTimes} ${take.displayName}'
                             : 'Get ${wants.isEmpty ? "…" : tradeBundleText(wants)}',
@@ -5293,7 +5335,10 @@ class _TacticalPanel extends StatelessWidget {
                     ),
                   ),
                   icon: const Icon(Icons.volunteer_activism_outlined),
-                  label: Text('Pledge 1 ${good.displayName}'),
+                  label: ResourceLabel(
+                    'Pledge 1 ${good.displayName}',
+                    showNames: true,
+                  ),
                 ),
               ),
         OutlinedButton(
@@ -5326,30 +5371,26 @@ class BoardGeometry {
   // Portrait has room for a more top-down table. Change the hex geometry
   // rather than scaling the canvas, so artwork and pieces stay isotropic.
   bool get isPortrait => size.height > size.width * 1.10;
-  double get horizontalFactor => isPortrait ? 1.0 : horizontalScale;
-  double get verticalFactor => isPortrait ? 1.0 : verticalScale;
+  // Wide phone screens have unused water to the left and right. Expand
+  // the table projection there while keeping circular markers isotropic.
+  double get horizontalFactor => isPortrait
+      ? 1.0
+      : horizontalScale +
+            .20 * ((size.aspectRatio - 2.0) / 1.0).clamp(0.0, 1.0);
+  double get verticalFactor => isPortrait ? 1.10 : verticalScale;
 
   double get radius {
     if (isPortrait) {
-      // Keep room above/below the terrain for all dock labels and the
-      // raid/actions overlays, while filling the phone's usable width.
       return math.min(
-        size.width / (9.6 * horizontalFactor),
+        size.width / (9.4 * horizontalFactor),
         math.max(1, size.height - 112) / (8 * verticalFactor),
       );
     }
-    // The standard board spans 8 lattice units vertically. With sufficient
-    // side gutters, port labels no longer require a 64px vertical reserve.
-    const sideBadgeGutter = 130.0;
-    final fullHeightRadius =
-        math.max(1, size.height - 16) / (8 * verticalFactor);
-    final sideBadgesFit =
-        size.width > size.height * 1.25 &&
-        size.width / 2 - fullHeightRadius * 5.54 > sideBadgeGutter;
+    // Local dock badges need no remote gutters. Leave enough space for
+    // the outermost pieces and let badges hug the coast at the boundary.
     return math.min(
       size.width / (9.2 * horizontalFactor),
-      math.max(1, size.height - (sideBadgesFit ? 30 : 64)) /
-          (8 * verticalFactor),
+      math.max(1, size.height - 28) / (8 * verticalFactor),
     );
   }
 
@@ -5954,135 +5995,68 @@ class _Painter extends CustomPainter {
           ..strokeWidth = 5,
       );
     }
-    // The top/bottom docks need to sit *outside* the playable hexes rather
-    // than on top of them, especially when the board is vertically compact.
-    final vertices = state.topology.vertices.map(g.vertex).toList();
-    final boardBounds = Rect.fromLTRB(
-      vertices.map((p) => p.dx).reduce(math.min),
-      vertices.map((p) => p.dy).reduce(math.min),
-      vertices.map((p) => p.dx).reduce(math.max),
-      vertices.map((p) => p.dy).reduce(math.max),
-    );
-    final docks = [
-      for (final dock in state.topology.docks)
-        () {
-          final a = g.vertex(state.topology.vertices[dock.edge.a]);
-          final b = g.vertex(state.topology.vertices[dock.edge.b]);
-          final text = TextPainter(
-            text: TextSpan(
-              text: dock.label,
-              style: const TextStyle(
-                fontFamily: 'NotoSans',
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xffffe5b2),
-                backgroundColor: Color(0xff182a31),
-              ),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout();
-          return (a: a, b: b, midpoint: (a + b) / 2, text: text);
-        }(),
-    ];
-    final labels = layoutDockLabels(
-      boardVertices: vertices,
-      size: size,
-      boardBounds: boardBounds,
-      radius: g.radius,
-      requests: [
-        for (final dock in docks)
-          DockLabelRequest(dock.midpoint, dock.text.size),
-      ],
-    );
-
-    final leaderPaths = layoutDockLeaderPaths(
-      size: size,
-      tileCenters: [
-        for (final tile in state.board.tiles) g.tile(tile.position),
-      ],
-      radius: g.radius,
-      horizontalFactor: g.horizontalFactor,
-      verticalFactor: g.verticalFactor,
-      requests: [
-        for (var i = 0; i < docks.length; i++)
-          DockLeaderRequest(
-            shore: docks[i].midpoint,
-            badge: Rect.fromCenter(
-              center: labels[i],
-              width: docks[i].text.width + 12,
-              height: docks[i].text.height + 8,
-            ),
+    // A dock is a local feature of its own coastal edge. Keep the badge
+    // immediately offshore rather than moving it into a remote side gutter.
+    for (final dock in state.topology.docks) {
+      final a = g.vertex(state.topology.vertices[dock.edge.a]);
+      final b = g.vertex(state.topology.vertices[dock.edge.b]);
+      final tile = g.tile(state.board.tiles[dock.edge.tiles.single].position);
+      final label = TextPainter(
+        text: TextSpan(
+          text: dock.resource == null ? '3:1' : '2:1',
+          style: const TextStyle(
+            fontFamily: 'NotoSans',
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Color(0xffffe5b2),
           ),
-      ],
-    );
-
-    // The shore leads are routed through water, not diagonally over tiles.
-    // Paint every lead before badges so no line can overwrite text.
-    for (final points in leaderPaths) {
-      if (points.length < 2) continue;
-      final route = Path()..moveTo(points.first.dx, points.first.dy);
-      for (final point in points.skip(1)) {
-        route.lineTo(point.dx, point.dy);
-      }
-      canvas.drawPath(
-        route,
-        Paint()
-          ..color = const Color(0xff101c24)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.5
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final layout = coastalDockBadge(
+        size: size,
+        a: a,
+        b: b,
+        tileCenter: tile,
+        hasResource: dock.resource != null,
       );
-      canvas.drawPath(
-        route,
-        Paint()
-          ..color = const Color(0xfff0d493)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.7
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-    }
-    for (final dock in docks) {
-      canvas.drawLine(
-        dock.a,
-        dock.b,
-        Paint()
-          ..color = const Color(0xffffd68a)
-          ..strokeWidth = 3.4
-          ..strokeCap = StrokeCap.round,
-      );
+      final badge = layout.badge;
+      final gold = Paint()
+        ..color = const Color(0xffe5c58a)
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(layout.shore, layout.connection, gold);
+      // Mark the actual trading edge, without covering the ownership road.
       canvas.drawCircle(
-        dock.midpoint,
-        4.4,
+        layout.shore,
+        3,
         Paint()..color = const Color(0xff182a31),
       );
-      canvas.drawCircle(
-        dock.midpoint,
-        2.8,
-        Paint()..color = const Color(0xffffefba),
-      );
-    }
-    for (var i = 0; i < docks.length; i++) {
-      final text = docks[i].text;
-      final label = labels[i];
-      final badge = Rect.fromCenter(
-        center: label,
-        width: text.width + 12,
-        height: text.height + 8,
-      );
+      canvas.drawCircle(layout.shore, 1.8, gold);
+      final frame = RRect.fromRectAndRadius(badge, const Radius.circular(5));
+      canvas.drawRRect(frame, Paint()..color = const Color(0xff182a31));
       canvas.drawRRect(
-        RRect.fromRectAndRadius(badge, const Radius.circular(5)),
-        Paint()..color = const Color(0xff182a31),
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(badge, const Radius.circular(5)),
+        frame,
         Paint()
           ..color = const Color(0xffc7ac78)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = .9,
+          ..strokeWidth = .8,
       );
-      text.paint(canvas, label - Offset(text.width / 2, text.height / 2));
+      if (dock.resource case final resource?) {
+        paintResourceIcon(
+          canvas,
+          Offset(badge.left + 10, badge.center.dy),
+          14,
+          resource,
+        );
+      }
+      final textCenter =
+          badge.center + Offset(dock.resource == null ? 0 : 8, 0);
+      label.paint(
+        canvas,
+        textCenter - Offset(label.width / 2, label.height / 2),
+      );
+      label.dispose();
     }
   }
 
@@ -6123,6 +6097,33 @@ class _Painter extends CustomPainter {
     )..layout();
     p.paint(canvas, c - Offset(p.width / 2, p.height / 2));
   }
+
+  @override
+  SemanticsBuilderCallback get semanticsBuilder => (size) {
+    final g = BoardGeometry(size);
+    return [
+      for (final dock in state.topology.docks)
+        CustomPainterSemantics(
+          rect: coastalDockBadge(
+            size: size,
+            a: g.vertex(state.topology.vertices[dock.edge.a]),
+            b: g.vertex(state.topology.vertices[dock.edge.b]),
+            tileCenter: g.tile(
+              state.board.tiles[dock.edge.tiles.single].position,
+            ),
+            hasResource: dock.resource != null,
+          ).badge,
+          properties: SemanticsProperties(
+            label: '${dock.label} port',
+            textDirection: TextDirection.ltr,
+          ),
+        ),
+    ];
+  };
+
+  @override
+  bool shouldRebuildSemantics(_Painter old) =>
+      !identical(old.state.topology, state.topology);
 
   bool _sameTargets(Set<int> a, Set<int> b) =>
       a.length == b.length && a.containsAll(b);

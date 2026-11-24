@@ -1,3 +1,5 @@
+import 'resource_label_finder.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,7 +62,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Realm'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Paper ($before)'), findsOneWidget);
+    expect(resourceLabel('$before paper', contains: true), findsOneWidget);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/realm_developments.png'),

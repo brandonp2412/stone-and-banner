@@ -1,6 +1,9 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -17,6 +20,40 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+}
+
+// Report actual on-link IPv4 prefixes, not guessed /24 networks.
+static void lan_networks(FlMethodChannel*, FlMethodCall* call, gpointer) {
+  if (g_strcmp0(fl_method_call_get_name(call), "subnets") != 0) {
+    fl_method_call_respond_not_implemented(call, nullptr);
+    return;
+  }
+  g_autoptr(FlValue) values = fl_value_new_list();
+  struct ifaddrs* interfaces = nullptr;
+  if (getifaddrs(&interfaces) == 0) {
+    for (auto* iface = interfaces; iface; iface = iface->ifa_next) {
+      if (!iface->ifa_addr || !iface->ifa_netmask ||
+          iface->ifa_addr->sa_family != AF_INET ||
+          !(iface->ifa_flags & IFF_UP) ||
+          !(iface->ifa_flags & IFF_BROADCAST) ||
+          (iface->ifa_flags & IFF_LOOPBACK)) continue;
+      auto* address = reinterpret_cast<sockaddr_in*>(iface->ifa_addr);
+      auto* netmask = reinterpret_cast<sockaddr_in*>(iface->ifa_netmask);
+      char ip[INET_ADDRSTRLEN];
+      if (!inet_ntop(AF_INET, &address->sin_addr, ip, sizeof(ip))) continue;
+      uint32_t mask = ntohl(netmask->sin_addr.s_addr);
+      int prefix = 0;
+      while (mask & 0x80000000u) { ++prefix; mask <<= 1; }
+      if (mask != 0) continue;
+      g_autoptr(FlValue) entry = fl_value_new_map();
+      fl_value_set_string_take(entry, "name", fl_value_new_string(iface->ifa_name));
+      fl_value_set_string_take(entry, "address", fl_value_new_string(ip));
+      fl_value_set_string_take(entry, "prefix", fl_value_new_int(prefix));
+      fl_value_append(values, entry);
+    }
+    freeifaddrs(interfaces);
+  }
+  fl_method_call_respond_success(call, values, nullptr);
 }
 
 // Implements GApplication::activate.
@@ -74,6 +111,12 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_autoptr(FlMethodChannel) channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "stone_and_banner/lan", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(channel, lan_networks, nullptr, nullptr);
+
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

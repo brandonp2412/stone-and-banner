@@ -51,7 +51,7 @@ void main() {
     await tester.pump();
     expect(find.byKey(const ValueKey('incoming-trade-dialog')), findsOneWidget);
     expect(find.text('Resume computer'), findsNothing);
-    expect(find.text('End turn').hitTestable(), findsNothing);
+    expect(find.text('Done').hitTestable(), findsNothing);
     await tester.tap(find.byKey(const ValueKey('dismiss-incoming-trade')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('incoming-trade-dialog')), findsNothing);
@@ -69,7 +69,7 @@ void main() {
     await tester.tap(decline);
     expect(events, hasLength(1));
     expect(events.single, isA<RespondTrade>());
-    expect(find.text('End turn').hitTestable(), findsNothing);
+    expect(find.text('Done').hitTestable(), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -100,7 +100,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.byKey(const ValueKey('incoming-trade-dialog')), findsOneWidget);
-    expect(find.text('End turn'), findsNothing);
+    expect(find.text('Done'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('dismiss-incoming-trade')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('restore-bot-trade')), findsNothing);

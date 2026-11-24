@@ -101,6 +101,13 @@ class _MatchHistoryPageState extends State<MatchHistoryPage> {
                                         onEvent: (_) {},
                                         observing: true,
                                         visibleSeat: 0,
+                                        computerSeats:
+                                            entry.computerSeats ?? const {},
+                                        // Legacy archives did not record bot seats.
+                                        // Review them from the original seat-zero perspective.
+                                        viewingSeat: entry.computerSeats == null
+                                            ? 0
+                                            : null,
                                         onHome: () =>
                                             Navigator.of(context).pop(),
                                       ),

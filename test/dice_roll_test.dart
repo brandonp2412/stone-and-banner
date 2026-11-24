@@ -30,7 +30,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(DiceRoll), findsNothing);
     final expected = MatchEngine.expectedDice(state);
-    await tester.tap(find.text('Roll dice').first);
+    await tester.tap(find.text('Roll').first);
     await tester.pump();
     expect(find.byType(DiceRoll), findsOneWidget);
     expect(find.text('Rolling…'), findsOneWidget);

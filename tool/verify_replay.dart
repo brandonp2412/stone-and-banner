@@ -25,11 +25,20 @@ void main(List<String> args) {
       balance: saved.balance,
       cardDeckVersion: saved.cardDeckVersion,
       invasionInvitesFromEvent: saved.invasionInvitesFromEvent,
+      raidPledgeFixFromEvent: saved.raidPledgeFixFromEvent,
+      raidInterval: saved.raidInterval,
+      turnOrder: saved.turnOrder,
     );
     final eventTypes = <String, int>{};
     _verifySupply(state);
     for (final event in saved.events) {
-      state = MatchEngine.apply(state, event);
+      try {
+        state = MatchEngine.apply(state, event);
+      } catch (error) {
+        throw StateError(
+          "Event ${state.events.length + 1}: ${event.toJson()}: $error",
+        );
+      }
       _verifySupply(state);
       final type = event.toJson()['type']! as String;
       eventTypes.update(type, (n) => n + 1, ifAbsent: () => 1);
@@ -84,8 +93,7 @@ void _verifySupply(MatchState state) {
     final amounts = [
       state.bank[good] ?? 0,
       for (final player in state.players) player.stores[good] ?? 0,
-      for (final offer in state.offers)
-        if (offer.give == good) offer.giveCount,
+      // Standing offers do not reserve goods; they transfer on acceptance.
     ];
     if (amounts.any((amount) => amount < 0) ||
         amounts.fold<int>(0, (a, b) => a + b) != MatchEngine.bankSupply) {

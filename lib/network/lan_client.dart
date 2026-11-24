@@ -28,6 +28,13 @@ class LanRoomClient extends ChangeNotifier {
   MatchState? game;
   Map<String, dynamic>? view;
   List<dynamic> history = [];
+  int? _turnRemainingMs;
+  final _turnClock = Stopwatch();
+  int? get turnSecondsRemaining => _turnRemainingMs == null
+      ? null
+      : ((_turnRemainingMs! - _turnClock.elapsedMilliseconds).clamp(0, 90000) /
+                1000)
+            .ceil();
   bool connected = false, connecting = false, pending = false, started = false;
 
   void host(String address, String name, int seats, int seed) => _connect(
@@ -161,6 +168,10 @@ class LanRoomClient extends ChangeNotifier {
         started = msg['started'] as bool;
       case 'state':
         version = msg['version'] as int;
+        _turnRemainingMs = msg['turnRemainingMs'] as int?;
+        _turnClock
+          ..reset()
+          ..start();
         view = Map<String, dynamic>.from(msg['view'] as Map);
         game = RoomProtocol.readView(view!);
       case 'history':

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'compact_layout.dart';
 
 import 'package:flutter/material.dart';
@@ -56,7 +58,6 @@ class _LanRoomPageState extends State<LanRoomPage> {
       field.addListener(_saveSettings);
     }
     _restore();
-    _discover();
   }
 
   Future<void> _restore() async {
@@ -76,6 +77,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
       savedRoom = prefs.getString('lanRoom');
       savedToken = prefs.getString('lanToken');
     });
+    if (!host) unawaited(_discover());
   }
 
   void _saveSettings() {
@@ -269,7 +271,7 @@ class _LanRoomPageState extends State<LanRoomPage> {
                 ),
               ],
             ),
-          if (client.room == null)
+          if (client.room == null || seat == null)
             Expanded(child: _setup())
           else if (state == null)
             Expanded(child: _lobby())
@@ -282,6 +284,8 @@ class _LanRoomPageState extends State<LanRoomPage> {
                     online: true,
                     onlineView: client.view,
                     viewingSeat: seat,
+                    computerSeats: client.botSeats.toSet(),
+                    onlineTurnSeconds: client.turnSecondsRemaining,
                     observing: !canAct,
                     tradeReplyAllowed: canReplyToTrade,
                     waitingMessage: canAct ? null : wait,

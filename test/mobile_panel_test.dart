@@ -70,14 +70,14 @@ void main() {
           final actions = tester.getRect(
             find.byKey(const ValueKey('mobile-open-actions')),
           );
-          final turn = tester.getRect(find.text('End turn'));
+          final turn = tester.getRect(find.text('Done'));
           expect(actions.right, lessThan(size.width * .28));
           expect(turn.left, greaterThan(size.width * .72));
           expect(actions.bottom, lessThanOrEqualTo(map.bottom));
           expect(turn.bottom, lessThanOrEqualTo(map.bottom));
         }
         expect(find.text('Build'), findsNothing);
-        expect(find.text('End turn').hitTestable(), findsOneWidget);
+        expect(find.text('Done').hitTestable(), findsOneWidget);
 
         await tester.tap(find.byKey(const ValueKey('mobile-open-actions')));
         await tester.pumpAndSettle();
@@ -94,7 +94,7 @@ void main() {
         await tester.tap(find.byTooltip('Back to map'));
         await tester.pumpAndSettle();
         expect(tester.getRect(find.byKey(const ValueKey('realm-map'))), map);
-        expect(find.text('End turn').hitTestable(), findsOneWidget);
+        expect(find.text('Done').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
     }
@@ -165,7 +165,7 @@ void main() {
     await openCategory(tester, 'Build');
     final list = find.byType(ListView);
     expect(list, findsOneWidget);
-    expect(find.text('End turn'), findsNothing);
+    expect(find.text('Done'), findsNothing);
     final listRect = tester.getRect(list);
     expect(listRect.bottom, closeTo(320, 1));
     expect(find.byTooltip('wood: 3'), findsNothing);
@@ -175,7 +175,7 @@ void main() {
     await tester.tap(find.byTooltip('Back to map'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
-    expect(find.text('End turn').hitTestable(), findsOneWidget);
+    expect(find.text('Done').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

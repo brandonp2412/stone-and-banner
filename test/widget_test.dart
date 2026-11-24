@@ -74,12 +74,12 @@ void main() {
     if (find.text('Pass the device').evaluate().isNotEmpty) {
       await ready(tester);
     }
-    expect(find.text('Roll dice'), findsOneWidget);
-    await tester.ensureVisible(find.text('Roll dice'));
+    expect(find.text('Roll'), findsOneWidget);
+    await tester.ensureVisible(find.text('Roll'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Roll dice'));
+    await tester.tap(find.text('Roll'));
     await tester.pumpAndSettle();
-    expect(find.text('Roll dice'), findsNothing);
+    expect(find.text('Roll'), findsNothing);
   });
 
   testWidgets('landscape board stays readable in bounded width', (

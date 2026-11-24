@@ -191,7 +191,7 @@ void main() {
     expect(find.byTooltip('wood: 7'), findsOneWidget);
     expect(find.byTooltip('wood: 0'), findsNothing);
     expect(find.text('Computer turn'), findsNothing);
-    expect(find.text('End turn'), findsNothing);
+    expect(find.text('Done'), findsNothing);
     expect(find.text('Waiting for Ada…'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
@@ -213,7 +213,7 @@ void main() {
       await tester.pumpAndSettle();
       for (final tab in ['Trade', 'Cards', 'Realm', 'Build']) {
         await selectMobileCategory(tester, tab);
-        expect(find.text('End turn'), findsNothing);
+        expect(find.text('Done'), findsNothing);
         expect(tester.takeException(), isNull, reason: tab);
       }
       await tester.tap(find.byTooltip('Back to map'));
@@ -222,7 +222,7 @@ void main() {
         tester.getRect(find.byKey(const ValueKey('realm-map'))),
         originalMap,
       );
-      expect(find.text('End turn').hitTestable(), findsOneWidget);
+      expect(find.text('Done').hitTestable(), findsOneWidget);
     });
   }
 
@@ -303,7 +303,7 @@ void main() {
     await tester.pumpAndSettle();
     await scrollToAction(tester, 'Road');
     await tester.pumpAndSettle();
-    expect(find.text('End turn'), findsNothing);
+    expect(find.text('Done'), findsNothing);
     for (final label in ['Road', 'Village', 'Upgrade']) {
       await tester.ensureVisible(find.text(label));
       await tester.pumpAndSettle();
@@ -331,14 +331,14 @@ void main() {
     await selectMobileCategory(tester, 'Cards');
     expect(
       find.text('Roll the dice before playing your strategy cards.'),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.textContaining('Strategy hand'), findsNothing);
-    expect(find.text('Roll dice'), findsNothing);
+    expect(find.textContaining('Strategy hand'), findsOneWidget);
+    expect(find.text('Roll'), findsNothing);
     expect(find.byTooltip('Back to map'), findsOneWidget);
     await tester.tap(find.byTooltip('Back to map'));
     await tester.pumpAndSettle();
-    expect(find.text('Roll dice'), findsOneWidget);
+    expect(find.text('Roll'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

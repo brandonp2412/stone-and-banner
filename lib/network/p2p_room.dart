@@ -75,6 +75,7 @@ class P2pRoom extends ChangeNotifier {
   int? _botTradeGraceOfferId;
   int? _botTradeGraceExpiredId;
   bool _fastForwardingBots = false;
+  int? _fastForwardRequester;
   int _botFailures = 0;
   int _botFailedAtVersion = -1;
   Future<void> get aiSettled => _ai.settled;
@@ -695,13 +696,36 @@ class P2pRoom extends ChangeNotifier {
     _botFailures = 0;
     _botRecoveryTimer?.cancel();
     aiMoveCount++;
+    final after = room.state!;
+    final requester = _fastForwardRequester;
+    final rollAfterSkip =
+        _fastForwardingBots &&
+        requester != null &&
+        after.phase == MatchPhase.roll &&
+        after.tactical == null &&
+        after.actingSeat == requester;
     _broadcast();
     _schedule();
+    if (rollAfterSkip && !_disposed && room.state == after) {
+      final result = room.move(
+        requester,
+        _randomId(16),
+        room.version,
+        const RollDice(0, 0).toJson(),
+      );
+      if (result['ok'] == true) {
+        _broadcast();
+        _schedule();
+      }
+    }
     return true;
   }
 
   void _syncAi() {
-    if (!botsActing) _fastForwardingBots = false;
+    if (!botsActing) {
+      _fastForwardingBots = false;
+      _fastForwardRequester = null;
+    }
     final state = _room?.state;
     if (_disposed ||
         !isHost ||
@@ -1011,7 +1035,7 @@ class P2pRoom extends ChangeNotifier {
           _stateFor(peer, seat);
         }
       case 'fastForwardBots':
-        fastForwardBots();
+        _fastForwardFor(seat);
       case 'emote':
         if (msg['emoji'] is String) {
           // Identify the sender from the authenticated peer, never the payload.
@@ -1159,12 +1183,18 @@ class P2pRoom extends ChangeNotifier {
   void fastForwardBots() {
     if (!connected || !botsActing) return;
     if (isHost) {
-      _fastForwardingBots = true;
-      _syncAi();
-      _ai.fastForward();
+      _fastForwardFor(0);
     } else if (guestPeer != null) {
       _send(guestPeer!, {'op': 'fastForwardBots'});
     }
+  }
+
+  void _fastForwardFor(int seat) {
+    if (!connected || !isHost || !botsActing || botSeats.contains(seat)) return;
+    _fastForwardRequester = seat;
+    _fastForwardingBots = true;
+    _syncAi();
+    _ai.fastForward();
   }
 
   void dispatch(MatchEvent event) {

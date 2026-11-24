@@ -15,26 +15,45 @@ void main() {
     const ProposeTrade(1, Resource.wood, 1, Resource.brick, 1),
   );
 
-  test(
-    'decline reports recorded recipient and refunded terms across turns',
-    () {
-      final pending = offered();
-      expect(latestTradeFeedback(pending), isNull);
-      final answered = MatchEngine.apply(
-        pending.copyWith(active: 1),
-        RespondTrade(1, false, offerId: pending.offers.single.id),
-      );
-      expect(answered.offers, isEmpty);
-      expect(
-        latestTradeFeedback(answered),
-        'Ben declined the trade: 1 wood for 1 brick. Reserved goods returned.',
-      );
-      expect(
-        latestTradeFeedback(answered.copyWith(active: 0)),
-        latestTradeFeedback(answered),
-      );
-    },
-  );
+  test('decline reports recorded recipient and terms across turns', () {
+    final pending = offered();
+    expect(latestTradeFeedback(pending), isNull);
+    final answered = MatchEngine.apply(
+      pending.copyWith(active: 1),
+      RespondTrade(1, false, offerId: pending.offers.single.id),
+    );
+    expect(answered.offers, isEmpty);
+    expect(
+      latestTradeFeedback(answered),
+      'Ben declined the trade: 1 wood for 1 brick.',
+    );
+    expect(
+      latestTradeFeedback(answered.copyWith(active: 0)),
+      latestTradeFeedback(answered),
+    );
+  });
+
+  test('trade attribution follows shuffled turn order', () {
+    final state =
+        MatchEngine.newGame(
+          ['Ada', 'Ben', 'Cora'],
+          42,
+          turnOrder: [1, 0, 2],
+        ).copyWith(
+          active: 0,
+          events: [
+            const ProposeTrade(2, Resource.wood, 1, Resource.brick, 1),
+            const RespondTrade(2, false, offerId: 0),
+            const EndTurn(),
+          ],
+        );
+    expect(tradeProposerForEvent(state, 0), 1);
+    expect(
+      latestTradeFeedback(state, viewer: 1),
+      'Cora declined the trade: 1 wood for 1 brick.',
+    );
+    expect(latestTradeFeedback(state, viewer: 0), isNull);
+  });
 
   test('acceptance reports the completed exchange', () {
     final pending = offered();

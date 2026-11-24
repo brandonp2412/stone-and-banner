@@ -145,6 +145,51 @@ void main() {
     await tester.pump(const Duration(seconds: 31));
   });
 
+  testWidgets('fast-forward rolls once when the sole human gets their turn', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(844, 390);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await startAi(tester);
+    final dynamic app = tester.state(find.byType(StoneBannerApp));
+    app.ai.pause();
+    var state = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 4613);
+    for (var i = 0; i < 6; i++) {
+      state = MatchEngine.apply(
+        state,
+        PlaceVillage(MatchEngine.legalVertices(state).first),
+      );
+      state = MatchEngine.apply(
+        state,
+        PlaceRoad(MatchEngine.legalEdges(state).first),
+      );
+    }
+    state = state.copyWith(active: 2, phase: MatchPhase.actions);
+    final before = state.events.length;
+    app.setState(() {
+      app.match = state;
+      app.aiSeats = <int>{1, 2};
+    });
+    app.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('fast-forward-bots')));
+    for (var tick = 0; tick < 300; tick++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      if (app.match.active == 0 && app.match.phase != MatchPhase.roll) break;
+    }
+    final MatchState after = app.match;
+    expect(after.active, 0);
+    expect(after.phase, isNot(MatchPhase.roll));
+    expect(after.events.skip(before).whereType<RollDice>(), hasLength(1));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 31));
+  });
+
   testWidgets('leaving board cancels an in-flight bot event', (tester) async {
     tester.view.physicalSize = const Size(844, 390);
     tester.view.devicePixelRatio = 1;

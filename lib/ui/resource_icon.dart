@@ -1,3 +1,5 @@
+import 'labels.dart';
+
 import 'dart:ui' as ui;
 
 import 'compact_layout.dart';
@@ -99,7 +101,7 @@ class ResourceIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     loadResourceIcons();
     return Semantics(
-      label: resource.name,
+      label: resource.displayName,
       image: true,
       child: ValueListenableBuilder<ResourceIconStyle>(
         valueListenable: resourceIconStyle,
@@ -204,7 +206,7 @@ Future<void> showResourceIconPicker(BuildContext context) => showDialog<void>(
                                 for (final resource in Resource.values)
                                   Expanded(
                                     child: Tooltip(
-                                      message: resource.name,
+                                      message: resource.displayName,
                                       child: Center(
                                         child: ResourceIcon(
                                           resource,

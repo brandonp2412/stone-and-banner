@@ -1,3 +1,5 @@
+import 'resource_label.dart';
+
 import 'package:flutter/material.dart';
 
 import 'game_colors.dart';
@@ -16,7 +18,6 @@ class TradeMarket extends StatelessWidget {
     required this.onCounter,
     required this.onEvent,
     required this.viewerSeat,
-    this.onReturnToBoard,
     this.allowOffers = true,
     this.allowCounters = true,
     this.privateOpponentHands = false,
@@ -36,7 +37,6 @@ class TradeMarket extends StatelessWidget {
   final ValueChanged<TradeProposal> onCounter;
   final ValueChanged<MatchEvent> onEvent;
   final int viewerSeat;
-  final VoidCallback? onReturnToBoard;
 
   /// In the notification dialog, show just this offer and its response actions.
   /// The Trade tab still shows all pending offers.
@@ -89,7 +89,8 @@ class TradeMarket extends StatelessWidget {
         // On compact screens an out-of-turn recipient only needs to
         // respond. Omit two disabled trade buttons so the reply actions
         // are not pushed underneath the fixed inventory tray.
-        if (onlyIncomingOfferId == null && (allowOffers || !compactLandscape))
+        if (onlyIncomingOfferId == null &&
+            (allowOffers || !compactLandscape || incoming.isEmpty))
           Row(
             children: [
               Expanded(
@@ -155,36 +156,6 @@ class TradeMarket extends StatelessWidget {
                   ? 'Thinking about your offer…'
                   : 'Your offer is awaiting a reply.',
               style: TextStyle(color: gameColor(context, gold), fontSize: 12),
-            ),
-          ),
-        if (onlyIncomingOfferId == null && !ownTurn && incoming.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.lock_outline,
-                  size: 20,
-                  color: gameColor(context, const Color(0xffe5c183)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    state.active != viewerSeat
-                        ? 'Waiting for ${state.players[state.active].id}…'
-                        : 'Roll or resolve the current event before trading.',
-                    style: TextStyle(
-                      color: gameColor(context, const Color(0xffaec2c6)),
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                if (onReturnToBoard != null)
-                  OutlinedButton(
-                    onPressed: onReturnToBoard,
-                    child: Text('Board'),
-                  ),
-              ],
             ),
           ),
         if (incoming.isNotEmpty) ...[
@@ -503,8 +474,9 @@ class TradeMarket extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            Text(
+            ResourceLabel(
               tradeBundleText(goods),
+              adaptive: true,
               style: TextStyle(
                 color: gameColor(context, Colors.white),
                 fontWeight: FontWeight.w800,

@@ -315,7 +315,7 @@ class _MatchActivityState extends State<MatchActivity> {
           if (earned.isNotEmpty) {
             return cue(
               '🌾',
-              'Starting village harvest',
+              'Starting town harvest',
               earned.join(', '),
               color: teal,
             );
@@ -424,12 +424,7 @@ class _MatchActivityState extends State<MatchActivity> {
           cheeky: cheeky,
         );
       case WithdrawTrade():
-        return cue(
-          '📦',
-          '$prefix withdraws an offer',
-          'Reserved goods returned',
-          color: violet,
-        );
+        return cue('📦', '$prefix withdraws an offer', '', color: violet);
       case PlayStrategyCard():
         final playedHand = previous.players[actor].cards;
         if (event.handIndex >= 0 &&

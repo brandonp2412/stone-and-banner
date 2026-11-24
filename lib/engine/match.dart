@@ -39,7 +39,8 @@ bool canPayTrade(Map<Resource, int> stores, Map<Resource, int> goods) =>
 
 String tradeBundleText(Map<Resource, int> goods) => [
   for (final good in Resource.values)
-    if (goods.containsKey(good)) '${goods[good]} ${good.name}',
+    if (goods.containsKey(good))
+      '${goods[good]} ${good == Resource.wool ? 'sheep' : good.name}',
 ].join(' + ');
 
 class TradeProposal {

@@ -1,3 +1,5 @@
+import 'resource_label_finder.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/match.dart';
@@ -48,7 +50,7 @@ void main() {
       );
       expect(discard.onPressed != null, phase == MatchPhase.actions);
       expect(
-        find.text('Collect 1 wood'),
+        resourceLabel('Collect 1 wood'),
         phase == MatchPhase.actions ? findsOneWidget : findsNothing,
       );
       await tester.tap(find.byTooltip('Close card'));
@@ -98,9 +100,11 @@ void main() {
     );
     expect(find.text('Town Developments'), findsOneWidget);
     expect(
-      tester.widget<FilledButton>(
-        find.byKey(const ValueKey('quick-innovation-development')),
-      ).onPressed,
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('quick-innovation-development')),
+          )
+          .onPressed,
       isNull,
       reason: 'Viewing the realm cannot grant off-turn development actions',
     );

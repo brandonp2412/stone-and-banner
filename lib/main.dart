@@ -184,7 +184,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
 
   void _fastForwardBots() {
     if (!aiActing) return;
-    _fastForwardingBots = true;
+    setState(() => _fastForwardingBots = true);
     _syncAi();
     ai.fastForward();
   }
@@ -215,6 +215,12 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     }
     final oldOwner = expected.actingSeat;
     final nextOwner = next.actingSeat;
+    final rollAfterSkip =
+        _fastForwardingBots &&
+        oneHumanMatch &&
+        next.phase == MatchPhase.roll &&
+        next.tactical == null &&
+        !aiSeats.contains(nextOwner);
     setState(() {
       match = next;
       aiMoveCount++;
@@ -225,6 +231,19 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     });
     _save(next, previous: expected);
     _syncAi();
+    if (rollAfterSkip) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            !_canRun ||
+            page != Page.board ||
+            handoff ||
+            !identical(match, next)) {
+          return;
+        }
+        final (a, b) = MatchEngine.expectedDice(next);
+        dispatch(RollDice(a, b));
+      });
+    }
     return true;
   }
 
@@ -377,6 +396,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     savedReplay = replay;
     savedAiSeats = {...aiSeats};
     savedBotDifficulty = matchBotDifficulty;
+    final archivedComputerSeats = {...aiSeats};
     final session = jsonEncode({
       'version': 2,
       'replay': replay,
@@ -395,7 +415,12 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           await DebugMatchLog.append(prefs, previous, state);
         }
         if (state.phase == MatchPhase.finished) {
-          await MatchArchive.save(prefs, state, replay: replay);
+          await MatchArchive.save(
+            prefs,
+            state,
+            replay: replay,
+            computerSeats: archivedComputerSeats,
+          );
         }
       } on Object {
         if (mounted) {
@@ -409,17 +434,23 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   void _archiveReplacedMatch() {
     final prior = match;
     final replay = savedReplay;
+    final archivedComputerSeats = {...(prior == null ? savedAiSeats : aiSeats)};
     if (prior == null && replay == null) return;
     _saveTail = _saveTail.then((_) async {
       try {
         final prefs = await SharedPreferences.getInstance();
         if (prior != null) {
-          await MatchArchive.save(prefs, prior);
+          await MatchArchive.save(
+            prefs,
+            prior,
+            computerSeats: archivedComputerSeats,
+          );
         } else if (replay != null) {
           await MatchArchive.save(
             prefs,
             MatchEngine.importReplay(replay),
             replay: replay,
+            computerSeats: archivedComputerSeats,
           );
         }
       } on Object {
@@ -1419,6 +1450,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                         ? 0
                                         : current.actingSeat,
                                     observing: aiActing,
+                                    fastForwardingBots: _fastForwardingBots,
                                     onFastForward: aiActing
                                         ? _fastForwardBots
                                         : null,

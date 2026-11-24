@@ -49,11 +49,10 @@ void main() {
       await tester.tap(find.text('Trade').first);
       await tester.pump();
       expect(find.byType(TradeMarket), findsOneWidget);
-      expect(find.textContaining('Waiting for Ben'), findsWidgets);
+      expect(find.textContaining('Waiting for Ben'), findsNothing);
       final create = find.byKey(const ValueKey('create-player-offer'));
-      if (create.evaluate().isNotEmpty) {
-        expect(tester.widget<FilledButton>(create).onPressed, isNull);
-      }
+      expect(create, findsOneWidget);
+      expect(tester.widget<FilledButton>(create).onPressed, isNull);
 
       await tester.tap(find.text('Cards').first);
       await tester.pump();

@@ -1,3 +1,4 @@
+import 'resource_label.dart';
 import '../network/room_protocol.dart';
 import 'labels.dart';
 
@@ -194,9 +195,7 @@ class StrategyHand extends StatelessWidget {
                     ? <PlayStrategyCard>[]
                     : groups[selectedGroup]!)
               : options;
-          final heading = options.isEmpty
-              ? 'No legal play right now.'
-              : grouped && selectedGroup == null
+          final heading = grouped && selectedGroup == null
               ? (card.power == CardPower.seizeGood
                     ? 'Choose a rival'
                     : 'Choose what to give')
@@ -238,13 +237,14 @@ class StrategyHand extends StatelessWidget {
           final decisions = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                child: Text(
-                  heading,
-                  style: Theme.of(sheetContext).textTheme.titleSmall,
+              if (options.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  child: Text(
+                    heading,
+                    style: Theme.of(sheetContext).textTheme.titleSmall,
+                  ),
                 ),
-              ),
               if (selectedGroup != null)
                 TextButton.icon(
                   onPressed: () => refresh(() {
@@ -252,76 +252,75 @@ class StrategyHand extends StatelessWidget {
                     selectedOption = null;
                   }),
                   icon: const Icon(Icons.arrow_back, size: 18),
-                  label: Text(selectedGroup!),
+                  label: ResourceLabel(selectedGroup!, showNames: true),
                 ),
-              Expanded(
-                child: boardTargeted && options.isNotEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.map_outlined, size: 48),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Choose the highlighted location on the realm map.',
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              FilledButton.icon(
-                                onPressed: () {
-                                  Navigator.pop(sheetContext);
-                                  onChooseOnMap!(card, options);
-                                },
-                                icon: const Icon(Icons.place_outlined),
-                                label: const Text('Choose on map'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : options.isEmpty
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text(
-                            'Keep this card for a future turn, or discard it.',
-                          ),
-                        ),
-                      )
-                    : grouped && selectedGroup == null
-                    ? ListView(
-                        children: [
-                          for (final entry in groups.entries)
-                            ListTile(
-                              title: Text(entry.key),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () => refresh(() {
-                                selectedGroup = entry.key;
-                                selectedOption = null;
-                              }),
+              if (options.isNotEmpty)
+                Expanded(
+                  child: boardTargeted
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.map_outlined, size: 48),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Choose the highlighted location on the realm map.',
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 12),
+                                FilledButton.icon(
+                                  onPressed: () {
+                                    Navigator.pop(sheetContext);
+                                    onChooseOnMap!(card, options);
+                                  },
+                                  icon: const Icon(Icons.place_outlined),
+                                  label: const Text('Choose on map'),
+                                ),
+                              ],
                             ),
-                        ],
-                      )
-                    : ListView.builder(
-                        itemCount: visible.length,
-                        itemBuilder: (_, i) {
-                          final option = visible[i];
-                          final selected = identical(selectedOption, option);
-                          return ListTile(
-                            selected: selected,
-                            leading: Icon(
-                              selected
-                                  ? Icons.check_circle
-                                  : Icons.radio_button_unchecked,
-                            ),
-                            title: Text(_optionLabel(card, option)),
-                            onTap: () => refresh(() => selectedOption = option),
-                          );
-                        },
-                      ),
-              ),
+                          ),
+                        )
+                      : grouped && selectedGroup == null
+                      ? ListView(
+                          children: [
+                            for (final entry in groups.entries)
+                              ListTile(
+                                title: ResourceLabel(
+                                  entry.key,
+                                  showNames: true,
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => refresh(() {
+                                  selectedGroup = entry.key;
+                                  selectedOption = null;
+                                }),
+                              ),
+                          ],
+                        )
+                      : ListView.builder(
+                          itemCount: visible.length,
+                          itemBuilder: (_, i) {
+                            final option = visible[i];
+                            final selected = identical(selectedOption, option);
+                            return ListTile(
+                              selected: selected,
+                              leading: Icon(
+                                selected
+                                    ? Icons.check_circle
+                                    : Icons.radio_button_unchecked,
+                              ),
+                              title: ResourceLabel(
+                                _optionLabel(card, option),
+                                adaptive: true,
+                              ),
+                              onTap: () =>
+                                  refresh(() => selectedOption = option),
+                            );
+                          },
+                        ),
+                ),
               Padding(
                 padding: const EdgeInsets.all(8),
                 child: Wrap(
@@ -361,7 +360,7 @@ class StrategyHand extends StatelessWidget {
                       icon: const Icon(Icons.delete_outline),
                       label: const Text('Discard this card'),
                     ),
-                    if (options.isNotEmpty && !boardTargeted)
+                    if (options.isEmpty || !boardTargeted)
                       FilledButton.icon(
                         onPressed: selectedOption == null
                             ? null
@@ -389,7 +388,25 @@ class StrategyHand extends StatelessWidget {
                   : 760,
               height: isCompactLandscape(sheetContext)
                   ? MediaQuery.sizeOf(sheetContext).height - 8
-                  : MediaQuery.sizeOf(sheetContext).height * .94,
+                  : math.min(
+                      MediaQuery.sizeOf(sheetContext).height * .94,
+                      MediaQuery.sizeOf(sheetContext).width >= 800
+                          ? math.max(
+                              360.0,
+                              (boardTargeted
+                                      ? 400.0
+                                      : 150.0 +
+                                            math.max(
+                                                  groups.length,
+                                                  options.length,
+                                                ) *
+                                                56) *
+                                  MediaQuery.textScalerOf(sheetContext)
+                                      .scale(14) /
+                                  14,
+                            )
+                          : double.infinity,
+                    ),
               child: Column(
                 children: [
                   Padding(
@@ -420,7 +437,14 @@ class StrategyHand extends StatelessWidget {
                   const Divider(height: 1),
                   Expanded(
                     child: LayoutBuilder(
-                      builder: (_, bounds) => bounds.maxWidth >= 560
+                      builder: (_, bounds) => options.isEmpty
+                          ? Column(
+                              children: [
+                                Expanded(child: detail),
+                                decisions,
+                              ],
+                            )
+                          : bounds.maxWidth >= 560
                           ? Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -585,11 +609,13 @@ class StrategyHand extends StatelessWidget {
                             ],
                           ),
                         ),
-                        IconButton(
-                          tooltip: 'Card details and discard',
-                          onPressed: () =>
-                              _showCard(context, i, forceDetails: true),
-                          icon: const Icon(Icons.more_vert),
+                        Tooltip(
+                          message: 'Card details and discard',
+                          excludeFromSemantics: true,
+                          child: const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Icon(Icons.chevron_right, size: 20),
+                          ),
                         ),
                       ],
                     ),

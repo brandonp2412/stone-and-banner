@@ -164,6 +164,6 @@ void main() {
     await tester.tap(find.text('Resolve'));
     await tester.pumpAndSettle();
     expect(s.phase, MatchPhase.roll);
-    expect(find.text('Roll dice'), findsOneWidget);
+    expect(find.text('Roll'), findsOneWidget);
   });
 }

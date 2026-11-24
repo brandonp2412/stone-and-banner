@@ -1,3 +1,5 @@
+import 'resource_label_finder.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/game.dart';
@@ -126,8 +128,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build').hitTestable());
     await tester.pumpAndSettle();
-    expect(find.textContaining('Town: 2 wheat · 3 ore'), findsWidgets);
-    expect(find.textContaining('Capital: 2 wheat · 2 ore'), findsWidgets);
+    expect(
+      resourceLabel('Town: 2 wheat · 3 ore', contains: true),
+      findsWidgets,
+    );
+    expect(
+      resourceLabel('Capital: 2 wheat · 2 ore', contains: true),
+      findsWidgets,
+    );
     expect(tester.takeException(), isNull);
   });
 }

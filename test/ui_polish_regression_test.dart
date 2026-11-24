@@ -1,3 +1,5 @@
+import 'resource_label_finder.dart';
+
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
@@ -74,14 +76,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.ancestor(
-        of: find.textContaining('Build village ·'),
+        of: resourceLabel('Build village ·', contains: true),
         matching: find.byType(FilledButton),
       ),
       findsOneWidget,
     );
     expect(
       find.ancestor(
-        of: find.textContaining('Build Guard ·'),
+        of: resourceLabel('Build Guard ·', contains: true),
         matching: find.byType(OutlinedButton),
       ),
       findsOneWidget,

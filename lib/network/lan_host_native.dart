@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
+import 'lan_discovery_targets.dart';
+
 import '../engine/match.dart';
 import '../engine/ai_turn_coordinator.dart';
 import 'room_host.dart';
@@ -132,7 +136,7 @@ class LanHostServer {
   }
 
   static Future<List<LanFoundRoom>> discover({
-    Duration duration = const Duration(milliseconds: 1200),
+    Duration duration = const Duration(milliseconds: 2600),
   }) async {
     final found = <String, LanFoundRoom>{};
     final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
@@ -151,6 +155,7 @@ class LanHostServer {
             }
             final ip = packet.address.address;
             final port = msg['port'] as int;
+            if (port < 1 || port > 65535) continue;
             for (final room in msg['rooms'] as List? ?? const []) {
               if (room is! Map ||
                   room['code'] is! String ||
@@ -172,15 +177,53 @@ class LanHostServer {
           }
         }
       });
-      for (var i = 0; i < 3; i++) {
-        socket.send(
-          utf8.encode(discoveryRequest),
-          InternetAddress('255.255.255.255'),
-          discoveryPort,
-        );
-        await Future<void>.delayed(
-          Duration(milliseconds: duration.inMilliseconds ~/ 3),
-        );
+      final clock = Stopwatch()..start();
+      final request = utf8.encode(discoveryRequest);
+      void probe(String address) {
+        try {
+          socket.send(request, InternetAddress(address), discoveryPort);
+        } on SocketException {
+          // Another interface or a later retry can still succeed.
+        }
+      }
+
+      // Keep the original protocol, and send directed broadcasts when the
+      // operating system knows the interface's actual subnet.
+      List<LanDiscoverySubnet> subnets = [];
+      try {
+        final raw = await const MethodChannel('stone_and_banner/lan')
+            .invokeListMethod<dynamic>('subnets');
+        subnets = LanDiscoverySubnet.fromPlatform(raw ?? []);
+      } on Object {
+        // Older runners and unsupported platforms retain broadcast discovery.
+      }
+      final broadcasts = {
+        '255.255.255.255',
+        for (final subnet in subnets) subnet.broadcast,
+      };
+      final initial = duration.inMilliseconds ~/ 4;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        for (final target in broadcasts) {
+          probe(target);
+        }
+        await Future<void>.delayed(Duration(milliseconds: initial));
+      }
+      // Some networks pass broadcast requests but drop their unicast replies.
+      // Probe only the game's discovery port on a bounded on-link subnet,
+      // and only when ordinary discovery did not find any rooms.
+      if (found.isEmpty) {
+        final targets = LanDiscoverySubnet.fallbackTargets(subnets);
+        for (var offset = 0; offset < targets.length; offset += 16) {
+          if (clock.elapsedMilliseconds >= duration.inMilliseconds) break;
+          for (final target in targets.skip(offset).take(16)) {
+            probe(target);
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 8));
+        }
+      }
+      final remaining = duration.inMilliseconds - clock.elapsedMilliseconds;
+      if (remaining > 0) {
+        await Future<void>.delayed(Duration(milliseconds: remaining));
       }
       return found.values.toList();
     } finally {
@@ -240,6 +283,7 @@ class _LanServerProtocol {
       clock.cancel();
     }
     clocks.clear();
+    clockDeadlines.clear();
     for (final conn in connections.toList()) {
       conn.socket.close();
     }
@@ -249,6 +293,8 @@ class _LanServerProtocol {
   final connections = <_Connection>{};
   final clocks = <HostedRoom, Timer>{};
   final clockTurns = <HostedRoom, String>{};
+  final clockDeadlines = <HostedRoom, int>{};
+  final clock = Stopwatch()..start();
 
   void attach(WebSocket socket) {
     final conn = _Connection(socket);
@@ -366,7 +412,6 @@ class _LanServerProtocol {
         }
         room.start(seat);
         broadcast(room);
-        if (fresh) schedule(room);
       case 'move':
         final before = room.version;
         final reply = room.move(
@@ -379,7 +424,6 @@ class _LanServerProtocol {
         if (reply['ok'] == true) {
           if (room.version != before) {
             broadcast(room);
-            schedule(room);
           }
         } else {
           sendState(conn);
@@ -404,11 +448,17 @@ class _LanServerProtocol {
       'op': 'state',
       'room': room.id,
       'version': room.version,
+      if (clockDeadlines[room] case final int deadline)
+        'turnRemainingMs': (deadline - clock.elapsedMilliseconds).clamp(
+          0,
+          90000,
+        ),
       'view': RoomProtocol.view(room.state!, conn.seat!),
     });
   }
 
   void broadcast(HostedRoom room) {
+    schedule(room);
     for (final conn in connections) {
       if (conn.room != room) continue;
       conn.send({
@@ -457,7 +507,6 @@ class _LanServerProtocol {
           );
           if (result['ok'] != true) return false;
           broadcast(room);
-          schedule(room);
           return true;
         },
         onError: (error) {
@@ -488,6 +537,7 @@ class _LanServerProtocol {
     if (state == null || state.phase == MatchPhase.finished) {
       clocks.remove(room)?.cancel();
       clockTurns.remove(room);
+      clockDeadlines.remove(room);
       return;
     }
     final key =
@@ -496,6 +546,7 @@ class _LanServerProtocol {
     if (clockTurns[room] == key && clocks[room]?.isActive == true) return;
     clocks.remove(room)?.cancel();
     clockTurns[room] = key;
+    clockDeadlines[room] = clock.elapsedMilliseconds + 90000;
     clocks[room] = Timer(const Duration(seconds: 90), () {
       final current = room.state;
       if (current == null) return;

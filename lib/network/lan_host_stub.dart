@@ -11,7 +11,7 @@ class LanHostServer {
   );
   static Future<List<String>> localAddresses() async => [];
   static Future<List<LanFoundRoom>> discover({
-    Duration duration = const Duration(milliseconds: 1200),
+    Duration duration = const Duration(milliseconds: 2600),
   }) async => [];
   Future<void> close() async {}
 }

@@ -15,13 +15,15 @@ class ArchivedMatch {
     this.round,
     this.eventCount,
     this.finished,
-    this.winner,
-  );
+    this.winner, {
+    this.computerSeats,
+  });
   final String key, savedAt;
   final List<String> names;
   final int round, eventCount;
   final bool finished;
   final String? winner;
+  final Set<int>? computerSeats;
 
   factory ArchivedMatch.fromJson(Map<String, dynamic> json) => ArchivedMatch(
     json['key'] as String,
@@ -31,6 +33,7 @@ class ArchivedMatch {
     json['events'] as int,
     json['finished'] as bool,
     json['winner'] as String?,
+    computerSeats: (json['computerSeats'] as List?)?.cast<int>().toSet(),
   );
   Map<String, Object?> toJson() => {
     'key': key,
@@ -40,6 +43,7 @@ class ArchivedMatch {
     'events': eventCount,
     'finished': finished,
     'winner': winner,
+    if (computerSeats != null) 'computerSeats': computerSeats!.toList()..sort(),
   };
 }
 
@@ -52,6 +56,7 @@ abstract final class MatchArchive {
     SharedPreferences prefs,
     MatchState match, {
     String? replay,
+    Set<int>? computerSeats,
   }) async {
     if (match.events.isEmpty) return;
     final timestamp = DateTime.now().toUtc().toIso8601String();
@@ -76,6 +81,7 @@ abstract final class MatchArchive {
       match.events.length,
       match.phase == MatchPhase.finished,
       winnerSeat == null ? null : match.players[winnerSeat].id,
+      computerSeats: computerSeats,
     );
     final indexKey = '$_indexPrefix$month';
     final previous = prefs.getStringList(indexKey) ?? [];

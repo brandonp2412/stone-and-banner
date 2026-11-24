@@ -57,3 +57,6 @@ TODO.md
 
 # Local Cloudflare Workers test databases
 /.wrangler/
+
+# Local assistant instructions
+/AGENTS.md

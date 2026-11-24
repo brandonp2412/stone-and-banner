@@ -1,3 +1,5 @@
+import 'resource_label_finder.dart';
+
 import 'package:stone_and_banner/ui/trade_picker.dart';
 
 import 'action_helpers.dart';
@@ -243,12 +245,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Response for Ben'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Pledge 1 ore'),
+      resourceLabel('Pledge 1 ore'),
       100,
       scrollable: find.byType(Scrollable).last,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pledge 1 ore'));
+    await tester.tap(resourceLabel('Pledge 1 ore'));
     await tester.pumpAndSettle();
     expect(updated.invasionAid, 2);
     expect(find.text('Response for Cora'), findsOneWidget);

@@ -1,3 +1,5 @@
+import 'labels.dart';
+
 import 'package:flutter/material.dart';
 
 import 'game_colors.dart';
@@ -107,7 +109,7 @@ class _ResourceHarvestState extends State<ResourceHarvest>
                           ),
                         ),
                         child: Text(
-                          '+${entry.value} ${entry.key.name}',
+                          '+${entry.value} ${entry.key.displayName}',
                           style: TextStyle(
                             color: gameColor(context, const Color(0xffeafff5)),
                             fontWeight: FontWeight.bold,

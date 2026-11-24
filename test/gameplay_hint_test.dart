@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +9,7 @@ import 'package:stone_and_banner/engine/cards.dart';
 import 'package:stone_and_banner/ui/focus_hint.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
 
+import 'board_target_helpers.dart';
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
 
 void main() {
@@ -76,6 +79,64 @@ void main() {
       },
     );
   }
+
+  testWidgets('roll hint highlights the actual dice button on desktop', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await showMatch(
+      tester,
+      MatchEngine.newGame([
+        'Ada',
+        'Ben',
+        'Cora',
+      ], 13).copyWith(phase: MatchPhase.roll),
+    );
+    final hint = tester.widget<FocusHint>(find.byType(FocusHint));
+    final button = find.widgetWithText(FilledButton, 'Roll');
+    expect(button, findsOneWidget);
+    expect(hint.target.currentContext, isNotNull);
+    expect(tester.getRect(find.byKey(hint.target)), tester.getRect(button));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('board does not expose a coordinate-free accessibility tap', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'gameplay_hints_enabled': false});
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final semantics = tester.ensureSemantics();
+    final state = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 13);
+    final events = <MatchEvent>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatchView(state: state, onEvent: events.add),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final map = find.byKey(const ValueKey('realm-map'));
+    expect(tester.getSemantics(map).label, contains('Realm map'));
+    expect(
+      tester
+          .getSemantics(map)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isFalse,
+    );
+    await tapBoardTarget(
+      tester,
+      state,
+      vertex: MatchEngine.legalVertices(state).first,
+    );
+    expect(events.single, isA<PlaceVillage>());
+    semantics.dispose();
+  });
 
   testWidgets('second setup village explains the free Town', (tester) async {
     final initial = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 13);

@@ -1,3 +1,7 @@
+import 'resource_label_finder.dart';
+
+import 'dart:ui' show SemanticsAction;
+
 import 'action_helpers.dart';
 
 import 'package:flutter/material.dart';
@@ -26,6 +30,92 @@ MatchState withCard(String id) {
 }
 
 void main() {
+  for (final size in [const Size(844, 390), const Size(1280, 800)]) {
+    testWidgets(
+      'held cards remain visible but cannot be played before rolling at $size',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final events = <MatchEvent>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: MatchView(
+                state: withCard('forecast').copyWith(phase: MatchPhase.roll),
+                onEvent: events.add,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        if (size.width < 900) {
+          await tester.tap(find.text('Actions'));
+          await tester.pumpAndSettle();
+          await scrollToAction(tester, 'Cards');
+        } else {
+          await tester.tap(find.text('Cards'));
+          await tester.pumpAndSettle();
+        }
+        expect(find.text('Forecast'), findsOneWidget);
+        await tester.ensureVisible(find.text('Forecast'));
+        await tester.tap(find.text('Forecast'));
+        await tester.pumpAndSettle();
+        expect(find.text('No legal play right now.'), findsNothing);
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Play selected card'),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(
+          tester
+              .widget<TextButton>(
+                find.widgetWithText(TextButton, 'Discard this card'),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(events, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('card row is one named accessible button', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MatchView(state: withCard('forecast'), onEvent: (_) {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cards'));
+    await tester.pumpAndSettle();
+    final card = find.widgetWithText(OutlinedButton, 'Forecast');
+    expect(card, findsOneWidget);
+    final node = tester.getSemantics(card);
+    expect(node.label, contains('Forecast'));
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    expect(
+      find.descendant(of: card, matching: find.byType(IconButton)),
+      findsNothing,
+    );
+    await tester.tap(card);
+    await tester.pumpAndSettle();
+    expect(resourceLabel('Collect 1 wood'), findsOneWidget);
+    semantics.dispose();
+  });
+
   testWidgets('card detail exposes accessible legal targets and plays card', (
     tester,
   ) async {
@@ -66,7 +156,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    await tester.tap(find.text('Collect 1 wood'));
+    await tester.tap(resourceLabel('Collect 1 wood'));
     await tester.pumpAndSettle();
     expect(state.current.cards, hasLength(1), reason: 'Selection is not play');
     await tester.tap(find.text('Play selected card'));
@@ -108,7 +198,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Fortification Plans'));
     await tester.pumpAndSettle();
-    expect(find.text('No legal play right now.'), findsOneWidget);
+    expect(find.text('No legal play right now.'), findsNothing);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Play selected card'),
+          )
+          .onPressed,
+      isNull,
+    );
     await tester.tap(find.text('Discard this card'));
     await tester.pumpAndSettle();
     expect(find.text('Discard this card?'), findsOneWidget);
@@ -155,11 +253,11 @@ void main() {
     await tester.tap(find.text('Open Routes'));
     await tester.pumpAndSettle();
     expect(find.text('Choose what to give'), findsOneWidget);
-    final group = find.textContaining('Give 1 ').first;
+    final group = resourceLabel('Give 1 ', contains: true).first;
     await tester.tap(group);
     await tester.pumpAndSettle();
     expect(find.text('Choose a legal target or exchange'), findsOneWidget);
-    await tester.tap(find.textContaining('receive 1 ').first);
+    await tester.tap(resourceLabel('receive 1 ', contains: true).first);
     await tester.pumpAndSettle();
     expect(state.current.cards, hasLength(1));
     await tester.tap(find.text('Play selected card'));
