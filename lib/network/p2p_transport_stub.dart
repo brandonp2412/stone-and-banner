@@ -1,6 +1,9 @@
 /// Browser-only RTCPeerConnection bridge.
 class P2pTransport {
   static String? initialLink() => null;
+  static Map<String, String>? guestSession() => null;
+  static void rememberGuestSession(String key, String name, String token) {}
+  static void clearGuestSession() {}
   P2pTransport(this.onEvent);
   final void Function(String peer, String event, String data) onEvent;
 

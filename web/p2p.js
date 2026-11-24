@@ -2,7 +2,27 @@
 (() => {
   "use strict";
   // Flutter may rewrite hash routes, so retain the signalling fragment first.
-  const initialLink = location.hash.startsWith("#p2p=") ? location.href : null;
+  const guestSessionKey = "stone-banner-guest-session-v1";
+  function guestSession() {
+    try {
+      const value = JSON.parse(sessionStorage.getItem(guestSessionKey));
+      return value && /^[a-f0-9]{32}$/.test(value.key) &&
+        /^[a-f0-9]{64}$/.test(value.token) && typeof value.name === "string"
+        ? value : null;
+    } catch (_) { return null; }
+  }
+  function rememberGuestSession(key, name, token) {
+    try { sessionStorage.setItem(guestSessionKey, JSON.stringify({key, name, token})); }
+    catch (_) { /* Storage may be unavailable in private mode. */ }
+  }
+  function clearGuestSession() {
+    try { sessionStorage.removeItem(guestSessionKey); } catch (_) {}
+  }
+  const savedGuest = guestSession();
+  const initialLink = location.hash.startsWith("#p2p=") ? location.href :
+    savedGuest ? location.origin + location.pathname + location.search + "#p2p=" +
+      btoa(JSON.stringify({v: 2, type: "room", key: savedGuest.key}))
+        .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") : null;
   // Public STUN endpoints are used only for endpoint discovery, never for
   // relaying moves. Two independent operators improve availability.
   const directIceServers = [
@@ -434,6 +454,8 @@
 
   window.stoneP2p = {
     initialLink() { return initialLink; },
+    guestSession() { return JSON.stringify(guestSession()); },
+    rememberGuestSession, clearGuestSession,
     create, offer, answer, accept, diagnostics,
     send(id, message) {
       const channel = peers.get(id)?.channel;

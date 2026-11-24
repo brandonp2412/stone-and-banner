@@ -72,7 +72,7 @@ export class SignalRoom {
     // Upgrade first: browsers hide 404/409 WebSocket bodies.
     const rejection = role === 'host' && activeHosts.length
       ? {code: 'host_busy', message: 'This host is already connected.'}
-      : role === 'guest' && guestCount >= 3
+      : role === 'guest' && guestCount >= 5
       ? {code: 'room_full', message: 'This room has reached its guest limit.'}
       : null;
     const pair = new WebSocketPair();

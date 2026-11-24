@@ -96,6 +96,7 @@ class P2pRoom extends ChangeNotifier {
   Timer? _clock;
   String? _clockKey;
   String _guestName = 'Player';
+  String? _guestRoomKey, _guestToken;
   bool _disposed = false;
 
   bool isHost = false, connected = false, pending = false, preparing = false;
@@ -356,9 +357,9 @@ class P2pRoom extends ChangeNotifier {
     final room = _room;
     final signalling = _signalling;
     if (_disposed || room == null || signalling == null) return;
-    if (started ||
-        _invited.contains(peer) ||
-        _invited.length + botCount + 1 >= capacity) {
+    // Full/started rooms still negotiate a bounded number of channels so
+    // a returning guest can authenticate with their original seat token.
+    if (_invited.contains(peer) || pendingInvites >= 5) {
       signalling.send({'op': 'reject', 'peer': peer});
       return;
     }
@@ -409,6 +410,10 @@ class P2pRoom extends ChangeNotifier {
     if (_room != null || guestPeer != null || joiningOneLink) {
       throw StateError('Already joining or in a room.');
     }
+    _guestRoomKey = key;
+    final saved = P2pTransport.guestSession();
+    _guestToken = saved != null && saved['key'] == key ? saved['token'] : null;
+    if (_guestToken != null) name = saved?['name'] ?? name;
     joiningOneLink = true;
     preparing = true;
     message = null;
@@ -445,6 +450,10 @@ class P2pRoom extends ChangeNotifier {
           }
         },
         onError: (error) {
+          if (_disposed ||
+              (client != null && !identical(_signalling, client))) {
+            return;
+          }
           if (!offerReady.isCompleted) {
             offerReady.completeError(StateError(error));
           } else if (!_disposed && !connected) {
@@ -846,20 +855,38 @@ class P2pRoom extends ChangeNotifier {
       case 'open':
         _open.add(peer);
         if (!isHost && peer == guestPeer) {
-          _send(peer, {'op': 'hello', 'name': _guestName});
+          _send(peer, {
+            'op': 'hello',
+            'name': _guestName,
+            if (_guestToken != null) 'token': _guestToken,
+          });
         }
       case 'close':
         _open.remove(peer);
         if (isHost && _peerSeats.containsKey(peer)) {
-          final seat = _peerSeats[peer]!;
+          final seat = _peerSeats.remove(peer)!;
+          _invited.remove(peer);
+          _answered.remove(peer);
+          peerPaths.remove(peer);
           _room!.seats[seat].connected = false;
           _broadcast();
+        } else if (isHost) {
+          _invited.remove(peer);
+          _answered.remove(peer);
+          peerPaths.remove(peer);
         } else if (!isHost && peer == guestPeer) {
+          final wasConnected = connected;
           connected = false;
-          message = 'Connection lost. Keep the host and guest sessions open.';
+          pending = false;
+          if (wasConnected) {
+            message = 'Connection lost. Keep the host and guest sessions open.';
+          }
         }
       case 'error':
-        message = raw;
+        // A retired channel may report errors after its replacement is open.
+        if (isHost && !_invited.contains(peer)) return;
+        if (!isHost && peer != guestPeer) return;
+        message ??= raw;
       case 'ice':
         networkDiagnostic = 'ICE: $raw';
       case 'diagnostic':
@@ -889,6 +916,16 @@ class P2pRoom extends ChangeNotifier {
     if (_open.contains(peer)) _rtc.send(peer, jsonEncode(msg));
   }
 
+  void _rejectGuest(String peer, String reason) {
+    _send(peer, {'op': 'error', 'message': reason});
+    _invited.remove(peer);
+    _answered.remove(peer);
+    // Let the reliable channel flush the rejection before tearing it down.
+    Timer(const Duration(seconds: 1), () {
+      if (!_disposed && !_peerSeats.containsKey(peer)) _rtc.close(peer);
+    });
+  }
+
   void _hostMessage(String peer, Map<String, dynamic> msg) {
     final room = _room!;
     if (msg['op'] == 'hello') {
@@ -903,23 +940,50 @@ class P2pRoom extends ChangeNotifier {
       if (msg['name'] is! String) {
         throw const FormatException('Invalid player name.');
       }
-      final number = room.seats.length;
-      try {
-        room.join(msg['name'] as String);
-      } on StateError catch (error) {
-        _send(peer, {'op': 'error', 'message': error.message});
-        return;
+      final token = msg['token'];
+      final int number;
+      if (token != null) {
+        number = token is String ? room.seatFor(token) : -1;
+        if (number <= 0 || botSeats.contains(number)) {
+          _rejectGuest(peer, 'Invalid seat credential.');
+          return;
+        }
+        // Invalidate the previous channel before closing it: a late close
+        // must not mark the newly authenticated seat disconnected.
+        for (final old
+            in _peerSeats.keys.where((p) => _peerSeats[p] == number).toList()) {
+          _peerSeats.remove(old);
+          _open.remove(old);
+          _invited.remove(old);
+          _answered.remove(old);
+          peerPaths.remove(old);
+          _rtc.close(old);
+        }
+      } else {
+        if (started || room.seats.length + botCount >= capacity) {
+          _rejectGuest(peer, 'Room has no available player seats.');
+          return;
+        }
+        number = room.seats.length;
+        try {
+          room.join(msg['name'] as String);
+        } on StateError catch (error) {
+          _send(peer, {'op': 'error', 'message': error.message});
+          return;
+        }
       }
       room.seats[number].connected = true;
       // Mark this invitation as fulfilled before counting unused invitations,
       // or the newly connected guest incorrectly evicts a reserved bot.
       _peerSeats[peer] = number;
-      if (botCount > capacity - room.seats.length - pendingInvites) {
-        botCount = (capacity - room.seats.length - pendingInvites).clamp(0, 6);
-      }
-      _planBotSeats();
+      if (!started) _planBotSeats();
       message = null;
-      _send(peer, {'op': 'welcome', 'room': room.id, 'seat': number});
+      _send(peer, {
+        'op': 'welcome',
+        'room': room.id,
+        'seat': number,
+        'token': room.seats[number].token,
+      });
       _broadcast();
       return;
     }
@@ -971,6 +1035,19 @@ class P2pRoom extends ChangeNotifier {
         seat = msg['seat'] as int;
         connected = true;
         message = null;
+        if (msg['token'] is String && _guestRoomKey != null) {
+          _guestToken = msg['token'] as String;
+          P2pTransport.rememberGuestSession(
+            _guestRoomKey!,
+            _guestName,
+            _guestToken!,
+          );
+        }
+        // SDP exchange is finished. Release the signalling socket; gameplay
+        // remains on the data channel and other guests can join/reconnect.
+        final signalling = _signalling;
+        _signalling = null;
+        unawaited(signalling?.dispose());
       case 'lobby':
         capacity = msg['capacity'] as int;
         players = (msg['players'] as List).cast<String>();
@@ -992,6 +1069,13 @@ class P2pRoom extends ChangeNotifier {
         }
       case 'error':
         message = msg['message'] as String? ?? 'Peer error.';
+        if (!connected &&
+            (message == 'Invalid seat credential.' ||
+                message == 'Room has no available player seats.')) {
+          final signalling = _signalling;
+          _signalling = null;
+          unawaited(signalling?.dispose());
+        }
     }
   }
 

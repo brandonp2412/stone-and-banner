@@ -84,6 +84,22 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
         incoming = P2pLinks.parse(incomingLink);
         if (incoming!['type'] == 'offer' || incoming!['type'] == 'room') {
           name.text = 'Guest';
+          final saved = P2pTransport.guestSession();
+          if (incoming!['type'] == 'room' &&
+              saved?['key'] == incoming!['key']) {
+            name.text = saved!['name']!;
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (!mounted) return;
+              try {
+                await room.joinByRoomLink(
+                  name.text,
+                  incoming!['key'] as String,
+                );
+              } on Object catch (error) {
+                if (mounted) setState(() => parseError = '$error');
+              }
+            });
+          }
         }
         if (incoming!['type'] == 'answer') {
           receivedResponseLink = incomingLink;
@@ -120,6 +136,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
   }
 
   void _exitRoom() {
+    if (!room.isHost) P2pTransport.clearGuestSession();
     if (widget.onExitToHome case final leaveToHome?) {
       leaveToHome();
       return;

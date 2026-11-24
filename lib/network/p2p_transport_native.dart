@@ -73,6 +73,9 @@ class P2pTransport {
   bool _disposed = false;
 
   static String? initialLink() => null;
+  static Map<String, String>? guestSession() => null;
+  static void rememberGuestSession(String key, String name, String token) {}
+  static void clearGuestSession() {}
   static Future<bool> forwardAnswer(String message) async => false;
   static void acknowledgeAnswer(String id, bool accepted) {}
   static void setHosting(bool hosting) {}

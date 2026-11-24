@@ -116,7 +116,7 @@ try {
   await fullHost.ready;
   await fullHost.receive('ready');
   fullHost.send({op:'host_ready'});
-  for (let i=0; i<3; i++) {
+  for (let i=0; i<5; i++) {
     const client = connect('guest', fullKey);
     await client.ready;
     await client.receive('ready');

@@ -1,7 +1,19 @@
+import 'dart:convert';
 import 'dart:js_interop';
 
 @JS('stoneP2p.initialLink')
 external JSString? _initialLink();
+
+@JS('stoneP2p.guestSession')
+external JSString _guestSession();
+@JS('stoneP2p.rememberGuestSession')
+external void _rememberGuestSession(
+  JSString key,
+  JSString name,
+  JSString token,
+);
+@JS('stoneP2p.clearGuestSession')
+external void _clearGuestSession();
 
 @JS('stoneP2p.create')
 external void _create(JSString id, JSBoolean isHost, JSFunction callback);
@@ -35,6 +47,31 @@ class P2pTransport {
       return _initialLink()?.toDart;
     } on Object {
       return null;
+    }
+  }
+
+  static Map<String, String>? guestSession() {
+    try {
+      final raw = jsonDecode(_guestSession().toDart);
+      return raw == null ? null : Map<String, String>.from(raw as Map);
+    } on Object {
+      return null;
+    }
+  }
+
+  static void rememberGuestSession(String key, String name, String token) {
+    try {
+      _rememberGuestSession(key.toJS, name.toJS, token.toJS);
+    } on Object {
+      /* Storage unavailable. */
+    }
+  }
+
+  static void clearGuestSession() {
+    try {
+      _clearGuestSession();
+    } on Object {
+      /* Storage unavailable. */
     }
   }
 
