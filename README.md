@@ -4,7 +4,7 @@ Build villages, trade goods and defend your realm from raids. Grow your villages
 
 **[Play in your browser](https://brandonp2412.github.io/stone-and-banner/)** · **[Download for Android, Windows or Linux](https://github.com/brandonp2412/stone-and-banner/releases)**
 
-![A three-player match with roads, villages and towns on the hex board](docs/screenshots/match-desktop.png)
+![A three-player match with roads, villages and towns on the hex board](fastlane/metadata/android/en-US/images/tenInchScreenshots/01-board.png)
 
 ## How to play
 
@@ -31,23 +31,17 @@ The app runs in a browser and on Android and Linux. Both portrait and landscape 
 
 ## Screenshots
 
-### Home and setup
+Automatically captured from the current game on every push to main.
 
-![Home screen](docs/screenshots/home-desktop.png)
+### Phone
 
-![Match setup](docs/screenshots/setup-desktop.png)
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01-board.png" alt="Portrait gameplay" width="270"> <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02-trade.png" alt="Trading" width="270"> <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03-realm.png" alt="Town developments" width="270">
 
-### Rules and town development
+### Tablet
 
-![The founding rules, including Renown and guard defence](docs/screenshots/rules-desktop.png)
+![Trading on a 7-inch tablet](fastlane/metadata/android/en-US/images/sevenInchScreenshots/02-trade.png)
 
-![Realm panel with town development tracks](docs/screenshots/realm-desktop.png)
-
-### Mobile layouts
-
-![Mobile landscape gameplay](docs/screenshots/match-landscape.png)
-
-<img src="docs/screenshots/match-mobile.png" alt="Portrait gameplay with the board above the action controls" width="360">
+![Realm on a 10-inch tablet](fastlane/metadata/android/en-US/images/tenInchScreenshots/03-realm.png)
 
 ## Run locally
 
@@ -95,6 +89,14 @@ uv run --with patchright==1.64.4 python -m patchright install chromium
 uv run --with patchright==1.64.4 python tool/capture_readme_screenshots.py --url http://127.0.0.1:8766/
 ```
 
-The capture script generates a repeatable match through legal engine actions, restores it through the app’s saved-match flow, and records the home, setup, rules, board and development screens. It checks visible text for retired terminology and fails if the browser reports an error. It never reads or changes your saved match. To capture a particular replay, pass `--replay /path/to/replay.json`.
+The capture script generates a repeatable match through legal engine actions, restores it through the app’s saved-match flow, and records the board, trade, realm and setup screens at each form factor. It checks visible text for retired terminology and fails if the browser reports an error. It never reads or changes your saved match. To capture a particular replay, pass `--replay /path/to/replay.json`.
 
-GitHub Actions runs the same capture workflow when gameplay, artwork or capture tools change. Its screenshots are available as downloadable workflow artifacts.
+GitHub Actions runs the capture on every push to main and commits changed images back to main (the bot commit does not trigger another workflow). The README uses those same Fastlane assets directly. The workflow also uploads a downloadable artifact.
+
+| Fastlane folder | Viewport | PNG resolution |
+| --- | --- | --- |
+| phoneScreenshots | 432 × 768 | 1080 × 1920 |
+| sevenInchScreenshots | 960 × 540 | 1920 × 1080 |
+| tenInchScreenshots | 1280 × 720 | 2560 × 1440 |
+
+The four images per folder are real responsive Chromium captures, validated as 24-bit RGB PNGs under 8 MB. The store assets are in `fastlane/metadata/android/en-US/images/`; the workflow does not publish them to Google Play.
