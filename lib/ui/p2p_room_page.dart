@@ -211,7 +211,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Text(label, style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       TextFormField(
         key: ValueKey(link),
         initialValue: link,
@@ -221,7 +221,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
         style: const TextStyle(fontSize: 11),
         decoration: const InputDecoration(border: OutlineInputBorder()),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       FilledButton.tonalIcon(
         onPressed: () => Clipboard.setData(ClipboardData(text: link)),
         icon: const Icon(Icons.copy),
@@ -304,7 +304,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
       child: Column(
         children: [
           CompactPageHeader(title: 'Multiplayer', onBack: _requestLeave),
-          const Divider(height: 1),
+          const Divider(height: 8),
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -317,7 +317,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
                         'Join a friend',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       TextField(
                         controller: inviteField,
                         maxLines: 1,
@@ -350,7 +350,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
                         'Host a game',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       TextField(
                         controller: name,
                         maxLength: 32,
@@ -432,9 +432,8 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
               'The connection can stay entirely on your local Wi-Fi.',
             ),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           if (incoming == null) ...[
-            const SizedBox(height: 8),
             TextField(
               controller: inviteField,
               minLines: 1,
@@ -444,21 +443,24 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _useInviteLink,
               icon: const Icon(Icons.link),
               label: const Text('Join from invitation'),
             ),
+            const SizedBox(height: 8),
           ],
           TextField(
             controller: name,
             maxLength: 32,
             decoration: const InputDecoration(
+              counterText: '',
               labelText: 'Your player name',
               border: OutlineInputBorder(),
             ),
           ),
+          const SizedBox(height: 8),
           if (incoming?['type'] == 'offer' || incoming?['type'] == 'room') ...[
             Text(
               incoming?['type'] == 'room'
@@ -469,7 +471,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
               const SizedBox(height: 8),
               Text(room.joinStatus!),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: room.preparing || room.joiningOneLink
                   ? null
@@ -506,25 +508,29 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
               ),
             ),
           ] else ...[
-            const Text(
-              'Create a room and share one invite link with your friends.',
+            Text('Players', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            LayoutBuilder(
+              builder: (context, constraints) => SegmentedButton<int>(
+                segments: [
+                  for (final count in [3, 4, 5, 6])
+                    ButtonSegment(
+                      value: count,
+                      label: Text(
+                        constraints.maxWidth >= 480
+                            ? '$count players'
+                            : '$count',
+                        semanticsLabel: '$count players',
+                      ),
+                    ),
+                ],
+                selected: {seats},
+                showSelectedIcon: false,
+                onSelectionChanged: (selection) =>
+                    setState(() => seats = selection.single),
+              ),
             ),
-            const SizedBox(height: 9),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final count in [3, 4, 5, 6])
-                  ChoiceChip(
-                    label: Text('$count players'),
-                    selected: seats == count,
-                    onSelected: (_) {
-                      setState(() => seats = count);
-                    },
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: () {
                 try {
@@ -534,14 +540,10 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
                 }
               },
               icon: const Icon(Icons.groups),
-              label: Text(
-                kIsWeb
-                    ? 'Host game'
-                    : 'Host game (Android, iPhone, web, Linux)',
-              ),
+              label: const Text('Host game'),
             ),
             if (!kIsWeb) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(builder: (_) => const LanRoomPage()),
@@ -561,7 +563,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
       'Connection response',
       style: Theme.of(context).textTheme.headlineSmall,
     ),
-    const SizedBox(height: 12),
+    const SizedBox(height: 8),
     if (forwardingResponse)
       const ListTile(
         leading: CircularProgressIndicator(),
@@ -628,7 +630,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
         ),
       ),
       if (room.invitationLink case final String link) ...[
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _copy('invite link', link),
       ],
       TextButton.icon(
@@ -638,14 +640,14 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
         icon: const Icon(Icons.refresh),
         label: const Text('Replace expired or unused invitations'),
       ),
-      const SizedBox(height: 14),
+      const SizedBox(height: 8),
       const Text(
         'Your friend must send a response link back because WebRTC needs '
         'connection details from both devices. Keep this host session open. '
         'On web, open their response link in another tab in the SAME browser '
         '(it applies automatically), or paste the response below on any platform.',
       ),
-      const SizedBox(height: 7),
+      const SizedBox(height: 8),
       TextField(
         controller: answerField,
         minLines: 1,
@@ -655,7 +657,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
           labelText: 'Response link from friend',
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       OutlinedButton(
         onPressed: applying
             ? null
@@ -683,7 +685,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
       'P2P room ${room.roomId ?? ''}',
       style: Theme.of(context).textTheme.headlineSmall,
     ),
-    const SizedBox(height: 7),
+    const SizedBox(height: 8),
     Text(
       room.isHost
           ? 'You are hosting. Share one invitation with your friends.'
@@ -693,7 +695,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
           ? 'Connecting to the host automatically…'
           : 'Waiting for the host to apply your response link…',
     ),
-    const SizedBox(height: 10),
+    const SizedBox(height: 8),
     if (room.isHost) ...[
       Row(
         children: [
@@ -726,7 +728,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
         'Friends always keep their own seats.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: 8),
       if (room.signallingPreparing)
         const Text('Preparing your one-link invitation…'),
       if (room.roomLink case final String link) ...[
@@ -757,19 +759,19 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
           border: OutlineInputBorder(),
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       OutlinedButton(
         onPressed: () => room.retryName(name.text),
         child: const Text('Retry with this name'),
       ),
     ] else if (room.answerLink case final String link) ...[
       _copy('response link', link),
-      const SizedBox(height: 7),
+      const SizedBox(height: 8),
       const Text(
         'Send this link back to the host. Keep both apps or browser tabs open.',
       ),
       if (!room.connected) ...[
-        const SizedBox(height: 9),
+        const SizedBox(height: 8),
         TextField(
           controller: name,
           decoration: const InputDecoration(
@@ -777,20 +779,20 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
             border: OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: 8),
         OutlinedButton(
           onPressed: () => room.retryName(name.text),
           child: const Text('Retry joining with this name'),
         ),
       ],
     ],
-    const SizedBox(height: 14),
+    const SizedBox(height: 8),
     if (room.networkDiagnostic != null) ...[
       Text(
         room.networkDiagnostic!,
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
     ],
     if (room.connectionPath != null) ...[
       Row(
@@ -805,7 +807,7 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
     ],
     Text('Players', style: Theme.of(context).textTheme.titleMedium),
     for (var i = 0; i < room.capacity; i++)
@@ -850,9 +852,9 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
               : 'Start with ${room.botCount} bot opponent${room.botCount == 1 ? '' : 's'}',
         ),
       ),
-    const SizedBox(height: 12),
+    const SizedBox(height: 8),
     _copyDiagnosticsButton(),
-    const SizedBox(height: 12),
+    const SizedBox(height: 8),
     const Text(
       'WebRTC tries a direct connection first. Restrictive NATs can use '
       'the encrypted free TURN relay; if its monthly quota is exhausted, '
