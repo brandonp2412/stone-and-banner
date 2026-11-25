@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/engine/cards.dart';
+import 'package:stone_and_banner/engine/board.dart';
+import 'package:stone_and_banner/network/room_protocol.dart';
 import 'package:stone_and_banner/engine/game.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/match_archive.dart';
@@ -23,7 +25,9 @@ Future<void> capture(WidgetTester tester, String path) async {
   ) as RenderRepaintBoundary;
   final image = await boundary.toImage(pixelRatio: 1);
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  File(path).writeAsBytesSync(bytes!.buffer.asUint8List());
+  final output = File(path);
+  output.parent.createSync(recursive: true);
+  output.writeAsBytesSync(bytes!.buffer.asUint8List());
   image.dispose();
 }
 
@@ -140,6 +144,22 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('realm-map')), findsOneWidget);
+    final boardPaint = tester.widget<CustomPaint>(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('realm-map')),
+            matching: find.byType(CustomPaint),
+          )
+          .first,
+    );
+    final dynamic painter = boardPaint.painter;
+    expect(painter.cardRoadTargets, isNotEmpty);
+    expect(
+      painter.showTargets,
+      isFalse,
+      reason: 'Ordinary build junctions are not playable card targets',
+    );
+
     if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
       await tester.runAsync(
         () => capture(tester, '/tmp/stone-map-card-target-ui.png'),
@@ -159,6 +179,83 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(played, isA<PlayStrategyCard>());
     expect((played as PlayStrategyCard).vertex, options.first.vertex);
+  });
+
+  testWidgets('remote trade reply does not cancel a selected map card', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var state = tableWithSupplies().copyWith(cardDeckVersion: 2);
+    final deck = StrategyCards.expandedDeck(StrategyDeck.innovation);
+    final index = deck.indexWhere((card) => card.id == 'surveyor');
+    final players = state.players.toList();
+    players[0] = players[0].copyWith(
+      cards: [HeldCard(StrategyDeck.innovation, index)],
+    );
+    state = state.copyWith(players: players);
+    state = MatchEngine.apply(
+      state,
+      const ProposeTrade(1, Resource.wood, 1, Resource.brick, 1),
+    );
+    final options = MatchEngine.legalCardPlays(state, 0);
+    expect(options, isNotEmpty);
+    final events = <MatchEvent>[];
+    Widget app() => MaterialApp(
+      theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),
+      builder: (_, child) =>
+          RepaintBoundary(key: const ValueKey('capture'), child: child!),
+      home: MatchView(
+        state: RoomProtocol.readView(RoomProtocol.view(state, 0)),
+        onlineView: RoomProtocol.view(state, 0),
+        online: true,
+        visibleSeat: 0,
+        onEvent: events.add,
+      ),
+    );
+    await tester.pumpWidget(app());
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Cards').last);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Surveyor').last);
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('Choose on map'));
+    await tester.pump(const Duration(milliseconds: 250));
+    final target = find.byKey(const ValueKey('choose-card-target-on-map'));
+    expect(target, findsOneWidget);
+    state = MatchEngine.apply(
+      state,
+      RespondTrade(1, false, offerId: state.offers.single.id),
+    );
+    await tester.pumpWidget(app());
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(target, findsOneWidget);
+    if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
+      await tester.runAsync(
+        () => capture(
+          tester,
+          '/tmp/stone-bughunt-1909/card-after-remote-trade.png',
+        ),
+      );
+    }
+    final surface = tester.renderObject<RenderBox>(
+      find.byKey(const ValueKey('realm-map')),
+    );
+    final geometry = BoardGeometry(surface.size);
+    final edge = state.topology.edges[options.first.vertex!];
+    await tester.tapAt(
+      surface.localToGlobal(
+        (geometry.vertex(state.topology.vertices[edge.a]) +
+                geometry.vertex(state.topology.vertices[edge.b])) /
+            2,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(events.single, isA<PlayStrategyCard>());
+    expect((events.single as PlayStrategyCard).vertex, options.first.vertex);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('victory wraps all four player names without clipping', (

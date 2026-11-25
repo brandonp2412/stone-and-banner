@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/heuristic_ai.dart';
@@ -9,6 +10,7 @@ import 'package:stone_and_banner/network/room_protocol.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
 
 import 'advanced_test.dart' show draft;
+import 'new_gameplay_widget_test.dart' show capture;
 
 MatchState seven() {
   var state = draft(55).copyWith(phase: MatchPhase.roll);
@@ -31,6 +33,14 @@ MatchState seven() {
 }
 
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final loader = FontLoader('NotoSans')
+      ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+      ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+    await loader.load();
+  });
+
   test(
     'seven waits for a validated choice and returns chosen goods to bank',
     () {
@@ -99,6 +109,85 @@ void main() {
     await tester.tap(confirm);
     await tester.pumpAndSettle();
     expect((events.single as DiscardResources).goods, {Resource.wheat: 4});
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('online status identifies the discarding seat, not roller', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1440, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final before = seven().copyWith(active: 1);
+    final (a, b) = MatchEngine.expectedDice(before);
+    final state = MatchEngine.apply(before, RollDice(a, b));
+    expect(state.actingSeat, 0);
+    expect(state.active, 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatchView(
+          state: state,
+          online: true,
+          visibleSeat: 1,
+          observing: true,
+          onEvent: (_) {},
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    final status = find.byKey(const ValueKey('acting-player-status'));
+    expect(status, findsOneWidget);
+    expect(tester.widget<Text>(status).data, state.players[0].id);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('turn flag and countdown follow the required discard player', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1440, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final before = seven().copyWith(active: 1);
+    final (a, b) = MatchEngine.expectedDice(before);
+    final state = MatchEngine.apply(before, RollDice(a, b));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),
+        builder: (_, child) =>
+            RepaintBoundary(key: const ValueKey('capture'), child: child!),
+        home: MatchView(
+          state: state,
+          online: true,
+          visibleSeat: 1,
+          observing: true,
+          onEvent: (_) {},
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    Finder tile(int seat) => find.byKey(ValueKey('player-tile-$seat'));
+    expect(
+      find.descendant(of: tile(0), matching: find.byIcon(Icons.flag_rounded)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: tile(1), matching: find.byIcon(Icons.flag_rounded)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: tile(0), matching: find.textContaining('Discard')),
+      findsOneWidget,
+    );
+    if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
+      await tester.runAsync(
+        () => capture(
+          tester,
+          '/tmp/stone-bughunt-1909/discard-acting-player.png',
+        ),
+      );
+    }
     await tester.pumpWidget(const SizedBox());
   });
 }

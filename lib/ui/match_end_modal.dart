@@ -379,7 +379,7 @@ class _MatchEndModalState extends State<MatchEndModal>
                         Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: compact ? 16 : 23,
-                            vertical: compact ? 12 : 18,
+                            vertical: compact ? 8 : 18,
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -502,7 +502,7 @@ class _MatchEndModalState extends State<MatchEndModal>
                                         ),
                                         style: TextStyle(
                                           fontWeight: FontWeight.w900,
-                                          fontSize: compact ? 36 : 49,
+                                          fontSize: compact ? 32 : 49,
                                           letterSpacing: 2,
                                           height: 1,
                                           color: accent,
@@ -543,9 +543,8 @@ class _MatchEndModalState extends State<MatchEndModal>
                                       ),
                                       maxLines: 1,
                                     ),
-                                    const SizedBox(height: 10),
-                                    SizedBox(
-                                      height: compact ? 64 : 80,
+                                    SizedBox(height: compact ? 6 : 10),
+                                    Expanded(
                                       child: LayoutBuilder(
                                         builder: (context, box) => SingleChildScrollView(
                                           child: Wrap(
@@ -667,7 +666,7 @@ class _MatchEndModalState extends State<MatchEndModal>
                                         ),
                                       ),
                                     ),
-                                    const Spacer(),
+                                    const SizedBox(height: 6),
                                     Row(
                                       children: [
                                         Expanded(

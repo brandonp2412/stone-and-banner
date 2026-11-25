@@ -7,6 +7,7 @@ import 'dart:async';
 import 'compact_layout.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/semantics.dart' show SemanticsProperties;
 
 import 'game_colors.dart';
@@ -22,6 +23,7 @@ import '../engine/cards.dart';
 import '../engine/board.dart';
 import '../engine/game.dart';
 import '../engine/match.dart';
+import '../network/room_protocol.dart';
 import 'strategy_hand.dart';
 import 'labels.dart';
 import 'resource_harvest.dart';
@@ -681,7 +683,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if (mounted &&
         selected != null &&
         _choosingCardTarget &&
-        s.active == viewerSeat) {
+        s.active == viewerSeat &&
+        _mapCardOptions.any(
+          (option) => mapEquals(option.toJson(), selected!.toJson()),
+        )) {
       send(selected);
     }
   }
@@ -1238,6 +1243,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
   }
 
+  bool _canReplyToIncoming(TradeProposal offer) =>
+      s.phase == MatchPhase.actions &&
+      s.pendingDiscards.isEmpty &&
+      s.tactical == null &&
+      offer.canRespond(viewerSeat) &&
+      ((!widget.observing && s.active == viewerSeat) ||
+          (offer.proposer == s.active &&
+              (!widget.online || widget.tradeReplyAllowed)));
+
   /// An offer is announced once. Closing the dialog does not answer it:
   /// the same offer remains in the Trade tab without a floating reminder.
   void _scheduleIncomingTrade() {
@@ -1254,10 +1268,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           .where(
             (offer) =>
                 !_notifiedTradeOfferIds.contains(offer.id) &&
-                offer.canRespond(viewerSeat) &&
-                ((!widget.observing && s.active == viewerSeat) ||
-                    (offer.proposer == s.active &&
-                        (!widget.online || widget.tradeReplyAllowed))),
+                _canReplyToIncoming(offer),
           )
           .firstOrNull;
       if (incoming == null) return;
@@ -1403,15 +1414,18 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if (_incomingDialogOfferId != null &&
         !s.offers.any(
           (offer) =>
-              offer.id == _incomingDialogOfferId &&
-              offer.canRespond(viewerSeat),
+              offer.id == _incomingDialogOfferId && _canReplyToIncoming(offer),
         )) {
+      final offerId = _incomingDialogOfferId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _incomingDialogOfferId != offerId) return;
         final dialogContext = _incomingDialogContext;
-        if (dialogContext != null &&
-            dialogContext.mounted &&
-            (ModalRoute.of(dialogContext)?.isCurrent ?? false)) {
-          Navigator.of(dialogContext).pop();
+        if (dialogContext == null || !dialogContext.mounted) return;
+        final route = ModalRoute.of(dialogContext);
+        // Remove this exact stale dialog, even if a mandatory discard or
+        // tactical response opened over it. Do not pop unrelated routes.
+        if (route != null && route.isActive) {
+          Navigator.of(dialogContext).removeRoute(route);
         }
       });
     }
@@ -1642,10 +1656,38 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if (widget.onlineTurnSeconds != null) {
       _secondsLeft = widget.onlineTurnSeconds!;
     }
-    if (oldWidget.state.events.length != s.events.length ||
-        oldWidget.state.active != s.active) {
-      _mapCard = null;
-      _mapCardOptions = const [];
+    if (_choosingCardTarget) {
+      final index = _mapCardOptions.first.handIndex;
+      final before = oldWidget.state.players[oldSeat].cards;
+      final now = s.players[viewerSeat].cards;
+      final stillHeld =
+          oldSeat == viewerSeat &&
+          oldWidget.state.seed == s.seed &&
+          s.active == viewerSeat &&
+          s.phase == MatchPhase.actions &&
+          s.pendingDiscards.isEmpty &&
+          s.tactical == null &&
+          !widget.observing &&
+          index >= 0 &&
+          index < before.length &&
+          index < now.length &&
+          before[index].track == now[index].track &&
+          before[index].index == now[index].index;
+      if (stillHeld) {
+        final onlineOptions = widget.onlineView?['options'] as Map?;
+        _mapCardOptions = widget.online && onlineOptions != null
+            ? [
+                for (final raw in (onlineOptions['$index'] as List? ?? []))
+                  RoomProtocol.eventFromJson(
+                    Map<String, dynamic>.from(raw as Map),
+                  ) as PlayStrategyCard,
+              ]
+            : MatchEngine.legalCardPlays(s, index);
+      }
+      if (!stillHeld || _mapCardOptions.isEmpty) {
+        _mapCard = null;
+        _mapCardOptions = const [];
+      }
     }
     if (oldWidget.state.active != s.active ||
         oldWidget.state.phase != s.phase) {
@@ -2816,6 +2858,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   Widget _playerBar() => LayoutBuilder(
     builder: (context, bounds) {
       final winner = MatchEngine.winner(s);
+      final actingLabel = s.pendingDiscards.isNotEmpty
+          ? 'Discard'
+          : s.tactical != null
+          ? 'Respond'
+          : 'Turn';
       final size = MediaQuery.sizeOf(context);
       final portrait = size.height > size.width && bounds.maxWidth < 600;
       final height = portrait
@@ -2879,7 +2926,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                         label:
                             '${s.players[i].id}, ${MatchEngine.score(s, i)} of 15 Renown${i == winner
                                 ? ', winner'
-                                : i == s.active
+                                : i == s.actingSeat && winner == null
                                 ? ', active player'
                                 : ''}',
                         child: Tooltip(
@@ -2897,7 +2944,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                 vertical: 3,
                               ),
                               decoration: BoxDecoration(
-                                color: i == s.active
+                                color:
+                                    (i == s.actingSeat && winner == null) ||
+                                        i == winner
                                     ? gameColor(
                                         context,
                                         seatColors[i],
@@ -2908,7 +2957,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                       ),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color: i == s.active
+                                  color:
+                                      (i == s.actingSeat && winner == null) ||
+                                          i == winner
                                       ? gameColor(context, seatColors[i])
                                       : gameColor(
                                           context,
@@ -2929,7 +2980,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                             Align(
                                               alignment: Alignment.topCenter,
                                               child: Icon(
-                                                i == s.active
+                                                i == s.actingSeat &&
+                                                        winner == null
                                                     ? Icons.flag_rounded
                                                     : Icons.shield_outlined,
                                                 size: portrait ? 16 : 20,
@@ -2994,7 +3046,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                               ),
                                             ),
                                             if (!portrait &&
-                                                i == s.active &&
+                                                i == s.actingSeat &&
+                                                winner == null &&
                                                 i != winner &&
                                                 width < 180)
                                               FittedBox(
@@ -3016,8 +3069,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                               Text(
                                                 i == winner
                                                     ? 'Winner'
-                                                    : i == s.active
-                                                    ? 'Turn · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.crownRoadHolder == i ? ' · Road +2' : ''}'
+                                                    : i == s.actingSeat &&
+                                                          winner == null
+                                                    ? '$actingLabel · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.crownRoadHolder == i ? ' · Road +2' : ''}'
                                                     : s.crownRoadHolder == i
                                                     ? 'Crown road · +2 Renown'
                                                     : 'Realm ${i + 1}',
@@ -3026,7 +3080,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                                 style: TextStyle(
                                                   fontSize: 10,
                                                   height: 1.2,
-                                                  color: i == s.active
+                                                  color:
+                                                      i == s.actingSeat &&
+                                                          winner == null
                                                       ? gameColor(
                                                           context,
                                                           seatColors[i],
@@ -3290,12 +3346,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                               selectedGuard,
                               showTargets:
                                   !widget.observing &&
+                                  !_choosingCardTarget &&
                                   viewerSeat == s.actingSeat &&
                                   s.tactical == null,
-                              hoverBuilds: hoverPosition != null,
                               hoveredRoad:
                                   hoverPosition != null &&
                                       !widget.observing &&
+                                      !_choosingCardTarget &&
                                       viewerSeat == s.actingSeat &&
                                       s.tactical == null &&
                                       (move == _Move.road ||
@@ -3829,7 +3886,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
           ),
           Text(
-            s.players[s.tactical?.responder ?? s.active].id,
+            s.players[s.actingSeat].id,
+            key: const ValueKey('acting-player-status'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -5421,7 +5479,6 @@ class _Painter extends CustomPainter {
     required this.banditBlock,
     this.humiliatedBanditTile,
     this.showTargets = true,
-    this.hoverBuilds = false,
     this.hoveredRoad,
     this.cardRoadTargets = const {},
     this.cardVertexTargets = const {},
@@ -5441,7 +5498,6 @@ class _Painter extends CustomPainter {
        );
   final MatchState state;
   final bool showTargets;
-  final bool hoverBuilds;
   final int? hoveredRoad;
   final Set<int> cardRoadTargets, cardVertexTargets, cardTileTargets;
   final _Move mode;
@@ -5771,13 +5827,6 @@ class _Painter extends CustomPainter {
       canvas.drawLine(c + const Offset(-3, 4), c + const Offset(8, 14), paint);
     }
     final legal = <int>{
-      if (hoverBuilds) ...MatchEngine.legalVertices(state),
-      if (hoverBuilds) ...MatchEngine.legalUpgrades(state),
-      if (hoverBuilds)
-        for (final v in state.topology.vertices)
-          if (MatchEngine.legalFort(state, v.id) ||
-              MatchEngine.legalRecruit(state, v.id))
-            v.id,
       ...switch (mode) {
         _Move.inspect => {
           ...MatchEngine.legalVertices(state),
@@ -6133,7 +6182,6 @@ class _Painter extends CustomPainter {
       !identical(old.state, state) ||
       old.mode != mode ||
       old.showTargets != showTargets ||
-      old.hoverBuilds != hoverBuilds ||
       old.hoveredRoad != hoveredRoad ||
       !_sameTargets(old.cardRoadTargets, cardRoadTargets) ||
       !_sameTargets(old.cardVertexTargets, cardVertexTargets) ||

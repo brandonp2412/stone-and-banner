@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
 
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
+import 'new_gameplay_widget_test.dart' show capture;
 
 MatchState offerFrom(int seat, {int? id}) {
   final original = tableWithSupplies();
@@ -32,6 +34,14 @@ MatchState offerFrom(int seat, {int? id}) {
 }
 
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final loader = FontLoader('NotoSans')
+      ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+      ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+    await loader.load();
+  });
+
   testWidgets('dismissed offer remains in Trade and new offer pops once', (
     tester,
   ) async {
@@ -171,5 +181,55 @@ void main() {
     expect(decline.hitTestable(), findsOneWidget);
     await tester.tap(decline);
     expect(actions.single, isA<RespondTrade>());
+  });
+
+  testWidgets('incoming offer closes when a tactical phase blocks trading', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var state = offerFrom(1);
+    final actions = <MatchEvent>[];
+    Widget view() => MaterialApp(
+      theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),
+      builder: (_, child) =>
+          RepaintBoundary(key: const ValueKey('capture'), child: child!),
+      home: MatchView(
+        state: state,
+        online: true,
+        visibleSeat: 0,
+        observing: true,
+        tradeReplyAllowed: state.phase == MatchPhase.actions,
+        onEvent: actions.add,
+      ),
+    );
+    await tester.pumpWidget(view());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('incoming-trade-dialog')), findsOneWidget);
+    if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
+      await tester.runAsync(
+        () => capture(
+          tester,
+          '/tmp/stone-bughunt-1909/trade-before-phase-change.png',
+        ),
+      );
+    }
+    state = state.copyWith(phase: MatchPhase.bandit);
+    await tester.pumpWidget(view());
+    await tester.pumpAndSettle();
+    expect(state.offers, isNotEmpty);
+    expect(find.byKey(const ValueKey('incoming-trade-dialog')), findsNothing);
+    expect(actions, isEmpty);
+    if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
+      await tester.runAsync(
+        () => capture(
+          tester,
+          '/tmp/stone-bughunt-1909/trade-after-phase-change.png',
+        ),
+      );
+    }
+    await tester.pumpWidget(const SizedBox());
   });
 }

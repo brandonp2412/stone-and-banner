@@ -1,4 +1,6 @@
-import 'dart:ui' show PointerDeviceKind;
+import 'dart:ui' show PointerDeviceKind, ImageByteFormat;
+
+import 'package:flutter/rendering.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,4 +51,58 @@ void main() {
     expect(find.byKey(const ValueKey('board-hover-hint')), findsNothing);
     await mouse.removePointer();
   });
+
+  testWidgets(
+    'selected upgrade never highlights recruit-only junctions on hover',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'gameplay_hints_enabled': false});
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1440, 900);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final state = tableWithSupplies();
+      final recruit = state.topology.vertices.firstWhere(
+        (v) =>
+            MatchEngine.legalRecruit(state, v.id) &&
+            !MatchEngine.legalUpgrades(state).contains(v.id),
+      );
+      const captureKey = ValueKey('capture');
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: captureKey,
+          child: MaterialApp(
+            home: MatchView(state: state, onEvent: (_) {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Upgrade'));
+      await tester.pumpAndSettle();
+      final map = find.byKey(const ValueKey('realm-map'));
+      final position =
+          tester.getTopLeft(map) +
+          BoardGeometry(tester.getSize(map)).vertex(recruit);
+      Future<int?> pixel() => tester.runAsync(() async {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(captureKey),
+        );
+        final image = await boundary.toImage();
+        final bytes = await image.toByteData(format: ImageByteFormat.rawRgba);
+        final value = bytes!.getUint32(
+          (position.dy.round() * image.width + position.dx.round()) * 4,
+        );
+        image.dispose();
+        return value;
+      });
+      final before = await pixel();
+      expect(before, isNotNull);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getTopLeft(map) + const Offset(10, 100));
+      await tester.pump();
+      expect(await pixel(), before);
+      await mouse.removePointer();
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }

@@ -169,6 +169,22 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1300));
     expect(find.text('VICTORY'), findsOneWidget);
     expect(find.byKey(const ValueKey('match-finale-review')), findsOneWidget);
+    final dialog = find.byKey(const ValueKey('match-finale-dialog'));
+    final scoreViewport = find.descendant(
+      of: dialog,
+      matching: find.byType(Scrollable),
+    );
+    expect(scoreViewport, findsOneWidget);
+    final viewport = tester.getRect(scoreViewport);
+    for (final name in ['Ada', 'Ben', 'Cora', 'Dee']) {
+      final row = find.descendant(of: dialog, matching: find.text(name));
+      expect(row, findsOneWidget);
+      expect(
+        tester.getRect(row).bottom,
+        lessThanOrEqualTo(viewport.bottom),
+        reason: '$name score must not be clipped at 145% text scale',
+      );
+    }
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/end_game_compact.png'),

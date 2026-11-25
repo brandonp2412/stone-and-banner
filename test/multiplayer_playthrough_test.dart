@@ -127,4 +127,65 @@ void main() {
     // and the focused tests cover trade acceptance and conservation.
     expect(exchanges, greaterThanOrEqualTo(0));
   });
+
+  test('three human seats complete an authoritative match to victory', () {
+    final room = HostedRoom.restored('AABBCCDD', 3, 8700, 20261125);
+    for (final name in ['Host', 'Alder', 'Briar']) {
+      room.join(name);
+    }
+    room.start(0);
+    final moves = List<int>.filled(3, 0);
+    final policy = const HeuristicAi();
+    final initial = room.state!;
+    final total = {
+      for (final good in Resource.values)
+        good:
+            (initial.bank[good] ?? 0) +
+            initial.players.fold<int>(
+              0,
+              (sum, player) => sum + (player.stores[good] ?? 0),
+            ),
+    };
+    for (var step = 0; step < 6000; step++) {
+      final before = room.state!;
+      if (before.phase == MatchPhase.finished) break;
+      final event = policy.choose(before);
+      expect(event, isNotNull, reason: 'No action on step $step');
+      final seat = event is RespondTrade ? event.player : before.actingSeat;
+      final response = room.move(
+        seat,
+        'three-human-$seat-$step',
+        room.version,
+        event!.toJson(),
+      );
+      expect(response['ok'], true, reason: 'Step $step: $response');
+      moves[seat]++;
+      final after = room.state!;
+      for (final viewer in [0, 1, 2]) {
+        final client = RoomProtocol.readView(RoomProtocol.view(after, viewer));
+        expect(client.active, after.active);
+        expect(client.actingSeat, after.actingSeat);
+        expect(client.phase, after.phase);
+        expect(client.roads, after.roads);
+        for (final good in Resource.values) {
+          expect(
+            client.players[viewer].stores[good] ?? 0,
+            after.players[viewer].stores[good] ?? 0,
+          );
+        }
+      }
+      for (final good in Resource.values) {
+        expect(
+          (after.bank[good] ?? 0) +
+              after.players.fold<int>(
+                0,
+                (sum, player) => sum + (player.stores[good] ?? 0),
+              ),
+          total[good],
+        );
+      }
+    }
+    expect(moves.every((count) => count > 20), true, reason: '$moves');
+    expect(room.state!.phase, MatchPhase.finished);
+  });
 }
