@@ -207,15 +207,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() {
       _hintsEnabled = prefs.getBool('gameplay_hints_enabled') ?? true;
-      _seenHints.addAll(prefs.getStringList('gameplay_hints_seen_v1') ?? []);
+      _seenHints
+        ..clear()
+        ..addAll(prefs.getStringList('gameplay_hints_seen_v1') ?? []);
+      _dismissedHintContext = null;
       _hintsLoaded = true;
     });
-  }
-
-  Future<void> _setHintsEnabled(bool enabled) async {
-    setState(() => _hintsEnabled = enabled);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('gameplay_hints_enabled', enabled);
   }
 
   final _realmHintTarget = GlobalKey();
@@ -1907,16 +1904,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                                     ),
                                                   ),
                                           ),
-                                          if (_canFastForward)
-                                            Padding(
-                                              padding: const EdgeInsets.all(10),
-                                              child: Align(
-                                                alignment:
-                                                    Alignment.centerRight,
-                                                child: _fastForwardButton(),
-                                              ),
-                                            )
-                                          else
+                                          if (!_canFastForward)
                                             Visibility(
                                               visible:
                                                   s.tactical == null &&
@@ -2608,11 +2596,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     icon: const Icon(Icons.arrow_back_rounded),
                   ),
                   Expanded(child: _tabs()),
-                  if (_canFastForward)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: _fastForwardButton(),
-                    ),
                 ],
               ),
             ),
@@ -2726,42 +2709,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     );
   }
 
-  Widget _hintSetting(BuildContext context, {bool dismissPopup = false}) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SwitchListTile(
-            dense: isCompactLandscape(context),
-            title: const Text('Gameplay hints'),
-            subtitle: isCompactLandscape(context)
-                ? null
-                : const Text('Explain each mechanic the first time you use it'),
-            value: _hintsEnabled,
-            onChanged: _hintsLoaded
-                ? (value) {
-                    if (dismissPopup) Navigator.of(context).pop();
-                    _setHintsEnabled(value);
-                  }
-                : null,
-          ),
-          if (_seenHints.isNotEmpty)
-            TextButton.icon(
-              onPressed: () async {
-                if (dismissPopup) Navigator.of(context).pop();
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.remove('gameplay_hints_seen_v1');
-                if (!mounted) return;
-                setState(() {
-                  _seenHints.clear();
-                  _dismissedHintContext = null;
-                });
-              },
-              icon: const Icon(Icons.replay, size: 18),
-              label: const Text('Show first-time hints again'),
-            ),
-        ],
-      );
-
   List<Widget> _matchOptions(BuildContext context) => [
     if (widget.onLeaveRoom != null)
       ListTile(
@@ -2773,7 +2720,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           widget.onLeaveRoom?.call();
         },
       ),
-    _hintSetting(context, dismissPopup: true),
     if (widget.onSettings != null)
       ListTile(
         leading: const Icon(Icons.settings),
@@ -3185,7 +3131,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           insetPadding: const EdgeInsets.all(6),
           clipBehavior: Clip.antiAlias,
           child: SizedBox(
-            width: 690,
+            width: 345,
             height: math.min(
               MediaQuery.sizeOf(dialogContext).height - 12,
               widget.onLeaveRoom == null ? 228 : 270,
@@ -3216,27 +3162,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                       contentPadding: EdgeInsets.symmetric(horizontal: 8),
                       visualDensity: VisualDensity.compact,
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: ListView(
-                            children: [
-                              _hintSetting(dialogContext, dismissPopup: true),
-                            ],
-                          ),
-                        ),
-                        const VerticalDivider(width: 1),
-                        Expanded(
-                          child: ListView(
-                            children: [
-                              for (final option in _matchOptions(dialogContext))
-                                if (option is ListTile) option,
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                    child: ListView(children: _matchOptions(dialogContext)),
                   ),
                 ),
               ],
@@ -4216,9 +4142,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                               style: TextStyle(fontSize: 12),
                             ),
                             Text(
-                              level == 0
-                                  ? 'Unlocks ${track.commodity.displayName} from Towns beside ${terrainLabel(track.sourceLand)}.'
-                                  : 'Towns beside ${terrainLabel(track.sourceLand)} produce ${track.commodity.displayName} instead of one ${track.sourceLand.produces!.displayName}.',
+                              _developmentEffect(
+                                s,
+                                track,
+                                level == 5 ? 5 : level + 1,
+                              ),
                               style: TextStyle(
                                 fontSize: 11,
                                 color: gameColor(
@@ -4259,8 +4187,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
         ],
       ),
-      if (MediaQuery.sizeOf(context).width >= 900 && !widget.observing)
-        _hintSetting(context),
     ];
   }
 
@@ -4509,6 +4435,38 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         ],
       ),
     );
+  }
+
+  String _developmentEffect(MatchState s, StrategyDeck track, int tier) {
+    final basic = track.sourceLand.produces!.displayName;
+    final commodity = track.commodity.displayName;
+    final balance = s.balance;
+
+    return switch ((track, tier)) {
+      (_, 1) => 'Towns and Capitals produce 1 $commodity in place of 1 $basic.',
+      (StrategyDeck.innovation, 2) when balance.stoneworksTier == 2 =>
+        'Build roads for 1 wood each.',
+      (StrategyDeck.innovation, 2) => 'Unlock tier 2 Innovation draws.',
+      (StrategyDeck.innovation, 3) =>
+        '${balance.stoneworksTier == 3 ? 'Build roads for 1 wood each. ' : ''}Drought relief starts after 2 dry rolls.',
+      (StrategyDeck.innovation, 4) =>
+        'Drought relief gives your scarcest basic resource in stock.',
+      (StrategyDeck.innovation, 5) =>
+        '+1 invasion defence. Convert a second $basic to $commodity.',
+      (StrategyDeck.commerce, 2) => '${balance.marketRate}:1 bank trades.',
+      (StrategyDeck.commerce, 3) =>
+        'Get 2 cloth when trading for cloth. Safe hand size +2.',
+      (StrategyDeck.commerce, 4) => '${balance.guildRate}:1 bank trades.',
+      (StrategyDeck.commerce, 5) =>
+        'Get ${balance.bazaarGoods} goods per bank trade. Convert a second $basic to $commodity.',
+      (StrategyDeck.governance, 2) => '+1 invasion defence.',
+      (StrategyDeck.governance, 3) =>
+        'Protect hand goods from raids. Safe hand size +2.',
+      (StrategyDeck.governance, 4) => 'Recruit Guards for 1 sheep each.',
+      (StrategyDeck.governance, 5) =>
+        '+1 more invasion defence. Convert a second $basic to $commodity.',
+      _ => throw StateError('Invalid development tier: $tier'),
+    };
   }
 
   String _upgradeCostLabel() {
@@ -5337,6 +5295,9 @@ class _TacticalPanel extends StatelessWidget {
       TacticalKind.governance =>
         'A targeted Governance card is pending. '
             'Spend the matching countercard to cancel it.',
+      TacticalKind.invasion when state.balance.raidAidCap > 0 =>
+        'The table can pledge up to ${state.balance.raidAidCap} defence per raid. '
+            'Wheat adds 1 and ore adds up to 2.',
       TacticalKind.invasion =>
         'One wheat gives +1 defence; one ore gives +2. '
             'Both go to the bank. The aid lasts for this invasion only.',

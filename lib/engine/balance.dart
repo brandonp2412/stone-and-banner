@@ -10,6 +10,7 @@ class MatchBalance {
     this.bazaarGoods = 2,
     this.raidBonusAfterFirst = 1,
     this.guardianHonourCap = 2,
+    this.raidAidCap = 2,
   }) : assert(catchupRate >= 2 && catchupRate <= 4),
        assert(reliefRolls >= 2 && reliefRolls <= 4),
        assert(stoneworksTier >= 2 && stoneworksTier <= 3),
@@ -18,7 +19,8 @@ class MatchBalance {
        assert(guildRate >= 2 && guildRate <= 3),
        assert(bazaarGoods >= 1 && bazaarGoods <= 2),
        assert(raidBonusAfterFirst >= 0 && raidBonusAfterFirst <= 2),
-       assert(guardianHonourCap >= 0 && guardianHonourCap <= 5);
+       assert(guardianHonourCap >= 0 && guardianHonourCap <= 5),
+       assert(raidAidCap >= 0 && raidAidCap <= 2);
 
   final int catchupRate;
   final int reliefRolls;
@@ -32,10 +34,14 @@ class MatchBalance {
   /// Max Honour points from defences; zero means old unlimited rules.
   final int guardianHonourCap;
 
+  /// Shared emergency defence per raid. Zero preserves uncapped aid.
+  final int raidAidCap;
+
   static const baseline = MatchBalance();
   static const legacy = MatchBalance(
     raidBonusAfterFirst: 0,
     guardianHonourCap: 0,
+    raidAidCap: 0,
   );
   static const enhancedTrade = MatchBalance(catchupRate: 2);
   static const earlierRelief = MatchBalance(reliefRolls: 2);
@@ -55,6 +61,7 @@ class MatchBalance {
     'bazaarGoods': bazaarGoods,
     'raidBonusAfterFirst': raidBonusAfterFirst,
     'guardianHonourCap': guardianHonourCap,
+    if (raidAidCap > 0) 'raidAidCap': raidAidCap,
   };
 
   factory MatchBalance.fromJson(Map<String, dynamic>? json) {
@@ -78,6 +85,7 @@ class MatchBalance {
       bazaarGoods: read('bazaarGoods', 2, 1, 2),
       raidBonusAfterFirst: read('raidBonusAfterFirst', 0, 0, 2),
       guardianHonourCap: read('guardianHonourCap', 0, 0, 5),
+      raidAidCap: read('raidAidCap', 0, 0, 2),
     );
   }
 }

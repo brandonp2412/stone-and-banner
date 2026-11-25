@@ -8,12 +8,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/engine/advanced.dart';
+import 'package:stone_and_banner/engine/balance.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
 
-MatchState drafted() {
-  var s = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 44);
+MatchState drafted({MatchBalance balance = MatchBalance.baseline}) {
+  var s = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], 44, balance: balance);
   for (var i = 0; i < 6; i++) {
     s = MatchEngine.apply(s, PlaceVillage(MatchEngine.legalVertices(s).first));
     s = MatchEngine.apply(s, PlaceRoad(MatchEngine.legalEdges(s).first));
@@ -225,11 +226,8 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    var s = drafted().copyWith(
-      phase: MatchPhase.actions,
-      active: 2,
-      reaverPressure: 5,
-    );
+    var s = drafted(balance: const MatchBalance(raidAidCap: 0))
+        .copyWith(phase: MatchPhase.actions, active: 2, reaverPressure: 5);
     s = grant(grant(s, 1, Resource.ore), 2, Resource.wheat);
     s = MatchEngine.apply(s, const EndTurn());
     expect(s.tactical, isNotNull);

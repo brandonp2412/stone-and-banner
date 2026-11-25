@@ -103,11 +103,16 @@ void main() {
     await tester.ensureVisible(find.text('Town Developments'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Scriptorium'), findsOneWidget);
+    expect(
+      find.textContaining('produce 1 paper in place of 1 wood'),
+      findsOneWidget,
+    );
     await tester.ensureVisible(find.text('Develop innovation'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Develop innovation').hitTestable());
     await tester.pumpAndSettle();
     expect(s.current.level(StrategyDeck.innovation), 1);
+    expect(find.text('Build roads for 1 wood each.'), findsOneWidget);
 
     final vertex = [
       for (var v = 0; v < s.topology.vertices.length; v++)

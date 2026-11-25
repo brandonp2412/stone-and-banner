@@ -26,7 +26,7 @@ void main() {
     );
     await tester.tap(find.text('Open multiplayer'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Host game (Android, iPhone, web, Linux)'));
+    await tester.tap(find.text('Host game'));
     await tester.pumpAndSettle();
     expect(find.textContaining('P2P room'), findsOneWidget);
 

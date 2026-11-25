@@ -62,6 +62,7 @@ class AiStrategySignals {
   const AiStrategySignals({
     required this.season,
     required this.pressure,
+    required this.roundsUntilRaid,
     required this.invasionThreat,
     required this.sharedDefence,
     required this.invasionAid,
@@ -79,7 +80,8 @@ class AiStrategySignals {
     required this.bankStock,
   });
 
-  final int season, pressure, invasionThreat, sharedDefence, invasionAid;
+  final int season, pressure, roundsUntilRaid;
+  final int invasionThreat, sharedDefence, invasionAid;
   final int aidRespondersRemaining, scoreDeficit, dryRolls, tradeRate;
   final bool reliefUsed;
   final Map<int, Structure> ownSites;
@@ -329,6 +331,7 @@ abstract final class AiActionAdapter {
       // Three complete rounds per season; no assumed production multiplier.
       season: ((state.round - 1) ~/ 3) % 4,
       pressure: state.reaverPressure,
+      roundsUntilRaid: state.raidInterval - state.reaverPressure,
       invasionThreat: MatchEngine.invasionStrength(state),
       sharedDefence: MatchEngine.defenceStrength(state),
       invasionAid: state.invasionAid,
@@ -421,7 +424,12 @@ abstract final class AiActionAdapter {
       if (forts.isNotEmpty) return forts.first;
       if (promotes.isNotEmpty) return promotes.first;
       // Recruits cannot activate in their recruitment turn.
-      if (s.pressure == 2 && recruits.isNotEmpty) return recruits.first;
+      if (s.roundsUntilRaid > 1 &&
+          recruits.isNotEmpty &&
+          s.ownGuards.length < 2 &&
+          s.ownGuards.values.every((guard) => guard.active)) {
+        return recruits.first;
+      }
     }
 
     final development = actions.whereType<DevelopTown>().toList();

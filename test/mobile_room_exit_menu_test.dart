@@ -43,7 +43,8 @@ void main() {
     // Force the surviving modal to rebuild its responsive layout.
     tester.view.physicalSize = const Size(420, 800);
     await tester.pumpAndSettle();
-    expect(find.text('Gameplay hints'), findsOneWidget);
+    expect(find.text('Leave room'), findsOneWidget);
+    expect(find.text('Gameplay hints'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -84,6 +85,7 @@ void main() {
     await tester.tap(menu);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('match-leave-room-menu')), findsOneWidget);
+    expect(find.text('Gameplay hints'), findsNothing);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/mobile_room_exit_menu.png'),

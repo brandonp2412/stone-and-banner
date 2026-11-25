@@ -2134,6 +2134,7 @@ class MatchEngine {
         'Cannot pledge that aid.',
       );
       final good = response!.good!;
+      final pledged = s.invasionAid + (good == Resource.ore ? 2 : 1);
       final players = s.players.toList();
       final stores = Map<Resource, int>.of(players[player].stores);
       stores[good] = stores[good]! - 1;
@@ -2141,7 +2142,9 @@ class MatchEngine {
       s = s.copyWith(
         players: players,
         bank: {...s.bank, good: s.bank[good]! + 1},
-        invasionAid: s.invasionAid + (good == Resource.ore ? 2 : 1),
+        invasionAid: s.balance.raidAidCap == 0
+            ? pledged
+            : pledged.clamp(0, s.balance.raidAidCap),
         reactionsUsed: {...s.reactionsUsed, player},
       );
     } else {
@@ -2738,7 +2741,9 @@ class MatchEngine {
             ? {}
             : s.reliefUsed,
       );
+      final aidCap = s.balance.raidAidCap;
       if (s.phase == MatchPhase.invasion &&
+          (aidCap == 0 || invasionStrength(s) - defenceStrength(s) <= aidCap) &&
           (s.events.length < s.raidPledgeFixFromEvent ||
               defenceStrength(s) + s.invasionAid < invasionStrength(s))) {
         // Include the current/human seat. No resources? They may pass.

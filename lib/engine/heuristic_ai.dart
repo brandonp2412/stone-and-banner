@@ -340,12 +340,9 @@ class HeuristicAi {
     final ownGuards = state.guards.entries
         .where((entry) => entry.value.owner == state.active)
         .toList();
-    final ownActiveStrength = ownGuards
-        .where((entry) => entry.value.active)
-        .fold<int>(0, (total, entry) => total + entry.value.rank.strength);
     final approachingFleet = MatchEngine.invasionStrength(state);
     final needDefence = MatchEngine.defenceStrength(state) < approachingFleet;
-    final preparing = state.reaverPressure >= 1 || state.round >= 2;
+    final roundsUntilRaid = state.raidInterval - state.reaverPressure;
     final ownsTown = state.sites.values.any(
       (site) =>
           site.owner == state.active && site.structure != Structure.village,
@@ -356,7 +353,7 @@ class HeuristicAi {
     );
     // A player with no towns at risk can profit from an undefended invasion.
     final defend = ownsTown || !rivalTowns;
-    if (preparing && defend && needDefence && view.actionsSinceRoll < 6) {
+    if (defend && needDefence && view.actionsSinceRoll < 6) {
       if (legal.activates.isNotEmpty) {
         return _best<ActivateGuard>(
           legal.activates,
@@ -371,10 +368,11 @@ class HeuristicAi {
           (event) => event.vertex,
         );
       }
-      // Have a second guard ready if the next attack disables the first.
-      if (legal.recruits.isNotEmpty &&
+      // Recruit while there is time to activate on a later turn.
+      if (roundsUntilRaid > 1 &&
+          legal.recruits.isNotEmpty &&
           ownGuards.length < 2 &&
-          (needDefence || ownActiveStrength == 0)) {
+          ownGuards.every((entry) => entry.value.active)) {
         return _best<RecruitGuard>(
           legal.recruits,
           (event) => _guardValue(state, event.vertex),

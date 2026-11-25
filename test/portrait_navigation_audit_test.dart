@@ -36,6 +36,24 @@ void main() {
     await home(tester);
     await tester.tap(find.text('Host / join multiplayer'));
     await tester.pumpAndSettle();
+    expect(find.text('Host game'), findsOneWidget);
+    final selector = find.byType(SegmentedButton<int>);
+    expect(selector, findsOneWidget);
+    expect(tester.widget<SegmentedButton<int>>(selector).selected, {3});
+    await tester.tap(find.text('4'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<SegmentedButton<int>>(selector).selected, {4});
+    await tester.tap(find.text('3'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.byType(TextField).last).dy -
+          tester
+              .getBottomLeft(
+                find.widgetWithText(OutlinedButton, 'Join from invitation'),
+              )
+              .dy,
+      greaterThanOrEqualTo(16),
+    );
     await golden(tester, 'p2p_setup');
     expect(find.text('Direct P2P multiplayer'), findsOneWidget);
     final advanced = find.textContaining('Advanced: native-app LAN rooms');

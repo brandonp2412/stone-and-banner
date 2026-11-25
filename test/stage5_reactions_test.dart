@@ -1,12 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/advanced.dart';
+import 'package:stone_and_banner/engine/balance.dart';
 import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/engine/cards.dart';
 import 'package:stone_and_banner/engine/game.dart';
 import 'package:stone_and_banner/engine/match.dart';
 
-MatchState draft(int seed) {
-  var s = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], seed);
+MatchState draft(int seed, {MatchBalance balance = MatchBalance.baseline}) {
+  var s = MatchEngine.newGame(['Ada', 'Ben', 'Cora'], seed, balance: balance);
   for (var i = 0; i < 6; i++) {
     s = MatchEngine.apply(s, PlaceVillage(MatchEngine.legalVertices(s).first));
     s = MatchEngine.apply(s, PlaceRoad(MatchEngine.legalEdges(s).first));
@@ -376,7 +377,7 @@ void main() {
   );
 
   test('invasion aid order, timeout, one response per round, clean reset', () {
-    var s = draft(155).copyWith(
+    var s = draft(155, balance: const MatchBalance(raidAidCap: 0)).copyWith(
       phase: MatchPhase.actions,
       active: 2,
       reaverPressure: 5,

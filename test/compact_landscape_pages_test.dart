@@ -9,7 +9,9 @@ void main() {
     testWidgets('landscape screens preserve visible controls at $size', (
       tester,
     ) async {
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        'gameplay_hints_seen_v1': ['town'],
+      });
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -20,7 +22,18 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
-      expect(find.text('Gameplay hints'), findsOneWidget);
+      final hints = find.text('Gameplay hints');
+      expect(hints, findsOneWidget);
+      await tester.tap(hints);
+      await tester.pumpAndSettle();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('gameplay_hints_enabled'), false);
+      final resetHints = find.text('Show first-time hints again');
+      await tester.ensureVisible(resetHints);
+      await tester.tap(resetHints);
+      await tester.pumpAndSettle();
+      expect(prefs.getStringList('gameplay_hints_seen_v1'), isNull);
+      expect(resetHints, findsNothing);
       expect(find.text('Computer action delay'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.tap(find.byTooltip('Back').first);

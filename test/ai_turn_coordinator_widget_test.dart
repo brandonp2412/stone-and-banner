@@ -4,6 +4,7 @@ import 'p2p_trade_turn_ui_test.dart' show botOffersHuman;
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/engine/match.dart';
@@ -108,7 +109,7 @@ void main() {
     expect(find.byTooltip('Choose target'), findsNothing);
   });
 
-  testWidgets('desktop fast-forward resumes a bot waiting for a trade', (
+  testWidgets('desktop Space shortcut resumes a bot waiting for a trade', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1280, 800);
@@ -132,7 +133,8 @@ void main() {
       await tester.tap(dismiss);
       await tester.pump();
     }
-    await tester.tap(find.byKey(const ValueKey('fast-forward-bots')));
+    expect(find.byKey(const ValueKey('fast-forward-bots')), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
     expect(app.ai.isPaused, isFalse);
     for (var tick = 0; tick < 100 && identical(app.match, offered); tick++) {
       await tester.runAsync(

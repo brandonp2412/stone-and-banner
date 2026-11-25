@@ -1116,6 +1116,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   );
 
   Future<void> _showSettings(BuildContext context) async {
+    final preferences = SharedPreferences.getInstance();
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => StatefulBuilder(
@@ -1125,20 +1126,40 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                 ? const EdgeInsets.symmetric(horizontal: 10)
                 : null;
             final hints = FutureBuilder<SharedPreferences>(
-              future: SharedPreferences.getInstance(),
-              builder: (context, snapshot) {
+              future: preferences,
+              builder: (_, snapshot) {
                 final prefs = snapshot.data;
-                return SwitchListTile(
-                  dense: compact,
-                  contentPadding: tilePadding,
-                  title: const Text('Gameplay hints'),
-                  value: prefs?.getBool('gameplay_hints_enabled') ?? true,
-                  onChanged: prefs == null
-                      ? null
-                      : (value) async {
-                          await prefs.setBool('gameplay_hints_enabled', value);
-                          refresh(() {});
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SwitchListTile(
+                      dense: compact,
+                      contentPadding: tilePadding,
+                      title: const Text('Gameplay hints'),
+                      value: prefs?.getBool('gameplay_hints_enabled') ?? true,
+                      onChanged: prefs == null
+                          ? null
+                          : (value) async {
+                              await prefs.setBool(
+                                'gameplay_hints_enabled',
+                                value,
+                              );
+                              if (context.mounted) refresh(() {});
+                            },
+                    ),
+                    if (prefs
+                            ?.getStringList('gameplay_hints_seen_v1')
+                            ?.isNotEmpty ??
+                        false)
+                      TextButton.icon(
+                        onPressed: () async {
+                          await prefs!.remove('gameplay_hints_seen_v1');
+                          if (context.mounted) refresh(() {});
                         },
+                        icon: const Icon(Icons.replay, size: 18),
+                        label: const Text('Show first-time hints again'),
+                      ),
+                  ],
                 );
               },
             );

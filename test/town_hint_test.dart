@@ -84,65 +84,21 @@ void main() {
     expect(prefs.getStringList('gameplay_hints_seen_v1'), contains('town'));
   });
 
-  testWidgets('hint setting persists and suppresses hints in a new match', (
+  testWidgets('Realm has no hint controls and respects disabled hints', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await showMatch(tester, townState(20));
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const ValueKey('town-production-hint')),
-        matching: find.text('Realm'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Gameplay hints'),
-      300,
-      scrollable: find.descendant(
-        of: find.byKey(const PageStorageKey('panel-3')),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Gameplay hints'));
-    await tester.pumpAndSettle();
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('gameplay_hints_enabled'), false);
-    await tester.pumpWidget(const SizedBox());
+    await prefs.setBool('gameplay_hints_enabled', false);
     await showMatch(tester, townState(21));
     expect(find.byKey(const ValueKey('town-production-hint')), findsNothing);
     await tester.tap(find.text('Realm'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Gameplay hints'),
-      300,
-      scrollable: find.descendant(
-        of: find.byKey(const PageStorageKey('panel-3')),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
-      false,
-    );
-    await tester.scrollUntilVisible(
-      find.text('Gameplay hints'),
-      300,
-      scrollable: find.descendant(
-        of: find.byKey(const PageStorageKey('panel-3')),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Gameplay hints'));
-    await tester.pumpAndSettle();
-    expect(prefs.getBool('gameplay_hints_enabled'), true);
-    expect(find.byKey(const ValueKey('town-production-hint')), findsNothing);
-    expect(find.byKey(const ValueKey('gameplay-hint-realm')), findsOneWidget);
+    expect(find.text('Town Developments'), findsOneWidget);
+    expect(find.text('Gameplay hints'), findsNothing);
+    expect(find.text('Show first-time hints again'), findsNothing);
   });
 }
