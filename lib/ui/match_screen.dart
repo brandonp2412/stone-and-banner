@@ -492,12 +492,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   PlayerState get inventoryOwner => s.players[widget.viewingSeat ?? viewerSeat];
   int get viewerSeat =>
       widget.visibleSeat ?? widget.viewingSeat ?? s.actingSeat;
-  _Move get move => switch (s.phase) {
-    MatchPhase.setupVillage => _Move.village,
-    MatchPhase.setupRoad => _Move.road,
-    MatchPhase.bandit => _Move.bandit,
-    _ => choice,
-  };
+  _Move get move => s.pendingDiscards.isNotEmpty
+      ? _Move.inspect
+      : switch (s.phase) {
+          MatchPhase.setupVillage => _Move.village,
+          MatchPhase.setupRoad => _Move.road,
+          MatchPhase.bandit => _Move.bandit,
+          _ => choice,
+        };
   bool _discardDialogOpen = false;
 
   void _scheduleDiscardDialog() {
@@ -588,6 +590,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   }
 
   void send(MatchEvent event) {
+    if (s.pendingDiscards.isNotEmpty && event is! DiscardResources) return;
     final isTradeResponse =
         event is RespondTrade ||
         (event is ProposeTrade && event.counterOf != null);
@@ -765,7 +768,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   }
 
   String? _boardHover(Offset point, Size size) {
-    if (widget.observing || s.tactical != null) return null;
+    if (widget.observing ||
+        s.tactical != null ||
+        s.pendingDiscards.isNotEmpty) {
+      return null;
+    }
     final g = BoardGeometry(size);
     if (_choosingCardTarget) {
       if (_mapCardUsesRoads && _roadNear(point, g, _mapCardEdges) != null) {
@@ -855,6 +862,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   }
 
   Future<void> tapBoard(Offset tap, Size size) async {
+    if (s.pendingDiscards.isNotEmpty) return;
     if (_choosingCardTarget) {
       await _tapCardTarget(tap, size);
       return;
@@ -1699,6 +1707,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   String get _instruction =>
       widget.online && widget.observing && s.phase != MatchPhase.finished
       ? 'Waiting for players'
+      : s.pendingDiscards.isNotEmpty
+      ? 'Discard resources'
       : s.tactical != null
       ? 'A response is pending'
       : switch (s.phase) {
@@ -1733,6 +1743,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   String get _hint =>
       widget.online && widget.observing && s.phase != MatchPhase.finished
       ? widget.waitingMessage ?? ''
+      : s.pendingDiscards.isNotEmpty
+      ? 'Finish discarding before moving the Bandit'
       : s.tactical != null
       ? 'Resolve this response to continue the turn'
       : switch (s.phase) {
@@ -3333,7 +3345,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                           // but leave coordinate-based taps to the gesture.
                           excludeFromSemantics: true,
                           behavior: HitTestBehavior.opaque,
-                          onTapUp: s.tactical == null && !widget.observing
+                          onTapUp:
+                              s.tactical == null &&
+                                  s.pendingDiscards.isEmpty &&
+                                  !widget.observing
                               ? (details) =>
                                     tapBoard(details.localPosition, size)
                               : null,
@@ -4064,7 +4079,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
           ),
 
-        if (phase == MatchPhase.bandit)
+        if (phase == MatchPhase.bandit && s.pendingDiscards.isEmpty)
           Text(
             'Choose a different hex. Any theft and response will be resolved before building.',
             style: TextStyle(

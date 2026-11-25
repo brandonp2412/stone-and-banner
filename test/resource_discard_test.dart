@@ -9,7 +9,7 @@ import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/network/room_protocol.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
 
-import 'advanced_test.dart' show draft;
+import 'advanced_test.dart' show draft, fund;
 import 'new_gameplay_widget_test.dart' show capture;
 
 MatchState seven() {
@@ -109,6 +109,69 @@ void main() {
     await tester.tap(confirm);
     await tester.pumpAndSettle();
     expect((events.single as DiscardResources).goods, {Resource.wheat: 4});
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('minimized discard prevents bandit targeting until resolved', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1440, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var state = seven().copyWith(active: 1, phase: MatchPhase.actions);
+    state = fund(state, 1, MatchEngine.effectiveRoadCost(state));
+    state = MatchEngine.apply(
+      state,
+      PlaceRoad(MatchEngine.legalEdges(state).first),
+    );
+    state = fund(state, 1, {Resource.wood: 1});
+    state = state.copyWith(active: 0, phase: MatchPhase.roll);
+    final (a, b) = MatchEngine.expectedDice(state);
+    state = MatchEngine.apply(state, RollDice(a, b));
+    final tile = List.generate(state.board.tiles.length, (i) => i).firstWhere(
+      (i) =>
+          i != state.banditTile &&
+          MatchEngine.banditVictims(state, i).contains(1),
+    );
+    final events = <MatchEvent>[];
+    Widget screen() => MaterialApp(
+      theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),
+      home: Scaffold(
+        body: MatchView(state: state, onEvent: events.add),
+      ),
+    );
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('minimize-discard')));
+    await tester.pumpAndSettle();
+    final map = find.byKey(const ValueKey('realm-map'));
+    final point =
+        tester.getTopLeft(map) +
+        BoardGeometry(tester.getSize(map))
+            .tile(state.board.tiles[tile].position);
+    await tester.tapAt(point);
+    await tester.pumpAndSettle();
+    expect(find.text('Bandit · choose who to rob'), findsNothing);
+    expect(events, isEmpty);
+    expect(find.text('Discard resources'), findsWidgets);
+    expect(find.text('Move the Bandit'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('restore-discard')));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 4; i++) {
+      await tester.tap(
+        find.byKey(const ValueKey('transfer-DISCARD-add-wheat')),
+      );
+      await tester.pump();
+    }
+    await tester.tap(find.widgetWithText(FilledButton, 'Discard 4 resources'));
+    await tester.pumpAndSettle();
+    state = MatchEngine.apply(state, events.removeLast());
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    await tester.tapAt(point);
+    await tester.pumpAndSettle();
+    expect(find.text('Bandit · choose who to rob'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
