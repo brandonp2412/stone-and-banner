@@ -3361,10 +3361,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                               selectedGuard,
                               devicePixelRatio: View.of(context)
                                   .devicePixelRatio,
-                              boardOriginX: () =>
+                              boardOrigin: () =>
                                   (context.findRenderObject()! as RenderBox)
-                                      .localToGlobal(Offset.zero)
-                                      .dx,
+                                      .localToGlobal(Offset.zero),
                               showTargets:
                                   !widget.observing &&
                                   !_choosingCardTarget &&
@@ -5574,7 +5573,7 @@ class _Painter extends CustomPainter {
     this.mode,
     this.selectedGuard, {
     required this.devicePixelRatio,
-    required this.boardOriginX,
+    required this.boardOrigin,
     required this.roadReveal,
     required this.roadBreak,
     required this.brokenRoads,
@@ -5605,7 +5604,7 @@ class _Painter extends CustomPainter {
        );
   final MatchState state;
   final double devicePixelRatio;
-  final double Function() boardOriginX;
+  final Offset Function() boardOrigin;
   final bool showTargets;
   final int? hoveredRoad;
   final Set<int> cardRoadTargets, cardVertexTargets, cardTileTargets;
@@ -6005,28 +6004,36 @@ class _Painter extends CustomPainter {
       final site = state.sites[v.id];
       if (site == null) continue;
       final capitalImage = _capitalImage.value;
+      final usesCapitalArt =
+          site.structure == Structure.capital && capitalImage != null;
       final width = switch (site.structure) {
         Structure.village => 15.0,
         Structure.town => 21.0,
         Structure.capital => capitalImage == null ? 28.0 : 34.0,
       };
-      final usesCapitalArt =
-          site.structure == Structure.capital && capitalImage != null;
-      var center = c + Offset(0, usesCapitalArt ? -4 : 2);
+      final center = c + Offset(0, usesCapitalArt ? -4 : 2);
+      final Rect bounds;
       if (usesCapitalArt) {
-        // Either a pixel center or a pixel boundary can be a mirror axis.
-        final origin = boardOriginX();
-        final halfPixels = 2 * devicePixelRatio;
-        final alignedX = ((origin + center.dx) * halfPixels).round();
-        center = Offset(alignedX / halfPixels - origin, center.dy);
+        // Align the whole sprite to physical pixels so opposite edges and
+        // windows sample the source image at matching offsets.
+        final origin = boardOrigin();
+        final pixelSize = (width * devicePixelRatio).round();
+        final topLeft =
+            (origin + center) * devicePixelRatio -
+            Offset(pixelSize / 2, pixelSize / 2);
+        bounds = Rect.fromLTWH(
+          topLeft.dx.round() / devicePixelRatio - origin.dx,
+          topLeft.dy.round() / devicePixelRatio - origin.dy,
+          pixelSize / devicePixelRatio,
+          pixelSize / devicePixelRatio,
+        );
+      } else {
+        bounds = Rect.fromCenter(
+          center: center,
+          width: width,
+          height: site.structure == Structure.village ? width : width * .75,
+        );
       }
-      final bounds = Rect.fromCenter(
-        center: center,
-        width: width,
-        height: usesCapitalArt || site.structure == Structure.village
-            ? width
-            : width * .75,
-      );
       if (state.fortified.contains(v.id)) {
         final halo = bounds.inflate(10);
         canvas.drawOval(
