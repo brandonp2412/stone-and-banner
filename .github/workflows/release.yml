@@ -44,6 +44,9 @@ jobs:
           flutter-version: '3.47.6'
           channel: stable
           cache: true
+      - name: Select Android JDK
+        if: matrix.platform == 'android'
+        run: flutter config --jdk-dir "$JAVA_HOME"
       - name: Resolve dependencies
         run: flutter pub get
       - name: Build split Android APKs
@@ -111,6 +114,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG"
+            gh release create "$RELEASE_TAG" --verify-tag --title "Stone & Banner ${RELEASE_TAG#v}" --generate-notes --draft
           fi
           gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
