@@ -4,17 +4,42 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag to build and publish (e.g. v1.0.0)'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
+  resolve:
+    name: Resolve release tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Validate release tag
+        id: tag
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a stable version tag such as v1.0.0"
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --silent
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: resolve
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +53,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+      - name: Verify package version matches release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          version=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)
+          test "v$version" = "$RELEASE_TAG" || { echo "::error::Package version $version does not match $RELEASE_TAG"; exit 1; }
       - name: Install Java
         uses: actions/setup-java@v4
         with:
@@ -90,8 +124,7 @@ jobs:
 
   release:
     name: Publish release assets
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [resolve, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -111,7 +144,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --title "Stone & Banner ${RELEASE_TAG#v}" --generate-notes --draft
