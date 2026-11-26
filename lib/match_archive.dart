@@ -133,6 +133,25 @@ abstract final class MatchArchive {
     return result;
   }
 
+  /// Portable, versioned archive containing the original replay strings.
+  static String exportAll(
+    SharedPreferences prefs,
+    List<ArchivedMatch> entries,
+  ) {
+    return const JsonEncoder.withIndent('  ').convert({
+      'version': 1,
+      'matches': [
+        for (final entry in entries)
+          {
+            ...entry.toJson(),
+            'replay':
+                replay(prefs, entry) ??
+                (throw StateError('Missing replay for ${entry.key}')),
+          },
+      ],
+    });
+  }
+
   static String? replay(SharedPreferences prefs, ArchivedMatch entry) =>
       prefs.getString(entry.key);
 }

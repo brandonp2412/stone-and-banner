@@ -27,6 +27,67 @@ MatchState nextActionTurn(MatchState state) => MatchEngine.apply(
 ).copyWith(phase: MatchPhase.actions);
 
 void main() {
+  for (final size in [const Size(393, 852), const Size(844, 390)]) {
+    testWidgets('bot activity stays quiet during fast-forward at $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      var state = nextActionTurn(funded());
+      Future<void> show({bool skipping = false}) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: MatchView(
+                state: state,
+                onEvent: (_) {},
+                computerSeats: const {1},
+                visibleSeat: 0,
+                fastForwardingBots: skipping,
+              ),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 450));
+      }
+
+      final notice = find.textContaining('visits the market');
+      await show();
+      state = MatchEngine.apply(
+        state,
+        const BankExchange(Resource.wood, Resource.wheat),
+      );
+      await show();
+      expect(notice, findsOneWidget);
+
+      await show(skipping: true);
+      expect(notice, findsNothing);
+      state = MatchEngine.apply(
+        state,
+        const BankExchange(Resource.brick, Resource.wheat),
+      );
+      await show(skipping: true);
+      expect(notice, findsNothing);
+
+      state = MatchEngine.apply(
+        state,
+        const BankExchange(Resource.wool, Resource.wheat),
+      );
+      await show();
+      expect(notice, findsNothing);
+      state = MatchEngine.apply(
+        state,
+        const BankExchange(Resource.ore, Resource.wheat),
+      );
+      await show();
+      expect(notice, findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   test('bot-to-bot decline never claims the human made an offer', () {
     var s = nextActionTurn(funded()); // Ben
     s = MatchEngine.apply(

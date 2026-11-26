@@ -108,6 +108,30 @@ void main() {
     await tester.tap(find.text('Learn the rules'));
     await tester.pumpAndSettle();
     expect(find.text('The founding rules'), findsOneWidget);
-    expect(find.text('1 · Claim'), findsOneWidget);
+    await tester.tap(find.text('Setup and turn order'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your first two placements'), findsOneWidget);
+
+    final search = find.byType(TextField);
+    await tester.enterText(search, 'REAVER looting');
+    await tester.pumpAndSettle();
+    expect(find.text('Governance (Ore Hills and coin)'), findsOneWidget);
+    expect(find.text('Your first two placements'), findsNothing);
+
+    await tester.enterText(search, 'ore aid');
+    await tester.pumpAndSettle();
+    expect(find.text('Pledging emergency aid'), findsOneWidget);
+    expect(find.text('When the fleet attacks'), findsNothing);
+
+    await tester.enterText(search, 'Royal Audit');
+    await tester.pumpAndSettle();
+    expect(find.text('The Royal Audit'), findsOneWidget);
+
+    await tester.enterText(search, 'unmatched query');
+    await tester.pumpAndSettle();
+    expect(find.text('No rules match your search.'), findsOneWidget);
+    await tester.tap(find.byTooltip('Clear search'));
+    await tester.pumpAndSettle();
+    expect(find.text('Setup and turn order'), findsOneWidget);
   });
 }

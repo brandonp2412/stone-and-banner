@@ -44,6 +44,20 @@ void main() {
       final fleet = tester.getRect(
         find.byKey(const ValueKey('raid-defense-hud')),
       );
+      if (size.width >= 900) {
+        final instructions = tester
+            .getRect(find.text('Shape your realm'))
+            .expandToInclude(
+              tester.getRect(find.text('Build, trade or play a card')),
+            );
+        final done = tester.getRect(find.widgetWithText(FilledButton, 'Done'));
+        final inventory = tester.getRect(
+          find.byKey(const ValueKey('resource-tile-wood')),
+        );
+        expect(instructions.center.dy, closeTo(done.center.dy, 1));
+        expect(done.top, greaterThanOrEqualTo(map.bottom));
+        expect(done.bottom, lessThan(inventory.top));
+      }
       if (size.width < 900) {
         await tester.tap(find.byKey(const ValueKey('mobile-open-actions')));
         await tester.pumpAndSettle();

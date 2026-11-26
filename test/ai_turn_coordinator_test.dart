@@ -34,6 +34,8 @@ void main() {
     coordinator.resume();
     coordinator.fastForward();
     await tester.pump();
+    expect(commits, 1);
+    await tester.pump(Duration.zero);
     expect(commits, 2);
     await tester.pump(const Duration(seconds: 5));
     await coordinator.settled;

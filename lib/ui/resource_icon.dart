@@ -120,7 +120,7 @@ class ResourceIcon extends StatelessWidget {
                       ResourceIconStyle.gameIcons,
                       ResourceIconStyle.pictogrammers,
                     }.contains(style ?? selected)
-                ? const Color(0xff755018)
+                ? gameColor(context, const Color(0xffe5c183))
                 : null,
             colorBlendMode: BlendMode.srcIn,
             filterQuality: FilterQuality.medium,

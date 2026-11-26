@@ -63,11 +63,13 @@ class CompactPageHeader extends StatelessWidget {
     required this.title,
     required this.onBack,
     this.backTooltip = 'Back',
+    this.actions = const [],
   });
 
   final String title;
   final VoidCallback onBack;
   final String backTooltip;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +95,7 @@ class CompactPageHeader extends StatelessWidget {
                   : Theme.of(context).textTheme.titleLarge,
             ),
           ),
+          ...actions,
         ],
       ),
     );

@@ -50,12 +50,62 @@ MatchState town(MatchState s, int vertex) {
 }
 
 void main() {
+  test('development requires an owned Town or Capital on matching terrain', () {
+    final state = fund(
+      draft(55).copyWith(phase: MatchPhase.actions),
+      0,
+      StrategyDeck.innovation.costFor(1),
+    );
+    final woodland = state.board.tiles.indexWhere(
+      (hex) => hex.land == Land.woodland,
+    );
+    final other = state.topology.vertices.indexWhere(
+      (vertex) => vertex.tiles.every(
+        (tile) => state.board.tiles[tile].land != Land.woodland,
+      ),
+    );
+    final matching = state.topology.tileVertices[woodland].first;
+    const event = DevelopTown(StrategyDeck.innovation);
+    final ineligible = state.copyWith(
+      sites: {
+        other: const Site(0, Structure.town),
+        matching: const Site(0, Structure.village),
+        ...{
+          for (final vertex in state.topology.tileVertices[woodland].skip(1))
+            vertex: const Site(1, Structure.town),
+        },
+      },
+    );
+    expect(MatchEngine.canDevelop(ineligible, event.track), isFalse);
+    expect(() => MatchEngine.apply(ineligible, event), throwsStateError);
+
+    for (final structure in [Structure.town, Structure.capital]) {
+      final eligible = ineligible.copyWith(
+        sites: {...ineligible.sites, matching: Site(0, structure)},
+        banditTile: woodland,
+      );
+      expect(MatchEngine.canDevelop(eligible, event.track), isTrue);
+      expect(MatchEngine.apply(eligible, event).current.level(event.track), 1);
+    }
+  });
+
   test('five named levels per track spend stock; Capital race paid once', () {
     var s = draft(55).copyWith(phase: MatchPhase.actions);
     final v = s.sites.keys.firstWhere((v) => s.sites[v]!.owner == 0);
     s = town(s, v);
     for (final track in StrategyDeck.values) {
       expect(track.tiers.length, 5);
+      final vertices = s.topology.vertices;
+      final matching = List.generate(vertices.length, (i) => i).firstWhere(
+        (i) =>
+            !s.sites.containsKey(i) &&
+            vertices[i].tiles.any(
+              (tile) => s.board.tiles[tile].land == track.sourceLand,
+            ),
+      );
+      s = s.copyWith(
+        sites: {...s.sites, matching: const Site(0, Structure.town)},
+      );
       for (var level = 1; level <= 5; level++) {
         s = fund(s, 0, track.costFor(level));
         s = MatchEngine.apply(s, DevelopTown(track));

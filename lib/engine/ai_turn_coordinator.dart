@@ -130,6 +130,12 @@ class AiTurnCoordinator {
     int? countedTurn;
     try {
       while (!_paused && ticket == _generation) {
+        if (_fastForward) {
+          // Let frames and input run between actions even when the decision
+          // and presentation delay both complete in microtasks.
+          await Future<void>.delayed(Duration.zero);
+          if (_paused || ticket != _generation) return;
+        }
         final before = read();
         if (before == null || before.phase == MatchPhase.finished) return;
         if (countedTurn != before.turnSerial) {
@@ -218,8 +224,6 @@ class AiTurnCoordinator {
           }
         }
 
-        // Yield even in tests with a zero delay. No wall clock enters the
-        // reducer, seed, policy or replay; this only schedules presentation.
         // Think during the presentation interval, so decision time is not
         // added as a second pause between actions. Await both to handle errors
         // even if the pump is cancelled while the decision is in flight.

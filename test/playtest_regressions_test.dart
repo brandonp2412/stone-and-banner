@@ -45,7 +45,10 @@ void main() {
     }
     await tester.tapAt(point);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, state.players[1].id));
+    final victim = find.widgetWithText(FilledButton, state.players[1].id);
+    final button = tester.widget<FilledButton>(victim);
+    expect(button.style?.backgroundColor?.resolve({}), seatColors[1]);
+    await tester.tap(victim);
     await tester.pumpAndSettle();
     expect(events.single, isA<MoveBandit>());
     expect(tester.takeException(), isNull);

@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 /// Theme counterparts for the game's illustrated dark palette. Map surfaces and
 /// their inks together; board art, resource art and player pieces keep their
 /// original colors. Unlisted art colors and every dark-mode color pass through.
-Color gameColor(BuildContext context, Color darkColor) {
+Color gameColor(BuildContext context, Color darkColor, {Color? light}) {
   if (Theme.of(context).brightness == Brightness.dark) return darkColor;
-  final light = _lightGameColors[darkColor.toARGB32() & 0x00ffffff];
-  return light?.withValues(alpha: darkColor.a) ?? darkColor;
+  final mapped = _lightGameColors[darkColor.toARGB32() & 0x00ffffff];
+  return light ?? mapped?.withValues(alpha: darkColor.a) ?? darkColor;
 }
 
 final Map<int, Color> _lightGameColors = {
@@ -66,7 +66,7 @@ final Map<int, Color> _lightGameColors = {
     0xbde7d4,
     0xeafff5,
   ])
-    rgb: const Color(0xff14634d),
+    rgb: const Color(0xff125741),
   // Danger panels
   for (final rgb in const [0x2e181c, 0x3c0715]) rgb: const Color(0xfffbe8e6),
   // Outlines
@@ -84,7 +84,7 @@ final Map<int, Color> _lightGameColors = {
     0x63737a,
     0x786039,
   ])
-    rgb: const Color(0xff78817e),
+    rgb: const Color(0xff69736f),
   // Information and blue player ink
   for (final rgb in const [0x4279b9, 0x8ebdff, 0xa1b1c4, 0xa7c8ff, 0xe4eff0])
     rgb: const Color(0xff285c8e),
@@ -108,12 +108,11 @@ final Map<int, Color> _lightGameColors = {
     0xb5c9c8,
     0xb7c9ce,
     0xbac9cc,
-    0xbac9cc,
     0xc2d2d2,
     0xc6d7d9,
     0xc7d8d9,
   ])
-    rgb: const Color(0xff4c5f63),
+    rgb: const Color(0xff405458),
   // Gold accents and action fills
   for (final rgb in const [
     0xad8121,
@@ -138,7 +137,7 @@ final Map<int, Color> _lightGameColors = {
     0xffde93,
     0xffe092,
   ])
-    rgb: const Color(0xff755018),
+    rgb: const Color(0xff684411),
   // Purple player and finale ink
   for (final rgb in const [0xbd9dca, 0xcba4f6, 0xd1b2f5, 0xd5a6f7])
     rgb: const Color(0xff69418a),
@@ -157,5 +156,5 @@ final Map<int, Color> _lightGameColors = {
     0xffa28e,
     0xffb8aa,
   ])
-    rgb: const Color(0xffa32c30),
+    rgb: const Color(0xff93272b),
 };

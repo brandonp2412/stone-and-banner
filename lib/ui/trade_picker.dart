@@ -48,7 +48,11 @@ class TradePicker extends StatelessWidget {
         height: compact ? 34 : 42,
         decoration: BoxDecoration(
           color: count > 0
-              ? color.withValues(alpha: .18)
+              ? color.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.light
+                      ? .13
+                      : .18,
+                )
               : gameColor(context, const Color(0xff192b32)),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
@@ -93,7 +97,11 @@ class TradePicker extends StatelessWidget {
                       style: TextStyle(
                         color: enabled || count > 0
                             ? color
-                            : gameColor(context, const Color(0xff63737a)),
+                            : gameColor(
+                                context,
+                                const Color(0xff63737a),
+                                light: const Color(0xff405458),
+                              ),
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
                       ),

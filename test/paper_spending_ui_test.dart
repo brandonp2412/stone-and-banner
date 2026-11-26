@@ -27,11 +27,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     var state = tableWithSupplies();
-    final owned = state.sites.keys.firstWhere(
-      (id) => state.sites[id]!.owner == state.active,
+    final woodland = state.board.tiles.indexWhere(
+      (hex) => hex.land == Land.woodland,
     );
-    final sites = Map<int, Site>.of(state.sites);
-    sites[owned] = Site(state.active, Structure.town);
+    final vertex = state.topology.tileVertices[woodland].first;
+    final sites = {...state.sites, vertex: Site(state.active, Structure.town)};
     final players = state.players.toList();
     players[state.active] = state.current.copyWith(
       developments: {StrategyDeck.innovation: 1},

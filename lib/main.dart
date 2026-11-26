@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import 'ui/compact_layout.dart';
+import 'ui/rules_page.dart';
 
 import 'package:flutter/material.dart';
 
@@ -186,7 +187,6 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     if (!aiActing) return;
     setState(() => _fastForwardingBots = true);
     _syncAi();
-    ai.fastForward();
   }
 
   void _syncAi() {
@@ -198,9 +198,10 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         aiError == null &&
         aiActing &&
         !_waitingOnLocalTrade(match!)) {
+      if (_fastForwardingBots) ai.fastForward();
       ai.resume();
     } else {
-      ai.pause();
+      _pauseAi();
     }
   }
 
@@ -229,7 +230,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
           !aiSeats.contains(nextOwner) &&
           !oneHumanMatch;
     });
-    _save(next, previous: expected);
+    _save(next, previous: expected, batch: _fastForwardingBots && aiActing);
     _syncAi();
     if (rollAfterSkip) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -256,6 +257,23 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
   String? savedReplay;
   Future<void> _saveTail = Future<void>.value();
+  Timer? _fastForwardSaveTimer;
+  MatchState? _fastForwardCheckpoint;
+  final _debugEventsToSave = <(MatchState, MatchState)>[];
+
+  void _pauseAi() {
+    ai.pause();
+    _fastForwardSaveTimer?.cancel();
+    _flushFastForwardSave();
+  }
+
+  void _flushFastForwardSave() {
+    _fastForwardSaveTimer = null;
+    if (_fastForwardCheckpoint case final checkpoint?) {
+      _fastForwardCheckpoint = null;
+      _writeSave(checkpoint);
+    }
+  }
 
   @override
   void initState() {
@@ -391,7 +409,29 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     });
   }
 
-  void _save(MatchState state, {MatchState? previous}) {
+  void _save(MatchState state, {MatchState? previous, bool batch = false}) {
+    if (kDebugMode && previous != null) {
+      _debugEventsToSave.add((previous, state));
+    }
+    // Fast-forward can commit several moves between display frames.
+    // Checkpoint a burst once, then save immediately when control returns.
+    if (batch) {
+      _fastForwardCheckpoint = state;
+      _fastForwardSaveTimer ??= Timer(
+        const Duration(milliseconds: 150),
+        _flushFastForwardSave,
+      );
+      return;
+    }
+    _fastForwardSaveTimer?.cancel();
+    _fastForwardSaveTimer = null;
+    _fastForwardCheckpoint = null;
+    _writeSave(state);
+  }
+
+  void _writeSave(MatchState state) {
+    final debugEvents = _debugEventsToSave.toList();
+    _debugEventsToSave.clear();
     final replay = MatchEngine.exportReplay(state);
     savedReplay = replay;
     savedAiSeats = {...aiSeats};
@@ -411,8 +451,8 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             !await prefs.setString(_savedMatchKey, replay)) {
           throw StateError('Storage rejected the replay.');
         }
-        if (kDebugMode && previous != null) {
-          await DebugMatchLog.append(prefs, previous, state);
+        for (final (before, after) in debugEvents) {
+          await DebugMatchLog.append(prefs, before, after);
         }
         if (state.phase == MatchPhase.finished) {
           await MatchArchive.save(
@@ -480,7 +520,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       if (automatic && computerSeats.length != loaded.players.length - 1) {
         return;
       }
-      ai.pause();
+      _pauseAi();
       setState(() {
         match = loaded;
         aiSeats = computerSeats;
@@ -508,7 +548,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
 
   @override
   void dispose() {
-    ai.pause();
+    _pauseAi();
     _aiRecoveryTimer?.cancel();
     _localTradeGraceTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -597,7 +637,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             ? (List.generate(seats, (i) => i)..shuffle(math.Random()))
             : null,
       );
-      ai.pause();
+      _pauseAi();
       setState(() {
         match = s;
         matchBotDifficulty = botDifficulty;
@@ -617,7 +657,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   }
 
   Future<void> _showMatchActions(BuildContext parentContext) async {
-    ai.pause();
+    _pauseAi();
     await showDialog<void>(
       context: parentContext,
       builder: (dialogContext) => Dialog(
@@ -748,7 +788,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
         );
         if (!mounted || replace != true) return;
       }
-      ai.pause();
+      _pauseAi();
       _archiveReplacedMatch();
       setState(() {
         match = loaded;
@@ -1013,108 +1053,6 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     },
   );
 
-  Widget _compactRules(BuildContext context) => SafeArea(
-    child: Column(
-      children: [
-        CompactPageHeader(
-          title: 'The founding rules',
-          onBack: () => setState(() => page = Page.home),
-          backTooltip: 'Back to Home',
-        ),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  children: const [
-                    Text(
-                      'The essentials',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    _Rule(
-                      '1 · Claim',
-                      'Place two free Village–Road pairs in snake order. Leave a gap between villages.',
-                    ),
-                    _Rule(
-                      '2 · Roll',
-                      'Dice earn goods from nearby terrain. A seven moves the Bandit.',
-                    ),
-                    _Rule(
-                      '3 · Build and trade',
-                      'Spend goods on roads, Villages, Towns and Capitals, or exchange with other players.',
-                    ),
-                    _Rule(
-                      '4 · Win',
-                      'First to 15 Renown wins. Villages = 1, Towns = 2, Capitals = 4, crown road = 2.',
-                    ),
-                  ],
-                ),
-              ),
-              const VerticalDivider(width: 1),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  children: const [
-                    Text(
-                      'Advanced play',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    _Rule(
-                      'Town Developments',
-                      'Innovation, Commerce and Governance have five tiers, producing commodities.',
-                    ),
-                    _Rule(
-                      'Reaver Fleet and Guards',
-                      'Guards defend; fortifications protect Towns during invasions.',
-                    ),
-                    _Rule(
-                      'Reactions',
-                      'Intercept theft, counter cards and pledge invasion aid when eligible.',
-                    ),
-                    _Rule(
-                      'Catch-up',
-                      'Players three points behind can make a limited 3:1 bank exchange.',
-                    ),
-                    Divider(height: 16),
-                    Text(
-                      'Glossary',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    _Rule(
-                      'Basic goods',
-                      'Wood, brick, wheat, sheep and ore pay for roads, structures and Guards.',
-                    ),
-                    _Rule(
-                      'Commodities',
-                      'Paper, cloth and coin come from developed Towns and help build Capitals.',
-                    ),
-                    _Rule(
-                      'Renown',
-                      'Reach 15 to win. Charter Points and Guardian’s Honour also count.',
-                    ),
-                    _Rule(
-                      'Bandit',
-                      'A seven relocates the Bandit and may cause discards or theft.',
-                    ),
-                    _Rule(
-                      'Seed and replay',
-                      'Saved events and the world seed recreate a match.',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-
   Future<void> _showSettings(BuildContext context) async {
     final preferences = SharedPreferences.getInstance();
     await Navigator.of(context).push(
@@ -1345,7 +1283,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                 canPop: page == Page.home,
                 onPopInvokedWithResult: (didPop, result) {
                   if (!didPop) {
-                    ai.pause();
+                    _pauseAi();
                     setState(() => page = Page.home);
                   }
                 },
@@ -1391,7 +1329,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                 : IconButton(
                                     tooltip: 'Back to Home',
                                     onPressed: () {
-                                      ai.pause();
+                                      _pauseAi();
                                       setState(() => page = Page.home);
                                     },
                                     icon: const Icon(Icons.arrow_back),
@@ -1457,11 +1395,11 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                     state: current,
                                     onEvent: dispatch,
                                     onHome: () {
-                                      ai.pause();
+                                      _pauseAi();
                                       setState(() => page = Page.home);
                                     },
                                     onRules: () {
-                                      ai.pause();
+                                      _pauseAi();
                                       setState(() => page = Page.rules);
                                     },
                                     onSettings: () => _showSettings(context),
@@ -1484,142 +1422,14 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                               offer.canRespond(0),
                                         ),
                                   ),
-                          Page.rules =>
-                            isCompactLandscape(context)
-                                ? _compactRules(context)
-                                : Center(
-                                    key: const ValueKey('stone-rules-page'),
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 680,
-                                      ),
-                                      child: ListView(
-                                        // Leave space for the floating mobile
-                                        // back button, including at large text scales.
-                                        padding: EdgeInsets.fromLTRB(
-                                          20,
-                                          MediaQuery.sizeOf(context).width < 900
-                                              ? 62
-                                              : 20,
-                                          20,
-                                          20,
-                                        ),
-                                        children: [
-                                          Text(
-                                            'The founding rules',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .headlineMedium,
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            'The essentials',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleLarge,
-                                          ),
-                                          const SizedBox(height: 12),
-                                          const _Rule(
-                                            '1 · Claim',
-                                            'Each seat places two free Village and Road pairs in a snake draft. Leave a gap between villages.',
-                                          ),
-                                          const _Rule(
-                                            '2 · Roll',
-                                            'Roll numbered dice to earn goods from neighbouring terrain. A seven moves the Bandit.',
-                                          ),
-                                          const _Rule(
-                                            '3 · Build and trade',
-                                            'Spend goods to extend roads, found Villages and upgrade to Towns or Capitals. Exchange with the bank or offer a rival trade.',
-                                          ),
-                                          const _Rule(
-                                            '4 · Win',
-                                            'First to 15 Renown wins. Village = 1, Town = 2, Capital = 4; the crown road of at least five sides earns 2.',
-                                          ),
-                                          const Divider(height: 24),
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: const [
-                                              Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                  vertical: 12,
-                                                ),
-                                                child: Text(
-                                                  'Advanced play',
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                              ),
-                                              _Rule(
-                                                'Town Developments',
-                                                'Innovation, Commerce and Governance have five tiers each. Developed Towns can produce paper, cloth and coin.',
-                                              ),
-                                              _Rule(
-                                                'Reaver Fleet and Guards',
-                                                'Activate and promote Guards to defend the realm. Fortifications shelter Towns when an Invasion succeeds.',
-                                              ),
-                                              _Rule(
-                                                'Reactions',
-                                                'Eligible seats can intercept theft, counter Governance cards or pledge Invasion aid. Pass is always available.',
-                                              ),
-                                              _Rule(
-                                                'Catch-up',
-                                                'Seats behind by three points may exchange 3:1 with the bank once a round; drought relief is bounded.',
-                                              ),
-                                            ],
-                                          ),
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: const [
-                                              Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                  vertical: 12,
-                                                ),
-                                                child: Text(
-                                                  'Glossary',
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                              ),
-                                              _Rule(
-                                                'Basic goods',
-                                                'Wood, brick, wheat, sheep and ore pay for roads, structures and Guards.',
-                                              ),
-                                              _Rule(
-                                                'Commodities',
-                                                'Paper, cloth and coin come from developed Towns and help build Capitals.',
-                                              ),
-                                              _Rule(
-                                                'Renown',
-                                                'A seat’s score. Reach 15 points to win; Charter Points and Guardian’s Honour also count.',
-                                              ),
-                                              _Rule(
-                                                'Bandit',
-                                                'A seven relocates the Bandit and may cause discards or theft.',
-                                              ),
-                                              _Rule(
-                                                'Seed and replay',
-                                                'The saved world seed and all accepted events reproduce a match exactly.',
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 16),
-                                          const Text(
-                                            'Every move is engine-validated and logged for deterministic replay.',
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                          Page.rules => RulesPage(
+                            key: const ValueKey('stone-rules-page'),
+                            onBack: () => setState(() => page = Page.home),
+                          ),
                         },
                         if (MediaQuery.sizeOf(context).width < 900 &&
                             !isCompactLandscape(context) &&
-                            (page == Page.setup || page == Page.rules))
+                            page == Page.setup)
                           Positioned(
                             top: MediaQuery.paddingOf(context).top + 4,
                             right: MediaQuery.paddingOf(context).right + 8,
@@ -1787,34 +1597,6 @@ class _ReplayImportDialogState extends State<_ReplayImportDialog> {
       ),
     ],
   );
-}
-
-class _Rule extends StatelessWidget {
-  const _Rule(this.name, this.description);
-  final String name, description;
-  @override
-  Widget build(BuildContext context) {
-    final compact = isCompactLandscape(context);
-    return Padding(
-      padding: EdgeInsets.only(bottom: compact ? 8 : 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            name,
-            style: compact
-                ? Theme.of(context).textTheme.titleSmall
-                : Theme.of(context).textTheme.titleLarge,
-          ),
-          SizedBox(height: compact ? 2 : 4),
-          Text(
-            description,
-            style: compact ? const TextStyle(fontSize: 12) : null,
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _LandingHall extends StatelessWidget {

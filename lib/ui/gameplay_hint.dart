@@ -20,7 +20,7 @@ const gameplayHints = <String, GameplayHint>{
   'setupRoad': GameplayHint(
     'setupRoad',
     'Connect your village',
-    'Tap a glowing edge beside the village you just placed. This starting road is free. Extend roads later to reach new building sites.',
+    'Tap an edge beside the settlement you just placed. Hover with a mouse to preview a valid road. This starting road is free. Extend roads later to reach new building sites.',
   ),
   'roll': GameplayHint(
     'roll',
@@ -45,7 +45,7 @@ const gameplayHints = <String, GameplayHint>{
   'road': GameplayHint(
     'road',
     'Extend your roads',
-    'Tap a glowing edge connected to your network. Roads open routes to new village sites. The action shows the current cost, including any discounts.',
+    'Tap an edge connected to your network. Hover with a mouse to preview a valid road. Roads open routes to new village sites. The action shows the current cost, including any discounts.',
   ),
   'village': GameplayHint(
     'village',

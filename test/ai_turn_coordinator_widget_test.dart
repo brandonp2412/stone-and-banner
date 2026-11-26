@@ -91,6 +91,9 @@ void main() {
     expect(buttonBounds.center.dy, actionsBounds.center.dy);
     expect(buttonBounds.left, greaterThan(actionsBounds.right));
     await tester.tap(fastForward);
+    await tester.pump();
+    expect(find.text('Fast-forwarding…'), findsOneWidget);
+    expect(tester.widget<FilledButton>(fastForward).onPressed, isNull);
     await finishAi(tester);
     expect(fastForward, findsNothing);
     // Drain the presentation timer that fast-forward bypassed.
@@ -136,6 +139,8 @@ void main() {
     expect(find.byKey(const ValueKey('fast-forward-bots')), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     expect(app.ai.isPaused, isFalse);
+    await tester.pump();
+    expect(find.text('Fast-forwarding bots…'), findsWidgets);
     for (var tick = 0; tick < 100 && identical(app.match, offered); tick++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 10)),

@@ -3,6 +3,7 @@ import 'resource_transfer.dart';
 // ignore_for_file: prefer_interpolation_to_compose_strings
 import 'dart:math' as math;
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'compact_layout.dart';
 
@@ -69,6 +70,60 @@ const landColors = [
   Color(0xff8395a2),
   Color(0xff81705c),
 ];
+
+final _capitalImage = ValueNotifier<ui.Image?>(null);
+Future<void>? _capitalImageLoad;
+
+Future<void> _loadCapitalImage() async {
+  final data = await rootBundle.load('assets/art/capital.png');
+  final codec = await ui.instantiateImageCodec(
+    data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+  );
+  try {
+    _capitalImage.value = (await codec.getNextFrame()).image;
+  } finally {
+    codec.dispose();
+  }
+}
+
+final _capitalPaints = [
+  Paint()..filterQuality = FilterQuality.medium,
+  for (final color in seatColors.skip(1))
+    Paint()
+      ..filterQuality = FilterQuality.medium
+      ..colorFilter = _capitalColorFilter(color),
+];
+
+ColorFilter _capitalColorFilter(Color color) {
+  // Scale the color shift by the source teal's green–red difference so
+  // the artwork retains its dark outline and pale highlights.
+  const tealChroma = 205 - 56;
+  final red = (color.r * 255 - 56) / tealChroma;
+  final green = (color.g * 255 - 205) / tealChroma;
+  final blue = (color.b * 255 - 182) / tealChroma;
+  return ColorFilter.matrix([
+    1 - red,
+    red,
+    0,
+    0,
+    0,
+    -green,
+    1 + green,
+    0,
+    0,
+    0,
+    -blue,
+    blue,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ]);
+}
 
 class MatchView extends StatefulWidget {
   const MatchView({
@@ -350,6 +405,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     FocusManager.instance.addEarlyKeyEventHandler(_handleMainActionKey);
     _secondsLeft = widget.onlineTurnSeconds ?? (widget.online ? 150 : 90);
     unawaited(loadResourceIcons());
+    unawaited(_capitalImageLoad ??= _loadCapitalImage());
     unawaited(_loadHints());
     _scheduleIncomingTrade();
     _turnClock = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -994,7 +1050,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 child: const Text('Cancel'),
               ),
               for (final n in victims)
-                TextButton(
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: seatColors[n],
+                    foregroundColor: const Color(0xff172025),
+                  ),
                   onPressed: () => Navigator.pop(context, n),
                   child: Text(s.players[n].id),
                 ),
@@ -1562,7 +1622,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     final additions = s.roads.keys.where(
       (id) => !oldWidget.state.roads.containsKey(id),
     );
-    if (additions.isNotEmpty) {
+    if (!skipping && additions.isNotEmpty) {
       _animatedRoad = additions.last;
       final old = oldWidget.state;
       final edge = old.topology.edges[_animatedRoad!];
@@ -1584,7 +1644,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       _roadController.forward(from: 0);
     }
     final previous = oldWidget.state;
-    if (s.seed == previous.seed && s.events.length > previous.events.length) {
+    if (!skipping &&
+        s.seed == previous.seed &&
+        s.events.length > previous.events.length) {
       final holder = previous.crownRoadHolder;
       if (holder != null) {
         final before = MatchEngine.crownRoad(previous, holder);
@@ -1615,7 +1677,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         }
       }
     }
-    if (s.seed == oldWidget.state.seed &&
+    if (!skipping &&
+        s.seed == oldWidget.state.seed &&
         s.crownRoadHolder != null &&
         s.crownRoadHolder != oldWidget.state.crownRoadHolder) {
       _crownRoadWinner = s.crownRoadHolder;
@@ -1737,8 +1800,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           },
         };
 
-  String get _hint =>
-      widget.online && widget.observing && s.phase != MatchPhase.finished
+  String get _hint => widget.fastForwardingBots && !isCompactLandscape(context)
+      ? 'Fast-forwarding bots…'
+      : widget.online && widget.observing && s.phase != MatchPhase.finished
       ? widget.waitingMessage ?? ''
       : s.pendingDiscards.isNotEmpty
       ? 'Finish discarding before moving the Bandit'
@@ -1749,15 +1813,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             'Tap a glowing junction · first placements are free',
           MatchPhase.setupRoad =>
             s.setupStep < s.players.length
-                ? 'Tap a glowing edge beside your new village'
-                : 'Tap a glowing edge beside your new town',
+                ? 'Tap an edge beside your new village'
+                : 'Tap an edge beside your new town',
           MatchPhase.roll => '',
           MatchPhase.bandit => 'Tap another hex, then choose a neighbour',
           MatchPhase.invasion => 'Review the fleet and your shared defence',
           MatchPhase.finished => '15 Renown · a realm to remember',
           MatchPhase.actions => switch (move) {
             _Move.road =>
-              '${_costLabel(MatchEngine.effectiveRoadCost(s))} · tap a glowing edge',
+              '${_costLabel(MatchEngine.effectiveRoadCost(s))} · tap a connected edge',
             _Move.village =>
               '${_costLabel(MatchEngine.villageCost)} · tap a glowing junction',
             _Move.inspect => 'Build, trade or play a card',
@@ -1850,76 +1914,74 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                               final railWidth = desktop
                                   ? (bounds.maxWidth * .25).clamp(320.0, 420.0)
                                   : math.min(320.0, bounds.maxWidth * .48);
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                              return Column(
                                 children: [
-                                  Expanded(child: _map()),
-                                  SizedBox(
-                                    width: railWidth,
-                                    child: Material(
-                                      color: gameColor(
-                                        context,
-                                        const Color(0xff182a31),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          if (s.tactical == null ||
-                                              widget.observing)
-                                            _tabs(),
-                                          Expanded(
-                                            child:
-                                                s.tactical != null &&
-                                                    !widget.observing
-                                                ? _TacticalPanel(
-                                                    state: s,
-                                                    onEvent: send,
-                                                    online: widget.online,
-                                                  )
-                                                : Scrollbar(
-                                                    controller:
-                                                        _panelScroll[_tab],
-                                                    thumbVisibility: true,
-                                                    interactive: true,
-                                                    child: ListView(
-                                                      controller:
-                                                          _panelScroll[_tab],
-                                                      key: PageStorageKey(
-                                                        'panel-$_tab',
-                                                      ),
-                                                      padding:
-                                                          EdgeInsets.symmetric(
-                                                            horizontal: _compact
-                                                                ? 8
-                                                                : 12,
-                                                            vertical: _compact
-                                                                ? 4
-                                                                : 12,
-                                                          ),
-                                                      children: [
-                                                        _waitingStatus(),
-                                                        ..._visiblePanelContents(
-                                                          phase,
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                          ),
-                                          if (!_canFastForward)
-                                            Visibility(
-                                              visible:
-                                                  s.tactical == null &&
-                                                  !widget.observing &&
-                                                  s.phase !=
-                                                      MatchPhase.finished,
-                                              maintainSize: true,
-                                              maintainAnimation: true,
-                                              maintainState: true,
-                                              child: _turnAction(),
+                                  Expanded(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Expanded(child: _map()),
+                                        SizedBox(
+                                          width: railWidth,
+                                          child: Material(
+                                            color: gameColor(
+                                              context,
+                                              const Color(0xff182a31),
                                             ),
-                                        ],
-                                      ),
+                                            child: Column(
+                                              children: [
+                                                if (s.tactical == null ||
+                                                    widget.observing)
+                                                  _tabs(),
+                                                Expanded(
+                                                  child:
+                                                      s.tactical != null &&
+                                                          !widget.observing
+                                                      ? _TacticalPanel(
+                                                          state: s,
+                                                          onEvent: send,
+                                                          online: widget.online,
+                                                        )
+                                                      : Scrollbar(
+                                                          controller:
+                                                              _panelScroll[_tab],
+                                                          thumbVisibility: true,
+                                                          interactive: true,
+                                                          child: ListView(
+                                                            controller:
+                                                                _panelScroll[_tab],
+                                                            key: PageStorageKey(
+                                                              'panel-$_tab',
+                                                            ),
+                                                            padding:
+                                                                EdgeInsets.symmetric(
+                                                                  horizontal:
+                                                                      _compact
+                                                                      ? 8
+                                                                      : 12,
+                                                                  vertical:
+                                                                      _compact
+                                                                      ? 4
+                                                                      : 12,
+                                                                ),
+                                                            children: [
+                                                              _waitingStatus(),
+                                                              ..._visiblePanelContents(
+                                                                phase,
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
+                                  _desktopFooter(railWidth),
                                 ],
                               );
                             },
@@ -1992,6 +2054,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                       : 'top-reaction-toast',
                                 ),
                                 showActivity: portrait || _hasTopActivitySpace,
+                                fastForwardingBots: widget.fastForwardingBots,
                                 state: s,
                                 viewerSeat: viewerSeat,
                                 computerSeats: widget.computerSeats,
@@ -2012,14 +2075,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 ],
               ),
             ),
-            Positioned.fill(
-              child: ResourceHarvest(
-                state: s,
-                seat: viewerSeat,
-                anchors: _resourceAnchors,
-                deferAnimation: _rollingDice != null,
+            if (!widget.fastForwardingBots)
+              Positioned.fill(
+                child: ResourceHarvest(
+                  state: s,
+                  seat: viewerSeat,
+                  anchors: _resourceAnchors,
+                  deferAnimation: _rollingDice != null,
+                ),
               ),
-            ),
             if (_discardMinimized && s.pendingDiscards.containsKey(viewerSeat))
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 106,
@@ -2545,20 +2609,34 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
 
   Widget _fastForwardButton() => FilledButton.icon(
     key: const ValueKey('fast-forward-bots'),
-    onPressed: () {
-      setState(() {
-        _skipBotDice = true;
-        _rollingDice = null;
-      });
-      widget.onFastForward?.call();
-    },
+    onPressed: _skipBotDice || widget.fastForwardingBots
+        ? null
+        : () {
+            setState(() {
+              _skipBotDice = true;
+              _rollingDice = null;
+            });
+            widget.onFastForward?.call();
+          },
     style: FilledButton.styleFrom(
       minimumSize: const Size(0, 42),
+      disabledForegroundColor: Theme.of(context).brightness == Brightness.light
+          ? Theme.of(context).colorScheme.onSurfaceVariant
+          : null,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontSize: 13),
     ),
-    icon: const Icon(Icons.fast_forward),
-    label: const Text('Fast-forward bots'),
+    icon: _skipBotDice || widget.fastForwardingBots
+        ? const SizedBox.square(
+            dimension: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(Icons.fast_forward),
+    label: Text(
+      _skipBotDice || widget.fastForwardingBots
+          ? 'Fast-forwarding…'
+          : 'Fast-forward bots',
+    ),
   );
 
   Widget _mobileActionsButton() => SizedBox(
@@ -3097,6 +3175,8 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                         viewerSeat: viewerSeat,
                                         targetSeat: i,
                                         showEmotes: false,
+                                        fastForwardingBots:
+                                            widget.fastForwardingBots,
                                         computerSeats: widget.computerSeats,
                                         emote: widget.networkEmote ?? _emote,
                                         emoteSerial:
@@ -3186,7 +3266,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   }
 
   double get _instructionHeight => math.max(
-    50,
+    60,
     MediaQuery.textScalerOf(context).scale(15) * 1.2 +
         MediaQuery.textScalerOf(context).scale(11) * 1.2 +
         12,
@@ -3238,13 +3318,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               // Keep pointer motion local to the map, rather than rebuilding the
               // player bar, action panel, and trade calculations on every event.
               // Keep the instruction strip outside the interactive map coordinates.
-              final size = Size(
-                box.maxWidth,
-                math.max(
-                  1,
-                  box.maxHeight - (mobileFullscreen ? 0 : _instructionHeight),
-                ),
-              );
+              final size = Size(box.maxWidth, math.max(1, box.maxHeight));
               final hover = hoverPosition == null
                   ? null
                   : _boardHover(hoverPosition, size);
@@ -3285,6 +3359,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                   ? _Move.inspect
                                   : move,
                               selectedGuard,
+                              devicePixelRatio: View.of(context)
+                                  .devicePixelRatio,
+                              boardOriginX: () =>
+                                  (context.findRenderObject()! as RenderBox)
+                                      .localToGlobal(Offset.zero)
+                                      .dx,
                               showTargets:
                                   !widget.observing &&
                                   !_choosingCardTarget &&
@@ -3369,13 +3449,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                         ),
                                       ),
                                     ),
-                                  BoardEventEffects(
-                                    eventIndex: s.events.length,
-                                    event: s.events.isEmpty
-                                        ? null
-                                        : s.events.last,
-                                    anchor: _eventAnchor(size),
-                                  ),
+                                  if (!widget.fastForwardingBots)
+                                    BoardEventEffects(
+                                      eventIndex: s.events.length,
+                                      event: s.events.isEmpty
+                                          ? null
+                                          : s.events.last,
+                                      anchor: _eventAnchor(size),
+                                    ),
                                 ],
                               ),
                             ),
@@ -3499,28 +3580,28 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             icon: const Icon(Icons.close),
           ),
         ),
-      if (!mobileFullscreen)
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: _instructionHeight,
-          child: Container(
+    ],
+  );
+
+  Widget _desktopFooter(double railWidth) => Container(
+    constraints: BoxConstraints(minHeight: _instructionHeight),
+    decoration: BoxDecoration(
+      color: gameColor(context, const Color(0xff14242b)),
+      border: Border(
+        top: BorderSide(color: gameColor(context, const Color(0xff34464a))),
+      ),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 5, 6, 5),
-            decoration: BoxDecoration(
-              color: gameColor(context, const Color(0xff14242b)),
-              border: Border(
-                top: BorderSide(
-                  color: gameColor(context, const Color(0xff34464a)),
-                ),
-              ),
-            ),
             child: Row(
               children: [
                 Expanded(
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         _instruction,
@@ -3559,7 +3640,29 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
           ),
         ),
-    ],
+        SizedBox(
+          width: railWidth,
+          child: _canFastForward
+              ? null
+              : Visibility(
+                  visible:
+                      s.tactical == null &&
+                      !widget.observing &&
+                      s.phase != MatchPhase.finished,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    child: _turnButton(),
+                  ),
+                ),
+        ),
+      ],
+    ),
   );
 
   bool get phaseAllowsChoice => s.phase == MatchPhase.actions;
@@ -3609,7 +3712,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             _tab == index
                                 ? gameColor(context, const Color(0xff2c4145))
                                 : Colors.transparent,
-                            gameColor(context, const Color(0xff786039)),
+                            gameColor(
+                              context,
+                              const Color(0xff786039),
+                              light: const Color(0xffe4cda3),
+                            ),
                             _cardsTabPulse * 0.7,
                           )
                         : _tab == index
@@ -3719,6 +3826,10 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           minimumSize: const Size.fromHeight(52),
           alignment: Alignment.centerLeft,
+          disabledForegroundColor:
+              Theme.of(context).brightness == Brightness.light
+              ? gameColor(context, const Color(0xffabbfc2))
+              : null,
           backgroundColor: choice == action
               ? gameColor(context, const Color(0xff354e4b))
               : gameColor(context, const Color(0xff20343c)),
@@ -3887,7 +3998,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 8),
           Text(
-            'Tap a glowing mark on the map.',
+            phase == MatchPhase.setupRoad
+                ? 'Tap an edge beside your new settlement.'
+                : 'Tap a glowing mark on the map.',
             style: TextStyle(
               fontSize: 12,
               color: gameColor(context, const Color(0xffabbfc2)),
@@ -4117,6 +4230,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             Builder(
               builder: (context) {
                 final level = s.players[viewerSeat].level(track);
+                final terrain = terrainLabel(track.sourceLand);
+                final rolls = MatchEngine.developmentHexes(
+                  s,
+                  track,
+                  viewerSeat,
+                ).map((hex) => hex.productionNumber!).toList()..sort();
                 final cost = level == 5
                     ? <Resource, int>{}
                     : MatchEngine.developmentCost(s, track, level + 1);
@@ -4134,6 +4253,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                             Text(
                               '${track.name.toUpperCase()} · $level/5',
                               style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              rolls.isEmpty
+                                  ? 'Requires your Town or Capital on a $terrain hex'
+                                  : '$terrain hexes · ${rolls.join(', ')}',
+                              style: const TextStyle(fontSize: 12),
                             ),
                             Text(
                               level < 5
@@ -4190,16 +4315,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     ];
   }
 
-  Widget _turnAction() => Container(
-    padding: EdgeInsets.symmetric(horizontal: 10, vertical: _compact ? 2 : 10),
-    decoration: BoxDecoration(
-      border: Border(
-        top: BorderSide(color: gameColor(context, const Color(0xff34464a))),
-      ),
-    ),
-    child: SizedBox(width: double.infinity, child: _turnButton()),
-  );
-
   VoidCallback? get _turnActionCallback =>
       widget.observing || (widget.online && s.actingSeat != viewerSeat)
       ? null
@@ -4238,10 +4353,12 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               disabledBackgroundColor: gameColor(
                 context,
                 const Color(0xff425963),
+                light: const Color(0xffeee9df),
               ),
               disabledForegroundColor: gameColor(
                 context,
                 const Color(0xfff4eee2),
+                light: const Color(0xff405458),
               ),
               backgroundColor: gameColor(context, const Color(0xffe5c183)),
               foregroundColor: gameColor(context, const Color(0xff28271e)),
@@ -4318,7 +4435,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   vertical: horizontal ? 4 : 0,
                 ),
                 decoration: BoxDecoration(
-                  color: gameColor(context, const Color(0xff20323a)),
+                  color: gameColor(
+                    context,
+                    const Color(0xff20323a),
+                    light: const Color(0xffeee9df),
+                  ),
                   borderRadius: BorderRadius.circular(8),
                   border: Border(
                     top: BorderSide(
@@ -4585,11 +4706,7 @@ class _TradeComposerState extends State<_TradeComposer> {
       ))
         MatchEngine.capitalCost,
       for (final track in StrategyDeck.values)
-        if (s.current.level(track) < 5 &&
-            s.sites.values.any(
-              (site) =>
-                  site.owner == s.active && site.structure != Structure.village,
-            ))
+        if (MatchEngine.canDevelop(funded, track))
           MatchEngine.developmentCost(s, track, s.current.level(track) + 1),
     ];
     int shortfall(Map<Resource, int> cost) => cost.entries.fold(
@@ -4749,6 +4866,22 @@ class _TradeComposerState extends State<_TradeComposer> {
         available >= required &&
         (!bank || bankAvailable >= receipt * bankTimes) &&
         (bank || (giveCount > 0 && takeCount > 0 && target != s.active));
+    Widget seatMarker(int seat) =>
+        Icon(Icons.circle, color: seatColors[seat], size: 12);
+
+    Widget recipientLabel(int seat) => Row(
+      children: [
+        seatMarker(seat),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'To ${s.players[seat].id}',
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+
     final title = bank
         ? 'Bank exchange'
         : widget.counter == null
@@ -4927,10 +5060,7 @@ class _TradeComposerState extends State<_TradeComposer> {
                                 if (i != s.active)
                                   DropdownMenuItem(
                                     value: i,
-                                    child: Text(
-                                      'To ${s.players[i].id}',
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                    child: recipientLabel(i),
                                   ),
                             ],
                             onChanged: (seat) {
@@ -4982,10 +5112,7 @@ class _TradeComposerState extends State<_TradeComposer> {
                           if (i != s.active)
                             DropdownMenuItem(
                               value: i,
-                              child: Text(
-                                'To ${s.players[i].id}',
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                              child: recipientLabel(i),
                             ),
                       ],
                       onChanged: (seat) {
@@ -5039,6 +5166,7 @@ class _TradeComposerState extends State<_TradeComposer> {
                         showCheckmark: false,
                         selected: target == i,
                         label: Text(s.players[i].id),
+                        avatar: seatMarker(i),
                         onSelected: (_) => setState(() => target = i),
                       ),
                 ],
@@ -5445,6 +5573,8 @@ class _Painter extends CustomPainter {
     this.state,
     this.mode,
     this.selectedGuard, {
+    required this.devicePixelRatio,
+    required this.boardOriginX,
     required this.roadReveal,
     required this.roadBreak,
     required this.brokenRoads,
@@ -5470,9 +5600,12 @@ class _Painter extends CustomPainter {
            banditBlock,
            resourceIconStyle,
            resourceIconsRevision,
+           _capitalImage,
          ]),
        );
   final MatchState state;
+  final double devicePixelRatio;
+  final double Function() boardOriginX;
   final bool showTargets;
   final int? hoveredRoad;
   final Set<int> cardRoadTargets, cardVertexTargets, cardTileTargets;
@@ -5871,54 +6004,55 @@ class _Painter extends CustomPainter {
       }
       final site = state.sites[v.id];
       if (site == null) continue;
-      if (site.structure == Structure.capital) {
-        canvas.save();
-        canvas.translate(c.dx, c.dy);
-        // A single stepped outline stays recognisable at small board sizes.
-        final castle = Path()
-          ..moveTo(-13, 9)
-          ..lineTo(-13, -10)
-          ..lineTo(-9, -10)
-          ..lineTo(-9, -6)
-          ..lineTo(-5, -6)
-          ..lineTo(-5, -13)
-          ..lineTo(0, -20)
-          ..lineTo(5, -13)
-          ..lineTo(5, -6)
-          ..lineTo(9, -6)
-          ..lineTo(9, -10)
-          ..lineTo(13, -10)
-          ..lineTo(13, 9)
-          ..close();
-        canvas.drawPath(castle, Paint()..color = seatColors[site.owner]);
-        canvas.drawPath(
-          castle,
+      final capitalImage = _capitalImage.value;
+      final width = switch (site.structure) {
+        Structure.village => 15.0,
+        Structure.town => 21.0,
+        Structure.capital => capitalImage == null ? 28.0 : 34.0,
+      };
+      final usesCapitalArt =
+          site.structure == Structure.capital && capitalImage != null;
+      var center = c + Offset(0, usesCapitalArt ? -4 : 2);
+      if (usesCapitalArt) {
+        // Either a pixel center or a pixel boundary can be a mirror axis.
+        final origin = boardOriginX();
+        final halfPixels = 2 * devicePixelRatio;
+        final alignedX = ((origin + center.dx) * halfPixels).round();
+        center = Offset(alignedX / halfPixels - origin, center.dy);
+      }
+      final bounds = Rect.fromCenter(
+        center: center,
+        width: width,
+        height: usesCapitalArt || site.structure == Structure.village
+            ? width
+            : width * .75,
+      );
+      if (state.fortified.contains(v.id)) {
+        final halo = bounds.inflate(10);
+        canvas.drawOval(
+          halo,
           Paint()
-            ..color = const Color(0xff20313b)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..strokeJoin = StrokeJoin.round,
+            ..shader = const RadialGradient(
+              colors: [Color(0xfffff1ae), Color(0xe6ffcb54), Color(0x00ffab26)],
+              stops: [0, .48, 1],
+            ).createShader(halo),
         );
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            const Rect.fromLTWH(-3, 0, 6, 10),
-            const Radius.circular(3),
+      }
+      if (usesCapitalArt) {
+        canvas.drawImageRect(
+          capitalImage,
+          Rect.fromLTWH(
+            0,
+            0,
+            capitalImage.width.toDouble(),
+            capitalImage.height.toDouble(),
           ),
-          Paint()..color = const Color(0xff20313b),
+          bounds,
+          _capitalPaints[site.owner],
         );
-        canvas.restore();
       } else {
-        final width = site.structure == Structure.village
-            ? 15.0
-            : site.structure == Structure.town
-            ? 21.0
-            : 28.0;
         final building = RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: c + const Offset(0, 2),
-            width: width,
-            height: site.structure == Structure.village ? width : width * .75,
-          ),
+          bounds,
           const Radius.circular(3),
         );
         canvas.drawRRect(building, Paint()..color = const Color(0xff20313b));
@@ -5947,15 +6081,6 @@ class _Painter extends CustomPainter {
             );
           }
         }
-      }
-      if (state.fortified.contains(v.id)) {
-        _label(
-          canvas,
-          '▣',
-          c + const Offset(12, -15),
-          19,
-          const Color(0xffffd77e),
-        );
       }
       if (state.reaverScars.contains(v.id)) {
         _label(
@@ -6156,6 +6281,7 @@ class _Painter extends CustomPainter {
   @override
   bool shouldRepaint(_Painter old) =>
       !identical(old.state, state) ||
+      old.devicePixelRatio != devicePixelRatio ||
       old.mode != mode ||
       old.showTargets != showTargets ||
       old.hoveredRoad != hoveredRoad ||

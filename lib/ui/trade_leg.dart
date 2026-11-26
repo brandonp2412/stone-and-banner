@@ -38,6 +38,7 @@ class TradeLeg extends StatelessWidget {
     final gold = gameColor(context, const Color(0xffe5c183));
     final cyan = gameColor(context, const Color(0xff73d9c0));
     final accent = highlight ? cyan : gold;
+    final light = Theme.of(context).brightness == Brightness.light;
 
     return Container(
       decoration: BoxDecoration(
@@ -90,11 +91,15 @@ class TradeLeg extends StatelessWidget {
                         ? FontWeight.w800
                         : FontWeight.w500,
                     color: good == resource
-                        ? gameColor(context, const Color(0xff182b32))
+                        ? gameColor(
+                            context,
+                            const Color(0xff182b32),
+                            light: accent,
+                          )
                         : gameColor(context, const Color(0xffc6d7d9)),
                   ),
                   backgroundColor: gameColor(context, const Color(0xff2b4249)),
-                  selectedColor: accent,
+                  selectedColor: light ? accent.withValues(alpha: .13) : accent,
                   side: BorderSide(
                     color: good == resource
                         ? accent

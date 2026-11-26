@@ -24,8 +24,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('stone-rules-page')), findsOneWidget);
     await golden(tester, 'rules');
-    expect(find.byTooltip('Back to Home'), findsOneWidget);
-    await tester.tap(find.byTooltip('Back to Home'));
+    final back = find.byTooltip('Back to Home');
+    expect(back, findsOneWidget);
+    expect(tester.getCenter(back).dx, lessThan(48));
+    await tester.tap(back);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('stone-home-page')), findsOneWidget);
   });

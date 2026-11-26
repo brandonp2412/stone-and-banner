@@ -1026,7 +1026,30 @@ class MatchEngine {
     return cost;
   }
 
-  static bool canDevelop(MatchState s, StrategyDeck track) {
+  static Iterable<HexTile> developmentHexes(
+    MatchState s,
+    StrategyDeck track,
+    int seat,
+  ) sync* {
+    for (var tile = 0; tile < s.board.tiles.length; tile++) {
+      final hex = s.board.tiles[tile];
+      if (hex.land == track.sourceLand &&
+          s.topology.tileVertices[tile].any((vertex) {
+            final site = s.sites[vertex];
+            return site != null &&
+                site.owner == seat &&
+                site.structure != Structure.village;
+          })) {
+        yield hex;
+      }
+    }
+  }
+
+  static bool canDevelop(MatchState s, StrategyDeck track) =>
+      _canPayForDevelopment(s, track) &&
+      developmentHexes(s, track, s.active).isNotEmpty;
+
+  static bool _canPayForDevelopment(MatchState s, StrategyDeck track) {
     final level = s.current.level(track);
     return s.phase == MatchPhase.actions &&
         level < 5 &&
@@ -2325,7 +2348,15 @@ class MatchEngine {
         ),
       );
     } else if (event is DevelopTown) {
-      _require(canDevelop(s, event.track), 'Cannot develop that track.');
+      _require(
+        _canPayForDevelopment(s, event.track),
+        'Cannot develop that track.',
+      );
+      // Recorded developments used to allow any owned Town or Capital.
+      _require(
+        replaying || developmentHexes(s, event.track, s.active).isNotEmpty,
+        'Your Town or Capital must border the matching terrain.',
+      );
       final level = s.current.level(event.track) + 1;
       s = _pay(s, developmentCost(s, event.track, level));
       final players = List<PlayerState>.of(s.players);

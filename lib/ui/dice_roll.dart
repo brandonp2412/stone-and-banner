@@ -130,7 +130,11 @@ class _DiceRollState extends State<DiceRoll>
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: gameColor(context, const Color(0x9914242b)),
+                      color: gameColor(
+                        context,
+                        const Color(0x9914242b),
+                        light: const Color(0xfffffaf2),
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -142,9 +146,12 @@ class _DiceRollState extends State<DiceRoll>
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(
                             color: gameColor(context, Colors.white),
-                            shadows: const [
-                              Shadow(blurRadius: 4, color: Colors.black),
-                            ],
+                            shadows:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? const [
+                                    Shadow(blurRadius: 4, color: Colors.black),
+                                  ]
+                                : null,
                           ),
                     ),
                   ),

@@ -240,7 +240,7 @@ void main() {
       ) {
         final event = ai.choose(state);
         expect(event, isNotNull);
-        final actor = state.tactical?.responder ?? state.active;
+        final actor = state.actingSeat;
         final view = AiActionAdapter.observe(state, actor);
         state = AiActionAdapter.applySelected(state, view, event!);
         conserved(state);

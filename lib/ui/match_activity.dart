@@ -25,6 +25,7 @@ class MatchActivity extends StatefulWidget {
     this.emotesOnly = false,
     this.showEmotes = true,
     this.showActivity = true,
+    this.fastForwardingBots = false,
     this.emote,
     this.emoteSerial = 0,
     this.emoteSeat,
@@ -34,7 +35,7 @@ class MatchActivity extends StatefulWidget {
   final int viewerSeat;
   final Set<int> computerSeats;
   final int? targetSeat;
-  final bool emotesOnly, showEmotes, showActivity;
+  final bool emotesOnly, showEmotes, showActivity, fastForwardingBots;
   final String? emote;
   final int emoteSerial;
   final int? emoteSeat;
@@ -113,7 +114,15 @@ class _MatchActivityState extends State<MatchActivity> {
         });
       }
     }
-    if (widget.emotesOnly || !widget.showActivity) return;
+    if (widget.fastForwardingBots && _cue?.isEmote == false) {
+      _dismiss?.cancel();
+      _cue = null;
+    }
+    if (widget.emotesOnly ||
+        !widget.showActivity ||
+        widget.fastForwardingBots) {
+      return;
+    }
     final state = widget.state;
     if (state.events.length <= oldWidget.state.events.length) return;
     final event = state.events.last;
@@ -125,7 +134,12 @@ class _MatchActivityState extends State<MatchActivity> {
         ? event.player
         : event is ProposeTrade && event.counterActor != null
         ? event.counterActor!
+        : event is RollDice
+        ? state.active
         : oldWidget.state.active;
+    if (oldWidget.fastForwardingBots && widget.computerSeats.contains(actor)) {
+      return;
+    }
     final cue =
         _tradeDeclineReaction(oldWidget.state, state, event) ??
         _cutOffReaction(oldWidget.state, state, event, actor) ??
@@ -589,15 +603,7 @@ class _MatchActivityState extends State<MatchActivity> {
                     children: [
                       GameEmoteIcon(cue.emoji, size: 94),
                       const SizedBox(height: 5),
-                      Text(
-                        widget.state.players[cue.seat].id,
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: gameColor(context, Colors.white),
-                          shadows: [Shadow(blurRadius: 9, color: Colors.black)],
-                        ),
-                      ),
+                      _emoteName(context, widget.state.players[cue.seat].id),
                     ],
                   ),
           ),
@@ -623,6 +629,33 @@ class _MatchActivityState extends State<MatchActivity> {
       ),
     );
   }
+}
+
+// The board has both bright terrain and dark water behind the name.
+Widget _emoteName(BuildContext context, String name) {
+  final light = Theme.of(context).brightness == Brightness.light;
+  final label = Text(
+    name,
+    style: TextStyle(
+      fontSize: 17,
+      fontWeight: FontWeight.w900,
+      color: gameColor(context, Colors.white),
+      shadows: light
+          ? null
+          : const [Shadow(blurRadius: 9, color: Colors.black)],
+    ),
+  );
+  if (!light) return label;
+  return DecoratedBox(
+    decoration: BoxDecoration(
+      color: gameColor(context, const Color(0xff172a33)),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: label,
+    ),
+  );
 }
 
 class _ActivityCard extends StatelessWidget {
@@ -661,19 +694,12 @@ class _ActivityCard extends StatelessWidget {
             curve: Curves.elasticOut,
             builder: (context, scale, child) =>
                 Transform.scale(scale: scale, child: child),
-            child: cue.cheeky
-                ? Semantics(
-                    label: 'Cheeky devil emoji',
-                    child: SizedBox(
-                      width: MediaQuery.sizeOf(context).width < 900 ? 26 : 38,
-                      height: MediaQuery.sizeOf(context).width < 900 ? 26 : 38,
-                      child: CustomPaint(painter: _CheekyDevilPainter()),
-                    ),
-                  )
-                : GameEmoteIcon(
-                    cue.emoji,
-                    size: MediaQuery.sizeOf(context).width < 900 ? 22 : 32,
-                  ),
+            child: GameEmoteIcon(
+              cue.cheeky ? '😈' : cue.emoji,
+              size: cue.cheeky
+                  ? (MediaQuery.sizeOf(context).width < 900 ? 26 : 38)
+                  : (MediaQuery.sizeOf(context).width < 900 ? 22 : 32),
+            ),
           ),
           SizedBox(width: MediaQuery.sizeOf(context).width < 900 ? 6 : 12),
           Flexible(
@@ -720,74 +746,4 @@ class _ActivityCard extends StatelessWidget {
       ),
     ),
   );
-}
-
-/// Cross-platform, emoji-like mischievous devil: no platform emoji font needed.
-class _CheekyDevilPainter extends CustomPainter {
-  const _CheekyDevilPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.scale(size.width / 38, size.height / 38);
-    const yellow = Color(0xffffd449);
-    const deep = Color(0xffc58a20);
-    final hornPaint = Paint()..color = deep;
-    final leftHorn = Path()
-      ..moveTo(5, 14)
-      ..quadraticBezierTo(3, 6, 4, 0)
-      ..quadraticBezierTo(10, 7, 14, 7)
-      ..close();
-    final rightHorn = Path()
-      ..moveTo(24, 7)
-      ..quadraticBezierTo(30, 6, 34, 0)
-      ..quadraticBezierTo(35, 8, 32, 14)
-      ..close();
-    canvas.drawPath(leftHorn, hornPaint);
-    canvas.drawPath(rightHorn, hornPaint);
-    canvas.drawCircle(const Offset(19, 21), 16, Paint()..color = yellow);
-    canvas.drawCircle(
-      const Offset(13.2, 18),
-      3.5,
-      Paint()..color = Colors.white,
-    );
-    canvas.drawCircle(const Offset(25, 18), 3.5, Paint()..color = Colors.white);
-    canvas.drawCircle(
-      const Offset(14.4, 17.6),
-      1.7,
-      Paint()..color = const Color(0xff302217),
-    );
-    canvas.drawCircle(
-      const Offset(26.2, 17.6),
-      1.7,
-      Paint()..color = const Color(0xff302217),
-    );
-    final brow = Paint()
-      ..color = const Color(0xff92501b)
-      ..strokeWidth = 2.6
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(const Offset(9, 12), const Offset(17, 13.7), brow);
-    canvas.drawLine(const Offset(21, 13.7), const Offset(29, 12), brow);
-    final smirk = Path()
-      ..moveTo(10.5, 25)
-      ..quadraticBezierTo(19, 33.7, 29, 23.5);
-    canvas.drawPath(
-      smirk,
-      Paint()
-        ..color = const Color(0xff82501b)
-        ..strokeWidth = 2.8
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
-    );
-    canvas.drawCircle(
-      const Offset(30.2, 22.7),
-      2,
-      Paint()..color = const Color(0xffffeb9a),
-    );
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _CheekyDevilPainter oldDelegate) => false;
 }

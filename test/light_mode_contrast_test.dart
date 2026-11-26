@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stone_and_banner/engine/board.dart';
+import 'package:stone_and_banner/ui/dice_roll.dart';
 import 'package:stone_and_banner/ui/game_colors.dart';
-import 'package:stone_and_banner/ui/match_screen.dart' show seatColors;
+import 'package:stone_and_banner/ui/match_screen.dart'
+    show MatchView, seatColors;
+import 'package:stone_and_banner/ui/trade_leg.dart';
+
+import 'landscape_tabletop_test.dart' show tableWithSupplies;
 
 double contrast(Color a, Color b) {
   final x = a.computeLuminance(), y = b.computeLuminance();
@@ -65,6 +71,100 @@ void main() {
       ),
     );
   });
+  testWidgets(
+    'selected resource labels and outlines contrast with the chip fill',
+    (tester) async {
+      for (final highlight in [false, true]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TradeLeg(
+                title: 'Goods',
+                hint: 'Select a good',
+                resource: Resource.values.first,
+                count: 1,
+                onResource: (_) {},
+                onCount: (_) {},
+                showCount: false,
+                highlight: highlight,
+              ),
+            ),
+          ),
+        );
+        final chipFinder = find.byWidgetPredicate(
+          (widget) => widget is ChoiceChip && widget.selected,
+        );
+        final chip = tester.widget<ChoiceChip>(chipFinder);
+        final panel = gameColor(
+          tester.element(chipFinder),
+          const Color(0xff1e343d),
+        );
+        final fill = Color.alphaBlend(chip.selectedColor!, panel);
+        expect(
+          contrast(chip.labelStyle!.color!, fill),
+          greaterThanOrEqualTo(4.5),
+        );
+        expect(contrast(chip.side!.color, fill), greaterThanOrEqualTo(3));
+      }
+    },
+  );
+
+  testWidgets('the disabled turn action remains legible while observing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MatchView(
+            state: tableWithSupplies(),
+            onEvent: (_) {},
+            observing: true,
+          ),
+        ),
+      ),
+    );
+    final action = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.byIcon(Icons.check_circle_outline),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    expect(action.onPressed, isNull);
+    const disabled = {WidgetState.disabled};
+    expect(
+      contrast(
+        action.style!.foregroundColor!.resolve(disabled)!,
+        action.style!.backgroundColor!.resolve(disabled)!,
+      ),
+      greaterThanOrEqualTo(4.5),
+    );
+  });
+
+  testWidgets('dice text has an opaque high-contrast backdrop over the board', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: DiceRoll(first: 3, second: 4, onComplete: () {}),
+        ),
+      ),
+    );
+    final label = find.text('Rolling…');
+    final text = tester.widget<Text>(label);
+    final plaque = tester.widget<Container>(
+      find.ancestor(of: label, matching: find.byType(Container)).first,
+    );
+    final fill = (plaque.decoration! as BoxDecoration).color!;
+    expect(fill.a, 1);
+    expect(contrast(text.style!.color!, fill), greaterThanOrEqualTo(4.5));
+  });
+
   testWidgets('dark palette and translucent colors remain unchanged', (
     tester,
   ) async {

@@ -20,6 +20,7 @@ void main() {
     MatchState state, {
     bool observing = false,
     int? seat,
+    Future<void> Function()? onSettings,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -29,6 +30,7 @@ void main() {
             onEvent: (_) {},
             observing: observing,
             visibleSeat: seat,
+            onSettings: onSettings,
           ),
         ),
       ),
@@ -161,7 +163,14 @@ void main() {
         'gameplay_hints_seen_v1': ['town'],
       });
       final state = tableWithSupplies();
-      await showMatch(tester, state);
+      await showMatch(
+        tester,
+        state,
+        onSettings: () async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('gameplay_hints_seen_v1');
+        },
+      );
       expect(
         find.byKey(const ValueKey('gameplay-hint-actions')),
         findsOneWidget,
@@ -189,9 +198,10 @@ void main() {
       expect(find.byType(FocusHint), findsNothing);
       await tester.tap(find.text('Realm'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Show first-time hints again'));
+      expect(find.text('Show first-time hints again'), findsNothing);
+      await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Show first-time hints again'));
+      await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('gameplay-hint-realm')), findsOneWidget);
       final prefs = await SharedPreferences.getInstance();
