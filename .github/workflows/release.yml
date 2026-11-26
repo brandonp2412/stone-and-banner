@@ -129,6 +129,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+          persist-credentials: false
       - name: Download release files
         uses: actions/download-artifact@v4
         with:
@@ -147,7 +151,8 @@ jobs:
           RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --title "Stone & Banner ${RELEASE_TAG#v}" --generate-notes --draft
+            python3 scripts/release_notes.py "release-notes/${RELEASE_TAG#v}.txt"
+            gh release create "$RELEASE_TAG" --verify-tag --title "Stone & Banner ${RELEASE_TAG#v}" --notes-file "release-notes/${RELEASE_TAG#v}.txt" --draft
           fi
           gh release upload "$RELEASE_TAG" dist/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
