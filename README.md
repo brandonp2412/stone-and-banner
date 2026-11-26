@@ -18,4 +18,4 @@ flutter run -d chrome
 flutter test
 ```
 
-[Screenshots](fastlane/metadata/android/en-US/images) are generated on every push to main. [Release builds](https://github.com/brandonp2412/stone-and-banner/actions/workflows/release.yml) are generated on version tags or manually.
+[Screenshots](fastlane/metadata/android/en-US/images) are generated on every push to main. [Release builds](https://github.com/brandonp2412/stone-and-banner/actions/workflows/release.yml) are published when you push a version tag or run the workflow manually for an existing tag. The same workflow publishes the Android, Linux and Windows downloads and deploys the web version to GitHub Pages.

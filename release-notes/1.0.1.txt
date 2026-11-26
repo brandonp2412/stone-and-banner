@@ -1,0 +1,1 @@
+Capitals have new artwork. The game now aligns the artwork to screen pixels so the windows and edges render more evenly.

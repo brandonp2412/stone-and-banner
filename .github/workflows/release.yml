@@ -122,9 +122,86 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  build-web:
+    name: Build website
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+          persist-credentials: false
+      - name: Install Node.js for signalling tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Test P2P invitations and room authority
+        run: flutter test test/p2p_links_test.dart test/one_link_invites_test.dart test/p2p_signalling_diagnostics_test.dart test/p2p_bot_lobby_test.dart test/p2p_bot_long_run_test.dart test/p2p_trade_turn_ui_test.dart test/incoming_trade_modal_test.dart test/ai_turn_coordinator_test.dart test/broadcast_trade_test.dart test/multiplayer_playthrough_test.dart test/stage6_room_test.dart
+      - name: Verify direct WebRTC ICE and response handshakes
+        run: node --test tool/p2p_ice_test.js tool/p2p_answer_test.js
+      - name: Test Cloudflare signalling Worker and diagnostics endpoint
+        run: |
+          npx --yes wrangler@4.166.0 dev --config wrangler.signalling.jsonc --port 8799 --ip 127.0.0.1 --local > /tmp/stone-signalling-ci.log 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 40); do
+            if curl -s --max-time 2 -o /dev/null http://127.0.0.1:8799/; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/stone-signalling-ci.log
+            exit 1
+          fi
+          node tool/signal_worker_smoke.mjs
+      - name: Build website
+        run: flutter build web --release --base-href /stone-and-banner/
+      - name: Bust browser bridge cache on each deployment
+        run: sed -i "s|p2p.js?v=5|p2p.js?v=$(git rev-parse HEAD)|" build/web/index.html
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+      - name: Confirm unique indexed Pages artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 30); do
+            count=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '[.artifacts[] | select(.name=="github-pages")] | length')
+            if [ "$count" -eq 1 ]; then
+              echo "Pages artifact indexed and unique"
+              sleep 3
+              exit 0
+            fi
+            if [ "$count" -gt 1 ]; then
+              echo "::error::Duplicate Pages artifacts in one run"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::Pages artifact was not indexed"
+          exit 1
+
   release:
     name: Publish release assets
-    needs: [resolve, build]
+    needs: [resolve, build, build-web]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -156,3 +233,22 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" dist/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
+
+  deploy-web:
+    name: Deploy website to GitHub Pages
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
