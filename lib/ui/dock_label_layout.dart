@@ -19,7 +19,7 @@ import 'package:flutter/painting.dart';
   if (normal.dx * towardTile.dx + normal.dy * towardTile.dy > 0) {
     normal = -normal;
   }
-  const width = 42.0;
+  final width = hasResource ? 42.0 : 27.0;
   const height = 20.0;
   final support = normal.dx.abs() * width / 2 + normal.dy.abs() * height / 2;
   final preferred = shore + normal * (support + 6);

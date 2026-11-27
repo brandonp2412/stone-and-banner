@@ -5687,37 +5687,40 @@ class _Painter extends CustomPainter {
         }
       }
       hex.close();
-      canvas.drawShadow(hex, const Color(0xff04151c), radius * .14, true);
+
       final base = landColors[tile.land.index];
-      canvas.drawPath(
-        hex,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color.lerp(base, const Color(0xfff6e6aa), .13)!,
-              Color.lerp(base, const Color(0xff142d32), .24)!,
-            ],
-          ).createShader(Rect.fromCircle(center: c, radius: radius)),
-      );
+      canvas.drawPath(hex, Paint()..color = base);
+      final terrain = _tabletopArt[tile.land.name];
       canvas.save();
       canvas.clipPath(hex);
-      canvas.translate(c.dx, c.dy);
-      // The board uses an oblique projection, but artwork must stay isotropic.
-      final terrain = _tabletopArt[tile.land.name];
       if (terrain != null) {
-        _paintTabletop(canvas, terrain, hex.getBounds().shift(-c));
+        // Terrain is scenery, not a game piece. Blend it into the land
+        // colour and crop out the decorative tile frame so adjacent hexes
+        // share a single, quiet boundary.
+        final source = Rect.fromLTWH(
+          0,
+          0,
+          terrain.width.toDouble(),
+          terrain.height.toDouble(),
+        );
+        canvas.drawImageRect(
+          terrain,
+          source.deflate(5),
+          hex.getBounds(),
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..color = const Color(0x88ffffff),
+        );
       } else {
-        _terrain(canvas, Offset.zero, radius, tile.land, g);
+        _terrain(canvas, c, radius, tile.land, g);
       }
       canvas.restore();
       canvas.drawPath(
         hex,
         Paint()
-          ..color = const Color(0xffb4b28b).withValues(alpha: .60)
+          ..color = const Color(0xff263b36).withValues(alpha: .8)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.6,
+          ..strokeWidth = 1.1,
       );
       if (tile.productionNumber == state.dice &&
           state.dice != null &&
@@ -5756,31 +5759,15 @@ class _Painter extends CustomPainter {
               ..strokeWidth = radius * (.045 + .055 * pulse),
           );
         }
-        canvas.drawShadow(
-          Path()..addOval(
-            Rect.fromCircle(center: c, radius: radius * (.35 + .045 * pulse)),
-          ),
-          Colors.black,
-          radius * .06,
-          true,
-        );
-        canvas.drawCircle(
-          c,
-          radius * (.35 + .045 * pulse),
-          Paint()
-            ..color = Color.lerp(
-              const Color(0xfff5e6c4),
-              const Color(0xffffefad),
-              pulse,
-            )!,
-        );
         canvas.drawCircle(
           c,
           radius * (.30 + .045 * pulse),
           Paint()
-            ..color = const Color(0xffb6a17c)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = .8,
+            ..color = Color.lerp(
+              const Color(0xfff4e9d1),
+              const Color(0xffffefad),
+              pulse,
+            )!,
         );
         final ink = number == 6 || number == 8
             ? const Color(0xffa74637)
@@ -5789,14 +5776,14 @@ class _Painter extends CustomPainter {
           canvas,
           '$number',
           c - Offset(0, radius * .055),
-          radius * (.46 + .08 * pulse),
+          radius * (.42 + .08 * pulse),
           ink,
         );
         final pips = 6 - (7 - number).abs();
         for (var dot = 0; dot < pips; dot++) {
           canvas.drawCircle(
-            c + Offset((dot - (pips - 1) / 2) * radius * .075, radius * .20),
-            radius * .023,
+            c + Offset((dot - (pips - 1) / 2) * radius * .075, radius * .165),
+            radius * .022,
             Paint()..color = ink,
           );
         }
@@ -5810,7 +5797,9 @@ class _Painter extends CustomPainter {
       if (i == state.banditTile) {
         // Keep the production number unobscured; shame the bandit whenever
         // the blocked number rolls or a guard stops a theft.
-        final bandit = c + Offset(radius * .51, -radius * .29);
+        final bandit = state.board.tiles[i].productionNumber == null
+            ? c
+            : c + Offset(radius * .51, -radius * .29);
         final progress = banditBlock.value;
         final humiliation = humiliatedBanditTile == i && progress < 1
             ? math.sin(progress * math.pi).abs()
@@ -5918,14 +5907,14 @@ class _Painter extends CustomPainter {
       }
       final building = e.id == animatedRoad && roadReveal.value < 1;
       final tip = building ? Offset.lerp(a, b, roadReveal.value)! : b;
-      final road = _tabletopArt['road'];
-      final length = (b - a).distance;
+      // A single ownership stripe reads more clearly than a patterned
+      // cobblestone sprite, especially when several routes meet.
       canvas.drawLine(
         a,
         tip,
         Paint()
           ..color = const Color(0xff1b2834)
-          ..strokeWidth = 13
+          ..strokeWidth = 9
           ..strokeCap = StrokeCap.round,
       );
       canvas.drawLine(
@@ -5933,17 +5922,9 @@ class _Painter extends CustomPainter {
         tip,
         Paint()
           ..color = seatColors[owner]
-          ..strokeWidth = 10
+          ..strokeWidth = 5
           ..strokeCap = StrokeCap.round,
       );
-      if (road != null && length > 0) {
-        canvas.save();
-        canvas.translate(a.dx, a.dy);
-        canvas.rotate((b - a).direction);
-        canvas.clipRect(Rect.fromLTWH(-2, -8, (tip - a).distance + 2, 16));
-        _paintTabletop(canvas, road, Rect.fromLTWH(0, -3.5, length, 7));
-        canvas.restore();
-      }
       if (building) {
         canvas.drawCircle(
           tip,
@@ -6050,10 +6031,10 @@ class _Painter extends CustomPainter {
       if (showTargets && legal.contains(v.id)) {
         canvas.drawCircle(
           c,
-          math.max(setupVillage ? 5 : 7, g.radius * (setupVillage ? .15 : .22)),
+          math.max(setupVillage ? 4 : 5, g.radius * (setupVillage ? .12 : .16)),
           Paint()
             ..color = const Color(0xffaeffdf)
-                .withValues(alpha: setupVillage ? .18 : .45),
+                .withValues(alpha: setupVillage ? .12 : .20),
         );
         canvas.drawCircle(
           c,
@@ -6208,8 +6189,8 @@ class _Painter extends CustomPainter {
       );
       final badge = layout.badge;
       final gold = Paint()
-        ..color = const Color(0xffe5c58a)
-        ..strokeWidth = 1.5
+        ..color = const Color(0xffc0ac85).withValues(alpha: .7)
+        ..strokeWidth = 1.0
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(layout.shore, layout.connection, gold);
       // Mark the actual trading edge, without covering the ownership road.
@@ -6224,9 +6205,9 @@ class _Painter extends CustomPainter {
       canvas.drawRRect(
         frame,
         Paint()
-          ..color = const Color(0xffc7ac78)
+          ..color = const Color(0xffc7ac78).withValues(alpha: .4)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = .8,
+          ..strokeWidth = .6,
       );
       if (dock.resource case final resource?) {
         paintResourceIcon(
@@ -6236,15 +6217,8 @@ class _Painter extends CustomPainter {
           resource,
         );
       }
-      final harbor = _tabletopArt['harbor'];
-      if (dock.resource == null && harbor != null) {
-        _paintTabletop(
-          canvas,
-          harbor,
-          _spriteBounds(harbor, Offset(badge.left + 10, badge.center.dy), 17),
-        );
-      }
-      final textCenter = badge.center + const Offset(8, 0);
+      final textCenter =
+          badge.center + Offset(dock.resource == null ? 0 : 8, 0);
       label.paint(
         canvas,
         textCenter - Offset(label.width / 2, label.height / 2),
