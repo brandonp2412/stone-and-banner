@@ -1,0 +1,1 @@
+The web loading screen now features the original Stone & Banner artwork, a golden animated loading bar and responsive portrait and landscape layouts.
