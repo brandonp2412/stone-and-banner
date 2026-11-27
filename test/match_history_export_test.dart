@@ -77,6 +77,56 @@ void main() {
     expect(restored.botDifficulty, BotDifficulty.easy);
   });
 
+  test(
+    'recovers all months, standalone metadata and orphan replay blobs',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      for (final seed in [900, 901, 902]) {
+        final state = MatchEngine.apply(
+          MatchEngine.newGame(['Ada', 'Ben', 'Cora'], seed),
+          const PlaceVillage(0),
+        );
+        await MatchArchive.save(prefs, state, computerSeats: {1, 2});
+      }
+      final original = await MatchArchive.list(prefs);
+      final month = prefs.getStringList(MatchArchive.monthsKey)!.single;
+      final index = 'stone_banner_archive_index_v1_$month';
+      final entries = prefs.getStringList(index)!;
+      final older = Map<String, dynamic>.from(jsonDecode(entries[0]) as Map)
+        ..['at'] = '2025-10-31T23:59:00.000Z';
+      await prefs.setStringList('stone_banner_archive_index_v1_2025-10', [
+        jsonEncode(older),
+      ]);
+      await prefs.remove(MatchArchive.monthsKey);
+      await prefs.remove(index);
+      // One old-format replay has neither metadata nor an index entry.
+      final orphan = original.firstWhere((e) => e.key != older['key']);
+      await prefs.remove(orphan.key.replaceFirst('_replay_', '_metadata_'));
+      await prefs.setString(
+        'stone_banner_archive_replay_v1_corrupt',
+        'invalid',
+      );
+      final recovered = await MatchArchive.list(prefs);
+      expect(recovered, hasLength(3));
+      expect(
+        recovered.map((e) => e.key).toSet(),
+        original.map((e) => e.key).toSet(),
+      );
+      expect(
+        recovered.firstWhere((e) => e.key == older['key']).savedAt,
+        older['at'],
+      );
+      expect(recovered.firstWhere((e) => e.key == orphan.key).savedAt, isEmpty);
+      final exported =
+          jsonDecode(MatchArchive.exportAll(prefs, recovered)) as Map;
+      expect(exported['matches'], hasLength(3));
+      expect(
+        prefs.getString('stone_banner_archive_replay_v1_corrupt'),
+        'invalid',
+      );
+    },
+  );
+
   testWidgets('export all saves exact replays and metadata on portrait', (
     tester,
   ) async {

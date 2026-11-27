@@ -514,6 +514,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
   }
 
   Future<void> _showMatchHistory(BuildContext context) async {
+    await _saveTail;
     final prefs = await SharedPreferences.getInstance();
     if (!context.mounted) return;
     await Navigator.of(context).push(

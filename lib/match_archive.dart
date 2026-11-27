@@ -6,8 +6,8 @@ import 'engine/board.dart';
 import 'engine/heuristic_ai.dart';
 import 'engine/match.dart';
 
-/// Small month indexes with individual immutable replay blobs. Autosaves never
-/// update an archive: only completed or replaced matches are archived.
+/// Independent replay blobs and metadata, with legacy monthly indexes. Only
+/// completed or replaced matches are archived.
 class ArchivedMatch {
   const ArchivedMatch(
     this.key,
@@ -80,6 +80,10 @@ abstract final class MatchArchive {
   static const monthsKey = 'stone_banner_archive_months_v1';
   static const _indexPrefix = 'stone_banner_archive_index_v1_';
   static const _replayPrefix = 'stone_banner_archive_replay_v1_';
+  static const _metadataPrefix = 'stone_banner_archive_metadata_v1_';
+
+  static String _metadataKey(String replayKey) =>
+      '$_metadataPrefix${replayKey.substring(_replayPrefix.length)}';
 
   static Future<void> save(
     SharedPreferences prefs,
@@ -89,6 +93,7 @@ abstract final class MatchArchive {
     BotDifficulty? botDifficulty,
   }) async {
     if (match.events.isEmpty) return;
+    await prefs.reload();
     final timestamp = DateTime.now().toUtc().toIso8601String();
     final month = timestamp.substring(0, 7);
     // One immutable replay per completed/abandoned state, not one ever-growing
@@ -114,22 +119,21 @@ abstract final class MatchArchive {
       computerSeats: computerSeats,
       botDifficulty: botDifficulty,
     );
-    final indexKey = '$_indexPrefix$month';
-    final previous = prefs.getStringList(indexKey) ?? [];
-    if (previous.any((raw) {
-      try {
-        return (jsonDecode(raw) as Map)['key'] == key;
-      } on Object {
-        return false;
-      }
-    })) {
+    // An existing replay may have been archived in a different month or tab.
+    if (prefs.containsKey(key) && _indexedEntries(prefs).containsKey(key)) {
       return;
     }
-    // Commit blob before indexing, so interrupted writes cannot create a
-    // manifest entry pointing at absent data.
+    // Store the replay first, then independent metadata. A stale monthly
+    // index or interrupted write can no longer hide a saved replay.
     if (!prefs.containsKey(key) && !await prefs.setString(key, bytes)) {
       throw StateError('Could not archive the match replay.');
     }
+    if (!await prefs.setString(_metadataKey(key), jsonEncode(entry.toJson()))) {
+      throw StateError('Could not archive the match metadata.');
+    }
+    // Keep writing legacy indexes for clients running an older build.
+    final indexKey = '$_indexPrefix$month';
+    final previous = prefs.getStringList(indexKey) ?? [];
     if (!await prefs.setStringList(indexKey, [
       jsonEncode(entry.toJson()),
       ...previous,
@@ -143,25 +147,76 @@ abstract final class MatchArchive {
     }
   }
 
-  static Future<List<ArchivedMatch>> list(SharedPreferences prefs) async {
-    final result = <ArchivedMatch>[];
-    final months = [...?prefs.getStringList(monthsKey)]
-      ..sort((a, b) => b.compareTo(a));
-    for (final month in months) {
-      for (final raw
-          in prefs.getStringList('$_indexPrefix$month') ?? <String>[]) {
-        try {
-          final entry = ArchivedMatch.fromJson(
-            jsonDecode(raw) as Map<String, dynamic>,
-          );
-          if (prefs.containsKey(entry.key)) result.add(entry);
-        } on Object {
-          // Corrupt metadata must not hide other saved matches.
+  static Map<String, ArchivedMatch> _indexedEntries(SharedPreferences prefs) {
+    final entries = <String, ArchivedMatch>{};
+    void add(String raw) {
+      try {
+        final entry = ArchivedMatch.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>,
+        );
+        if (entry.key.startsWith(_replayPrefix) &&
+            prefs.containsKey(entry.key)) {
+          final previous = entries[entry.key];
+          if (previous == null ||
+              entry.savedAt.compareTo(previous.savedAt) < 0) {
+            entries[entry.key] = entry;
+          }
         }
+      } on Object {
+        // A damaged record must not hide unrelated matches.
       }
     }
-    result.sort((a, b) => b.savedAt.compareTo(a.savedAt));
-    return result;
+
+    // Enumerate actual keys rather than trusting the mutable month manifest.
+    for (final key in prefs.getKeys().where(
+      (k) => k.startsWith(_indexPrefix),
+    )) {
+      try {
+        for (final raw in prefs.getStringList(key) ?? <String>[]) {
+          add(raw);
+        }
+      } on Object {
+        // Continue with independent records and replay recovery.
+      }
+    }
+    for (final key in prefs.getKeys().where(
+      (k) => k.startsWith(_metadataPrefix),
+    )) {
+      try {
+        final raw = prefs.getString(key);
+        if (raw != null) add(raw);
+      } on Object {
+        // Continue with the replay itself.
+      }
+    }
+    return entries;
+  }
+
+  static Future<List<ArchivedMatch>> list(SharedPreferences prefs) async {
+    await prefs.reload();
+    final entries = _indexedEntries(prefs);
+    for (final key in prefs.getKeys().where(
+      (k) => k.startsWith(_replayPrefix),
+    )) {
+      if (entries.containsKey(key)) continue;
+      try {
+        final match = MatchEngine.importReplay(prefs.getString(key)!);
+        final winner = MatchEngine.winner(match);
+        entries[key] = ArchivedMatch(
+          key,
+          '', // Legacy orphan replays do not contain a date or bot settings.
+          [for (final player in match.players) player.id],
+          match.round,
+          match.events.length,
+          match.phase == MatchPhase.finished,
+          winner == null ? null : match.players[winner].id,
+        );
+      } on Object {
+        // An unreadable replay cannot be reconstructed; keep its stored data.
+      }
+    }
+    return entries.values.toList()
+      ..sort((a, b) => b.savedAt.compareTo(a.savedAt));
   }
 
   /// Portable, versioned archive containing the original replay strings.
