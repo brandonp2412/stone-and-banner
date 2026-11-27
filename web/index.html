@@ -33,31 +33,81 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#15252c">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preload" as="image" href="assets/assets/art/stone_banner_crest.jpg">
   <style>
-    html, body { margin: 0; background: #15252c; }
+    html, body { margin: 0; background: #101e25; }
     #stone-loading {
-      position: fixed; inset: 0; z-index: 9999; display: grid;
-      place-content: center; justify-items: center; gap: 18px;
-      background: #15252c; color: #e5c183; font: 16px system-ui, sans-serif;
+      position: fixed; inset: 0; z-index: 9999;
+      display: grid; place-items: center; overflow: auto;
+      background: radial-gradient(ellipse at 50% 38%, #123044 0%, #091c29 46%, #06131d 100%);
+      color: #efd6a3; font: 16px system-ui, sans-serif;
     }
-    #stone-loading strong { font-size: 25px; letter-spacing: .03em; }
-    #stone-loading small { color: #c0cbd0; }
-    #stone-loading .spinner {
-      width: 30px; height: 30px; border: 3px solid #41535b;
-      border-top-color: #e5c183; border-radius: 50%;
-      animation: stone-spin .8s linear infinite;
+    #stone-loading .loading-content {
+      box-sizing: border-box; width: min(100%, 480px); padding: 24px;
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center;
     }
-    @keyframes stone-spin { to { transform: rotate(360deg); } }
+    #stone-loading .crest {
+      display: block; width: min(76vw, 390px, 49vh); height: auto;
+      aspect-ratio: 1; object-fit: contain;
+      mask-image: linear-gradient(to bottom, transparent, #000 6%, #000 83%, transparent),
+        linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+      mask-composite: intersect;
+      margin-bottom: -4px;
+    }
+    #stone-loading strong {
+      font: 700 clamp(30px, 6vw, 46px)/1.12 Georgia, 'Times New Roman', serif;
+      letter-spacing: -.025em; color: #ffedc7;
+      text-shadow: 0 2px 18px #000a;
+    }
+    #stone-loading .motto {
+      margin-top: 11px; font-size: 10px; font-weight: 600;
+      letter-spacing: .27em; text-transform: uppercase; color: #c6a56e;
+    }
+    #stone-loading .loading-track {
+      position: relative; width: min(230px, 64vw); height: 3px;
+      background: #b494572e; margin: 32px 0 13px;
+      border-radius: 4px;
+    }
+    #stone-loading .loading-track::before,
+    #stone-loading .loading-track::after {
+      content: ''; position: absolute; top: -2px; width: 7px; height: 7px;
+      border: 1px solid #987a4a; background: #14242c; transform: rotate(45deg);
+      box-sizing: border-box;
+    }
+    #stone-loading .loading-track::before { left: -7px; }
+    #stone-loading .loading-track::after { right: -7px; }
+    #stone-loading .loading-fill {
+      display: block; width: 36%; height: 100%; border-radius: inherit;
+      background: linear-gradient(90deg, transparent, #b98032, #ffe2a0, #c78c37, transparent);
+      box-shadow: 0 0 13px #d6a24b88;
+      animation: stone-march 1.8s ease-in-out infinite alternate;
+    }
+    #stone-loading small { font-size: 12px; letter-spacing: .08em; color: #c0cbd0; }
+    @keyframes stone-march { from { transform: translateX(0); } to { transform: translateX(178%); } }
+    @media (max-height: 460px) and (orientation: landscape) {
+      #stone-loading .loading-content { width: min(100%, 760px); flex-direction: row; justify-content: center; gap: 22px; }
+      #stone-loading .crest { width: min(40vw, 78vh, 290px); margin: 0; }
+      #stone-loading .loading-copy { flex: 1; max-width: 340px; }
+      #stone-loading .loading-track { margin-top: 24px; }
+    }
+    #stone-loading .loading-copy { display: flex; flex-direction: column; align-items: center; min-width: 0; }
     @media (prefers-reduced-motion: reduce) {
-      #stone-loading .spinner { animation: none; }
+      #stone-loading .loading-fill { animation: none; width: 60%; transform: translateX(33%); }
     }
   </style>
 </head>
 <body>
-  <div id="stone-loading" role="status" aria-live="polite">
-    <strong>Stone &amp; Banner</strong>
-    <div class="spinner" aria-hidden="true"></div>
-    <small id="stone-loading-message">Loading game…</small>
+  <div id="stone-loading">
+    <div class="loading-content">
+      <img class="crest" src="assets/assets/art/stone_banner_crest.jpg" alt="" width="640" height="640" fetchpriority="high">
+      <div class="loading-copy">
+        <strong>Stone &amp; Banner</strong>
+        <span class="motto">A realm of your own</span>
+        <div class="loading-track" aria-hidden="true"><span class="loading-fill"></span></div>
+        <small id="stone-loading-message" role="status" aria-live="polite">Preparing your realm…</small>
+      </div>
+    </div>
   </div>
   <script>
     window.addEventListener('flutter-first-frame', () => {
