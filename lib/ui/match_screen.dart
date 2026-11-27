@@ -6058,13 +6058,10 @@ class _Painter extends CustomPainter {
       final height = sprite == null
           ? width * .75
           : width * sprite.height / sprite.width;
-      final baseHeight = math.max(10.0, width * .24);
-      // The ownership pedestal stays on the actual junction. Keep the
-      // illustrated piece above it, but inside the board at its top edge.
-      final baseCenter = c + Offset(0, baseHeight * .12);
+      // Anchor the illustrated piece at its junction.
       final center = Offset(
         c.dx.clamp(width / 2, math.max(width / 2, size.width - width / 2)),
-        (baseCenter.dy - height * .38).clamp(
+        (c.dy - height * .38).clamp(
           height / 2,
           math.max(height / 2, size.height - height / 2),
         ),
@@ -6086,26 +6083,7 @@ class _Painter extends CustomPainter {
         );
       }
       if (sprite != null) {
-        // A dark-edged, solid ownership pedestal remains legible even
-        // on similarly coloured terrain. Draw it in front of the art so
-        // the grassy base cannot hide the player colour.
         _paintTabletop(canvas, sprite, bounds);
-        final pedestal = Rect.fromCenter(
-          center: baseCenter,
-          width: width * .88,
-          height: baseHeight,
-        );
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(pedestal, Radius.circular(baseHeight / 2)),
-          Paint()..color = const Color(0xff102128),
-        );
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            pedestal.deflate(2),
-            Radius.circular(baseHeight / 2),
-          ),
-          Paint()..color = seatColors[site.owner],
-        );
       } else {
         final building = RRect.fromRectAndRadius(
           bounds,
@@ -6121,7 +6099,7 @@ class _Painter extends CustomPainter {
         _label(
           canvas,
           '!',
-          c + Offset(width * .45, baseHeight * .8),
+          c + Offset(width * .45, height * .2),
           14,
           const Color(0xffec6757),
         );
