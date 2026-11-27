@@ -1,0 +1,4 @@
+- Recover older match history when saved replays still exist, even if their indexes are missing. History now shows bot difficulty and count.
+- Start another match directly from the results screen, and use Auto-discard to select resources automatically.
+- New illustrated board, resource icons and more visible player buildings, with a smaller bandit.
+- Faster web startup with a visible loading indicator.
