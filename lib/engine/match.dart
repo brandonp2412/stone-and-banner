@@ -1853,6 +1853,63 @@ class MatchEngine {
     return result;
   }
 
+  /// Choose exactly the required discard, keeping scarce goods and useful
+  /// building combinations rather than simply dropping the largest pile.
+  static Map<Resource, int> suggestedDiscard(MatchState s, int seat) {
+    final required = s.pendingDiscards[seat] ?? 0;
+    final hand = Map<Resource, int>.of(s.players[seat].stores);
+    final goods = <Resource, int>{};
+    final produced = <Resource>{};
+    for (final entry in s.sites.entries.where((e) => e.value.owner == seat)) {
+      for (final tile in s.topology.vertices[entry.key].tiles) {
+        final land = s.board.tiles[tile].land;
+        if (land.produces case final Resource resource) produced.add(resource);
+        for (final track in StrategyDeck.values) {
+          if (entry.value.structure != Structure.village &&
+              s.players[seat].level(track) > 0 &&
+              track.sourceLand == land) {
+            produced.add(track.commodity);
+          }
+        }
+      }
+    }
+    const reserve = {
+      Resource.wood: 1,
+      Resource.brick: 1,
+      Resource.wheat: 2,
+      Resource.wool: 1,
+      Resource.ore: 3,
+      Resource.paper: 1,
+      Resource.cloth: 1,
+      Resource.coin: 1,
+    };
+    const builds = [villageCost, townCost, roadCost, recruitCost, capitalCost];
+    bool affordable(Map<Resource, int> cost) =>
+        cost.entries.every((e) => (hand[e.key] ?? 0) >= e.value);
+    int discardScore(Resource r) {
+      final count = hand[r]!;
+      // Excess above a useful reserve is the first candidate to go.
+      final excess = count - reserve[r]!;
+      final brokenBuilds = builds
+          .where((cost) => cost[r] == count && affordable(cost))
+          .length;
+      return excess * 4 + (produced.contains(r) ? 2 : 0) - brokenBuilds * 8;
+    }
+
+    for (var left = required; left > 0; left--) {
+      final ranked = Resource.values.where((r) => (hand[r] ?? 0) > 0).toList()
+        ..sort((a, b) {
+          final score = discardScore(b).compareTo(discardScore(a));
+          return score != 0 ? score : a.index.compareTo(b.index);
+        });
+      if (ranked.isEmpty) throw StateError('Not enough resources to discard.');
+      final good = ranked.first;
+      hand[good] = hand[good]! - 1;
+      goods[good] = (goods[good] ?? 0) + 1;
+    }
+    return goods;
+  }
+
   static MatchState _discardOnSeven(MatchState s) {
     final bank = Map<Resource, int>.of(s.bank);
     final players = List<PlayerState>.of(s.players);

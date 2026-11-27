@@ -82,6 +82,87 @@ void main() {
     },
   );
 
+  test('auto discard preserves a complete town upgrade over excess wood', () {
+    final before = seven();
+    final players = before.players.toList();
+    players[0] = players[0].copyWith(
+      stores: {Resource.wood: 5, Resource.wheat: 2, Resource.ore: 3},
+    );
+    final state = before.copyWith(players: players);
+    final (a, b) = MatchEngine.expectedDice(state);
+    final rolled = MatchEngine.apply(state, RollDice(a, b));
+    final goods = MatchEngine.suggestedDiscard(rolled, 0);
+    expect(goods, {Resource.wood: 5});
+    final after = MatchEngine.apply(rolled, DiscardResources(0, goods));
+    expect(after.pendingDiscards, isEmpty);
+    expect(after.players[0].stores[Resource.wheat], 2);
+    expect(after.players[0].stores[Resource.ore], 3);
+  });
+
+  for (final size in [
+    const Size(800, 600),
+    const Size(390, 844),
+    const Size(844, 390),
+  ]) {
+    testWidgets('auto discard submits once at ${size.width}x${size.height}', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final before = seven().copyWith(active: 1);
+      final (a, b) = MatchEngine.expectedDice(before);
+      var state = MatchEngine.apply(before, RollDice(a, b));
+      final events = <MatchEvent>[];
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: const ValueKey('capture'),
+          child: MaterialApp(
+            theme: ThemeData(
+              brightness: Brightness.dark,
+              fontFamily: 'NotoSans',
+            ),
+            home: StatefulBuilder(
+              builder: (context, update) => MatchView(
+                state: state,
+                online: true,
+                visibleSeat: 0,
+                onEvent: (event) => update(() {
+                  events.add(event);
+                  state = MatchEngine.apply(state, event);
+                }),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final button = find.byKey(const ValueKey('auto-discard'));
+      expect(button, findsOneWidget);
+      if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
+        await tester.runAsync(
+          () => capture(
+            tester,
+            '/tmp/stone-auto-discard-${size.width.toInt()}.png',
+          ),
+        );
+      }
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(events.single, isA<DiscardResources>());
+      expect(
+        (events.single as DiscardResources).goods.values.reduce(
+          (a, b) => a + b,
+        ),
+        4,
+      );
+      expect(state.pendingDiscards, isEmpty);
+      expect(button, findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   testWidgets('modal requires exact selection and submits chosen resources', (
     tester,
   ) async {

@@ -618,6 +618,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                     icon: const Icon(Icons.close_fullscreen, size: 17),
                     label: const Text('Later'),
                   ),
+                  OutlinedButton(
+                    key: const ValueKey('auto-discard'),
+                    onPressed: () => Navigator.pop(
+                      dialogContext,
+                      MatchEngine.suggestedDiscard(s, seat),
+                    ),
+                    child: const Text('Auto-discard'),
+                  ),
                   FilledButton(
                     onPressed: total == required
                         ? () => Navigator.pop(dialogContext, selected)
