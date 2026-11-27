@@ -21,7 +21,7 @@ class LanRoomClient extends ChangeNotifier {
   String url = '';
   String? room, token, error;
   int? seat;
-  int capacity = 3, version = 0, botCount = 0;
+  int capacity = 3, version = 0, botCount = 0, generation = 0;
   List<int> botSeats = [];
   List<String> players = [];
   List<bool> connectedPlayers = [];
@@ -157,7 +157,7 @@ class LanRoomClient extends ChangeNotifier {
         seat = msg['seat'] as int;
         _firstMessage = {'op': 'resume', 'room': room, 'token': token};
         onSession?.call(url, room!, token!);
-        _send({'op': 'sync', 'from': version});
+        _send({'op': 'sync', 'from': version, 'generation': generation});
         if (_outstanding != null) _send(_outstanding!);
       case 'lobby':
         botCount = (msg['botCount'] as int?) ?? 0;
@@ -167,6 +167,13 @@ class LanRoomClient extends ChangeNotifier {
         connectedPlayers = (msg['connected'] as List).cast<bool>();
         started = msg['started'] as bool;
       case 'state':
+        final nextGeneration = (msg['generation'] as int?) ?? 0;
+        if (nextGeneration != generation) {
+          generation = nextGeneration;
+          _outstanding = null;
+          pending = false;
+          history = [];
+        }
         version = msg['version'] as int;
         _turnRemainingMs = msg['turnRemainingMs'] as int?;
         _turnClock
@@ -182,7 +189,7 @@ class LanRoomClient extends ChangeNotifier {
           pending = false;
           if (msg['ok'] != true) {
             error = (msg['error'] as String?) ?? 'Move was rejected.';
-            _send({'op': 'sync', 'from': version});
+            _send({'op': 'sync', 'from': version, 'generation': generation});
           }
         }
       case 'error':
@@ -192,6 +199,7 @@ class LanRoomClient extends ChangeNotifier {
   }
 
   void start() => _send({'op': 'start'});
+  void playAgain() => _send({'op': 'playAgain', 'generation': generation});
   void setBots(int count) => _send({'op': 'setBots', 'count': count});
 
   void dispatch(MatchEvent event) {
@@ -205,6 +213,7 @@ class LanRoomClient extends ChangeNotifier {
       'op': 'move',
       'id': id,
       'base': version,
+      'generation': generation,
       'event': event.toJson(),
     };
     pending = true;

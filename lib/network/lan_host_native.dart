@@ -412,7 +412,21 @@ class _LanServerProtocol {
         }
         room.start(seat);
         broadcast(room);
+      case 'playAgain':
+        if ((msg['generation'] ?? 0) != room.generation) return;
+        room.playAgain(seat);
+        broadcast(room);
       case 'move':
+        if ((msg['generation'] ?? 0) != room.generation) {
+          conn.send({
+            'op': 'ack',
+            'id': msg['id'],
+            'ok': false,
+            'error': 'Match changed; resynchronise.',
+          });
+          sendState(conn);
+          return;
+        }
         final before = room.version;
         final reply = room.move(
           seat,
@@ -429,7 +443,9 @@ class _LanServerProtocol {
           sendState(conn);
         }
       case 'sync':
-        final from = (msg['from'] as int?) ?? 0;
+        final from = (msg['generation'] ?? 0) == room.generation
+            ? (msg['from'] as int?) ?? 0
+            : 0;
         conn.send({
           'op': 'history',
           'room': room.id,
@@ -448,6 +464,7 @@ class _LanServerProtocol {
       'op': 'state',
       'room': room.id,
       'version': room.version,
+      'generation': room.generation,
       if (clockDeadlines[room] case final int deadline)
         'turnRemainingMs': (deadline - clock.elapsedMilliseconds).clamp(
           0,

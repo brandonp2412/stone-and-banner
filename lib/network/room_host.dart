@@ -32,12 +32,18 @@ class HostedRoom {
            Random.secure().nextInt(1 << 30) +
            Random.secure().nextInt(1 << 22) * (1 << 30);
 
-  HostedRoom.restored(this.id, this.capacity, this.boardSeed, this.secretSeed)
-    : shuffleTurns = false,
-      assert(capacity >= 3 && capacity <= 6);
+  HostedRoom.restored(
+    this.id,
+    this.capacity,
+    this.boardSeed,
+    this.secretSeed, {
+    this.shuffleTurns = false,
+  }) : assert(capacity >= 3 && capacity <= 6);
 
   final String id;
-  final int capacity, boardSeed, secretSeed;
+  final int capacity;
+  int boardSeed, secretSeed;
+  int generation = 0;
   final bool shuffleTurns;
   final seats = <RoomSeat>[];
   MatchState? state;
@@ -87,6 +93,35 @@ class HostedRoom {
           ? (List.generate(capacity, (i) => i)..shuffle(Random.secure()))
           : null,
     );
+  }
+
+  void playAgain(int seat) {
+    if (seat != 0) throw StateError('Only the host can start a rematch.');
+    if (state?.phase != MatchPhase.finished) {
+      throw StateError('Finish the current match first.');
+    }
+    final random = Random.secure();
+    final old = state!;
+    final nextBoardSeed = random.nextInt(1 << 30);
+    final nextSecretSeed =
+        random.nextInt(1 << 30) + random.nextInt(1 << 22) * (1 << 30);
+    final next = MatchEngine.newGame(
+      [for (final s in seats) s.name],
+      nextSecretSeed,
+      boardSeed: nextBoardSeed,
+      cardDeckVersion: old.cardDeckVersion,
+      balance: old.balance,
+      raidInterval: old.raidInterval,
+      turnOrder: shuffleTurns
+          ? (List.generate(capacity, (i) => i)..shuffle(random))
+          : null,
+    );
+    boardSeed = nextBoardSeed;
+    secretSeed = nextSecretSeed;
+    generation++;
+    _responses.clear();
+    _audit.clear();
+    state = next;
   }
 
   Map<String, Object?> move(
@@ -268,6 +303,8 @@ class HostedRoom {
     'capacity': capacity,
     'boardSeed': boardSeed,
     'secretSeed': secretSeed,
+    'generation': generation,
+    'shuffleTurns': shuffleTurns,
     'version': version,
     'seats': [
       for (final seat in seats) {'name': seat.name, 'token': seat.token},
@@ -300,7 +337,13 @@ class HostedRoom {
         (capacity < 3 || capacity > 6)) {
       throw const FormatException('Invalid LAN room identity.');
     }
-    final room = HostedRoom.restored(id, capacity, boardSeed, secretSeed);
+    final room = HostedRoom.restored(
+      id,
+      capacity,
+      boardSeed,
+      secretSeed,
+      shuffleTurns: (data['shuffleTurns'] as bool?) ?? false,
+    )..generation = (data['generation'] as int?) ?? 0;
     for (final raw in data['seats'] as List) {
       final seat = Map<String, dynamic>.from(raw as Map);
       final name = seat['name'] as String;

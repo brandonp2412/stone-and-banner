@@ -919,7 +919,9 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
                   : Stack(
                       children: [
                         MatchView(
+                          key: ValueKey(room.generation),
                           state: game,
+                          onPlayAgain: room.isHost ? room.playAgain : null,
                           online: true,
                           onlineView: room.view,
                           viewingSeat: room.seat,

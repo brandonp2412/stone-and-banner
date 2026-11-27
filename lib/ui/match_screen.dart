@@ -142,6 +142,7 @@ class MatchView extends StatefulWidget {
     this.onFastForward,
     this.fastForwardingBots = false,
     this.onHome,
+    this.onPlayAgain,
     this.onLeaveRoom,
     this.onRules,
     this.onSettings,
@@ -166,7 +167,7 @@ class MatchView extends StatefulWidget {
   final String? waitingMessage;
   final VoidCallback? onFastForward;
   final bool fastForwardingBots;
-  final VoidCallback? onHome, onLeaveRoom, onRules;
+  final VoidCallback? onHome, onLeaveRoom, onRules, onPlayAgain;
   final Future<void> Function()? onSettings;
   final bool pauseInBackground;
   final ValueChanged<String>? onEmote;
@@ -2601,6 +2602,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       victory: won,
       onReview: () => setState(() => _endModalDismissed = true),
       onHome: widget.onHome,
+      onPlayAgain: widget.onPlayAgain,
     );
   }
 

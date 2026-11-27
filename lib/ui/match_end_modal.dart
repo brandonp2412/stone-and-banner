@@ -16,6 +16,7 @@ class MatchEndModal extends StatefulWidget {
     required this.victory,
     required this.onReview,
     this.onHome,
+    this.onPlayAgain,
   });
 
   final MatchState state;
@@ -23,6 +24,7 @@ class MatchEndModal extends StatefulWidget {
   final bool victory;
   final VoidCallback onReview;
   final VoidCallback? onHome;
+  final VoidCallback? onPlayAgain;
 
   @override
   State<MatchEndModal> createState() => _MatchEndModalState();
@@ -67,6 +69,19 @@ class _MatchEndModalState extends State<MatchEndModal>
     _celebration.dispose();
     super.dispose();
   }
+
+  Widget _playAgainButton(Color accent, bool compact) => FilledButton.icon(
+    key: const ValueKey('match-finale-play-again'),
+    onPressed: widget.onPlayAgain,
+    icon: const Icon(Icons.replay_rounded, size: 18),
+    label: const Text('Play again'),
+    style: FilledButton.styleFrom(
+      backgroundColor: accent,
+      foregroundColor: gameColor(context, const Color(0xff17242b)),
+      minimumSize: Size.fromHeight(compact ? 35 : 44),
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+    ),
+  );
 
   /// Portrait results use the phone's height instead of squeezing the
   /// landscape trophy, scores, and actions into side-by-side columns.
@@ -231,14 +246,22 @@ class _MatchEndModalState extends State<MatchEndModal>
             ),
           ),
           const SizedBox(height: 10),
+          if (widget.onPlayAgain != null) ...[
+            _playAgainButton(accent, false),
+            const SizedBox(height: 6),
+          ],
           FilledButton.icon(
             key: const ValueKey('match-finale-review'),
             onPressed: widget.onReview,
             icon: const Icon(Icons.map_outlined, size: 20),
             label: const Text('View board'),
             style: FilledButton.styleFrom(
-              backgroundColor: accent,
-              foregroundColor: gameColor(context, const Color(0xff17242b)),
+              backgroundColor: widget.onPlayAgain == null
+                  ? accent
+                  : gameColor(context, const Color(0xff243b43)),
+              foregroundColor: widget.onPlayAgain == null
+                  ? gameColor(context, const Color(0xff17242b))
+                  : gameColor(context, const Color(0xffe4eff0)),
               minimumSize: const Size.fromHeight(44),
             ),
           ),
@@ -272,7 +295,10 @@ class _MatchEndModalState extends State<MatchEndModal>
     final compact = available.height < 355;
     final height = portrait
         ? math.min(available.height * .76, available.height - 28)
-        : math.min(compact ? 283.0 : 310.0, available.height - 22);
+        : math.min(
+            (compact ? 283.0 : 310.0) + (widget.onPlayAgain != null ? 45 : 0),
+            available.height - 22,
+          );
     return Stack(
       children: [
         ModalBarrier(
@@ -667,6 +693,10 @@ class _MatchEndModalState extends State<MatchEndModal>
                                       ),
                                     ),
                                     const SizedBox(height: 6),
+                                    if (widget.onPlayAgain != null) ...[
+                                      _playAgainButton(accent, compact),
+                                      const SizedBox(height: 4),
+                                    ],
                                     Row(
                                       children: [
                                         Expanded(
@@ -681,10 +711,18 @@ class _MatchEndModalState extends State<MatchEndModal>
                                             ),
                                             label: const Text('View board'),
                                             style: FilledButton.styleFrom(
-                                              backgroundColor: accent,
+                                              backgroundColor:
+                                                  widget.onPlayAgain == null
+                                                  ? accent
+                                                  : gameColor(
+                                                      context,
+                                                      const Color(0xff243b43),
+                                                    ),
                                               foregroundColor: gameColor(
                                                 context,
-                                                const Color(0xff17242b),
+                                                widget.onPlayAgain == null
+                                                    ? const Color(0xff17242b)
+                                                    : const Color(0xffe4eff0),
                                               ),
                                               padding:
                                                   const EdgeInsets.symmetric(

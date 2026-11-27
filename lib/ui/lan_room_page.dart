@@ -280,7 +280,11 @@ class _LanRoomPageState extends State<LanRoomPage> {
               child: Stack(
                 children: [
                   MatchView(
+                    key: ValueKey(client.generation),
                     state: state,
+                    onPlayAgain: seat == 0 && client.connected
+                        ? client.playAgain
+                        : null,
                     online: true,
                     onlineView: client.view,
                     viewingSeat: seat,

@@ -656,6 +656,45 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     }
   }
 
+  void _playAgain() {
+    final prior = match;
+    if (prior == null || prior.phase != MatchPhase.finished) return;
+    try {
+      final count = prior.players.length;
+      final next = MatchEngine.newGame(
+        [for (final player in prior.players) player.id],
+        widget.worldSeedFactory(),
+        cardDeckVersion: prior.cardDeckVersion,
+        balance: prior.balance,
+        raidInterval: prior.raidInterval,
+        turnOrder: widget.randomizeTurnOrder
+            ? (List.generate(count, (i) => i)..shuffle(math.Random()))
+            : null,
+      );
+      _pauseAi();
+      _archiveReplacedMatch();
+      _aiRecoveryTimer?.cancel();
+      _localTradeGraceTimer?.cancel();
+      _localTradeGraceTimer = null;
+      _localTradeOfferId = null;
+      _localTradeExpiredId = null;
+      _localAiFailedVersion = -1;
+      _localAiFailures = 0;
+      _fastForwardingBots = false;
+      setState(() {
+        match = next;
+        aiMoveCount = 0;
+        aiError = null;
+        page = Page.board;
+        handoff = !oneHumanMatch;
+      });
+      _save(next);
+      _syncAi();
+    } on StateError catch (error) {
+      fail(error.message);
+    }
+  }
+
   Future<void> _showMatchActions(BuildContext parentContext) async {
     _pauseAi();
     await showDialog<void>(
@@ -1392,8 +1431,10 @@ class _StoneBannerAppState extends State<StoneBannerApp>
                                 : handoff
                                 ? const SizedBox.expand()
                                 : MatchView(
+                                    key: ValueKey(current.seed),
                                     state: current,
                                     onEvent: dispatch,
+                                    onPlayAgain: _playAgain,
                                     onHome: () {
                                       _pauseAi();
                                       setState(() => page = Page.home);

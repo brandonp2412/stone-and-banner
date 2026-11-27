@@ -185,7 +185,7 @@ class P2pRoom extends ChangeNotifier {
         RegExp(r'[a-f0-9]{8}-[a-f0-9-]{8,}\.local'),
         '[mDNS redacted]',
       );
-  int capacity = 3, version = 0;
+  int capacity = 3, version = 0, generation = 0;
   int? seat;
   bool started = false;
   List<String> players = [];
@@ -1020,6 +1020,16 @@ class P2pRoom extends ChangeNotifier {
             msg['event'] is! Map) {
           return;
         }
+        if ((msg['generation'] ?? 0) != room.generation) {
+          _send(peer, {
+            'op': 'ack',
+            'id': msg['id'],
+            'ok': false,
+            'error': 'Match changed; resynchronise.',
+          });
+          _stateFor(peer, seat);
+          return;
+        }
         final before = room.version;
         final reply = room.move(
           seat,
@@ -1083,6 +1093,7 @@ class P2pRoom extends ChangeNotifier {
         botCount = botSeats.length;
       case 'state':
         version = msg['version'] as int;
+        generation = (msg['generation'] as int?) ?? 0;
         view = Map<String, dynamic>.from(msg['view'] as Map);
         game = RoomProtocol.readView(view!);
         pending = false;
@@ -1109,6 +1120,7 @@ class P2pRoom extends ChangeNotifier {
       _send(peer, {
         'op': 'state',
         'version': _room!.version,
+        'generation': _room!.generation,
         'view': RoomProtocol.view(state, seat),
       });
     }
@@ -1121,6 +1133,7 @@ class P2pRoom extends ChangeNotifier {
     connectedPlayers = [for (final s in room.seats) s.connected];
     capacity = room.capacity;
     version = room.version;
+    generation = room.generation;
     view = room.state == null ? null : RoomProtocol.view(room.state!, 0);
     game = view == null ? null : RoomProtocol.readView(view!);
   }
@@ -1171,6 +1184,16 @@ class P2pRoom extends ChangeNotifier {
     _schedule();
   }
 
+  void playAgain() {
+    if (!isHost || _room?.state?.phase != MatchPhase.finished) return;
+    _room!.playAgain(0);
+    _botFailedAtVersion = -1;
+    _botFailures = 0;
+    message = null;
+    _broadcast();
+    _schedule();
+  }
+
   bool get botsActing {
     final state = game;
     return state != null &&
@@ -1216,6 +1239,7 @@ class P2pRoom extends ChangeNotifier {
         'op': 'move',
         'id': id,
         'base': version,
+        'generation': generation,
         'event': event.toJson(),
       });
       notifyListeners();
