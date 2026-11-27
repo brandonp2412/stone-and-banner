@@ -16,6 +16,7 @@ from urllib.parse import urlparse, unquote
 from pathlib import Path
 
 from patchright.async_api import async_playwright
+from screenshot_status_bar import STATUS_BAR_HEIGHT, capture_with_status_bar
 
 
 async def dismiss_hints(page):
@@ -43,7 +44,7 @@ def fresh_replay():
     return replay
 
 
-async def screenshot(page, destination, expected_size):
+async def screenshot(page, destination, expected_size, compositor, width, height, scale):
     await page.wait_for_timeout(600)
     visible = await page.locator("body").inner_text()
     labels = await page.locator("[aria-label]").evaluate_all(
@@ -56,7 +57,7 @@ async def screenshot(page, destination, expected_size):
     )
     if forbidden:
         raise AssertionError(f"Old terminology in {destination}: {forbidden.group()}")
-    await page.screenshot(path=str(destination), animations="disabled", full_page=False)
+    await capture_with_status_bar(page, compositor, destination, width, height, scale)
     import struct
     data = destination.read_bytes()
     assert data.startswith(b"\x89PNG\r\n\x1a\n"), destination
@@ -97,7 +98,7 @@ async def capture_profile(browser, args, replay, profile):
     destination.mkdir(parents=True, exist_ok=True)
     expected = (round(width * scale), round(height * scale))
     context = await browser.new_context(
-        viewport={"width": width, "height": height},
+        viewport={"width": width, "height": height - STATUS_BAR_HEIGHT},
         device_scale_factor=scale,
         reduced_motion="reduce",
     )
@@ -105,6 +106,8 @@ async def capture_profile(browser, args, replay, profile):
         "localStorage.setItem('flutter.gameplay_hints_enabled', 'false')"
     )
     page = await context.new_page()
+    compositor_context = await browser.new_context(viewport={"width": expected[0], "height": expected[1]}, device_scale_factor=1)
+    compositor = await compositor_context.new_page()
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     try:
@@ -112,8 +115,8 @@ async def capture_profile(browser, args, replay, profile):
         await enable_semantics(page)
         await page.get_by_text("New local match", exact=True).wait_for(timeout=30000)
         await click_text(page, "New local match")
-        await page.get_by_text("Match setup", exact=True).wait_for()
-        await screenshot(page, destination / "04-setup.png", expected)
+        await page.get_by_text("Game options", exact=True).wait_for()
+        await screenshot(page, destination / "04-setup.png", expected, compositor, width, height, scale)
         session = json.dumps({"version": 2, "replay": replay, "computerSeats": []})
         await page.evaluate("""session => {
             localStorage.setItem('flutter.stone_banner_local_session_v2', JSON.stringify(session));
@@ -124,7 +127,7 @@ async def capture_profile(browser, args, replay, profile):
         await click_text(page, "I'm ready")
         await page.wait_for_timeout(1100)
         await dismiss_hints(page)
-        await screenshot(page, destination / "01-board.png", expected)
+        await screenshot(page, destination / "01-board.png", expected, compositor, width, height, scale)
         if width < 900:
             await click_text(page, "Actions")
         # Canvas tabs currently have no web accessibility nodes. Match the
@@ -133,22 +136,23 @@ async def capture_profile(browser, args, replay, profile):
             left = 40 if width < 900 else width - 320
             y = 25 if width < 900 else 79
             await page.mouse.click(left + (width - left) * (index + 0.5) / 4, y)
-            await page.mouse.move(0, height - 1)
+            await page.mouse.move(0, height - STATUS_BAR_HEIGHT - 1)
 
         await select_tab(3)
         await page.wait_for_timeout(600)
         assert "Your realm" in await page.locator("body").inner_text(), "Realm tab did not open"
-        await screenshot(page, destination / "03-realm.png", expected)
+        await screenshot(page, destination / "03-realm.png", expected, compositor, width, height, scale)
         await select_tab(1)
         await page.get_by_text("Player trade", exact=True).wait_for(timeout=10000)
         await click_text(page, "Player trade")
         await page.wait_for_timeout(600)
         assert "Send offer" in await page.locator("body").inner_text(), await page.locator("body").inner_text()
-        await screenshot(page, destination / "02-trade.png", expected)
+        await screenshot(page, destination / "02-trade.png", expected, compositor, width, height, scale)
         if errors:
             raise RuntimeError(f"Page errors in {category}: {errors}")
     finally:
         await context.close()
+        await compositor_context.close()
 
 
 async def main(args):
