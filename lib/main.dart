@@ -437,6 +437,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     savedAiSeats = {...aiSeats};
     savedBotDifficulty = matchBotDifficulty;
     final archivedComputerSeats = {...aiSeats};
+    final archivedBotDifficulty = matchBotDifficulty;
     final session = jsonEncode({
       'version': 2,
       'replay': replay,
@@ -460,6 +461,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             state,
             replay: replay,
             computerSeats: archivedComputerSeats,
+            botDifficulty: archivedComputerSeats.isEmpty
+                ? null
+                : archivedBotDifficulty,
           );
         }
       } on Object {
@@ -475,6 +479,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
     final prior = match;
     final replay = savedReplay;
     final archivedComputerSeats = {...(prior == null ? savedAiSeats : aiSeats)};
+    final archivedBotDifficulty = prior == null
+        ? savedBotDifficulty
+        : matchBotDifficulty;
     if (prior == null && replay == null) return;
     _saveTail = _saveTail.then((_) async {
       try {
@@ -484,6 +491,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             prefs,
             prior,
             computerSeats: archivedComputerSeats,
+            botDifficulty: archivedComputerSeats.isEmpty
+                ? null
+                : archivedBotDifficulty,
           );
         } else if (replay != null) {
           await MatchArchive.save(
@@ -491,6 +501,9 @@ class _StoneBannerAppState extends State<StoneBannerApp>
             MatchEngine.importReplay(replay),
             replay: replay,
             computerSeats: archivedComputerSeats,
+            botDifficulty: archivedComputerSeats.isEmpty
+                ? null
+                : archivedBotDifficulty,
           );
         }
       } on Object {

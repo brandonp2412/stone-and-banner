@@ -257,7 +257,7 @@ class _HistoryCard extends StatelessWidget {
             alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
           );
     final outcome = entry.winner != null
-        ? '${entry.winner} won'
+        ? '${entry.displayWinner} won'
         : entry.finished
         ? 'Finished'
         : 'Replaced';
@@ -304,10 +304,7 @@ class _HistoryCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        entry.names.join(' vs '),
-                        style: theme.textTheme.bodyMedium,
-                      ),
+                      Text(entry.matchup, style: theme.textTheme.bodyMedium),
                     ],
                   ),
                 ),

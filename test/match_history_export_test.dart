@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stone_and_banner/engine/match.dart';
+import 'package:stone_and_banner/engine/heuristic_ai.dart';
 import 'package:stone_and_banner/match_archive.dart';
 import 'package:stone_and_banner/ui/match_history.dart';
 
@@ -49,6 +50,33 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('legacy and mixed history labels', () {
+    ArchivedMatch entry(Set<int>? seats, BotDifficulty? difficulty) =>
+        ArchivedMatch(
+          'key',
+          'date',
+          ['BotOne', 'Ada', 'Ben', 'BotTwo'],
+          1,
+          2,
+          true,
+          'BotOne',
+          computerSeats: seats,
+          botDifficulty: difficulty,
+        );
+    expect(
+      entry({0, 3}, BotDifficulty.hard).matchup,
+      'Ada vs Ben vs Hard bots x2',
+    );
+    expect(entry({0, 3}, BotDifficulty.hard).displayWinner, 'Hard bot');
+    expect(entry({0, 3}, null).matchup, 'Ada vs Ben vs Bots x2');
+    expect(entry(null, null).matchup, 'BotOne vs Ada vs Ben vs BotTwo');
+    expect(entry({}, null).displayWinner, 'BotOne');
+    final restored = ArchivedMatch.fromJson(
+      entry({0, 3}, BotDifficulty.easy).toJson(),
+    );
+    expect(restored.botDifficulty, BotDifficulty.easy);
+  });
+
   testWidgets('export all saves exact replays and metadata on portrait', (
     tester,
   ) async {
@@ -62,7 +90,12 @@ void main() {
         MatchEngine.newGame(['Ada', 'Ben', 'Cora'], seed),
         const PlaceVillage(0),
       );
-      await MatchArchive.save(prefs, state, computerSeats: {1, 2});
+      await MatchArchive.save(
+        prefs,
+        state,
+        computerSeats: {1, 2},
+        botDifficulty: BotDifficulty.values[seed - 333],
+      );
     }
     tester.view.physicalSize = const Size(393, 780);
     tester.view.devicePixelRatio = 1;
@@ -79,6 +112,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('3 matches · 0 finished'), findsOneWidget);
+    for (final level in BotDifficulty.values) {
+      expect(find.text('Ada vs ${level.label} bots x2'), findsOneWidget);
+    }
+    expect(find.textContaining('Ben'), findsNothing);
     expect(tester.takeException(), isNull);
     if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
       await tester.runAsync(() async {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'engine/board.dart';
+import 'engine/heuristic_ai.dart';
 import 'engine/match.dart';
 
 /// Small month indexes with individual immutable replay blobs. Autosaves never
@@ -17,6 +18,7 @@ class ArchivedMatch {
     this.finished,
     this.winner, {
     this.computerSeats,
+    this.botDifficulty,
   });
   final String key, savedAt;
   final List<String> names;
@@ -24,6 +26,29 @@ class ArchivedMatch {
   final bool finished;
   final String? winner;
   final Set<int>? computerSeats;
+  final BotDifficulty? botDifficulty;
+
+  String get matchup {
+    final bots = computerSeats;
+    if (bots == null || bots.isEmpty) return names.join(' vs ');
+    final humans = [
+      for (var i = 0; i < names.length; i++)
+        if (!bots.contains(i)) names[i],
+    ];
+    final count = names.length - humans.length;
+    if (count == 0) return names.join(' vs ');
+    final difficulty = botDifficulty?.name;
+    final label = difficulty == null ? 'Bots' : '${botDifficulty!.label} bots';
+    return [...humans, '$label x$count'].join(' vs ');
+  }
+
+  String? get displayWinner {
+    final name = winner;
+    if (name == null || computerSeats == null) return name;
+    final seat = names.indexOf(name);
+    if (!computerSeats!.contains(seat)) return name;
+    return botDifficulty == null ? 'Bot' : '${botDifficulty!.label} bot';
+  }
 
   factory ArchivedMatch.fromJson(Map<String, dynamic> json) => ArchivedMatch(
     json['key'] as String,
@@ -34,6 +59,9 @@ class ArchivedMatch {
     json['finished'] as bool,
     json['winner'] as String?,
     computerSeats: (json['computerSeats'] as List?)?.cast<int>().toSet(),
+    botDifficulty: BotDifficulty.values
+        .where((d) => d.name == json['botDifficulty'])
+        .firstOrNull,
   );
   Map<String, Object?> toJson() => {
     'key': key,
@@ -44,6 +72,7 @@ class ArchivedMatch {
     'finished': finished,
     'winner': winner,
     if (computerSeats != null) 'computerSeats': computerSeats!.toList()..sort(),
+    if (botDifficulty != null) 'botDifficulty': botDifficulty!.name,
   };
 }
 
@@ -57,6 +86,7 @@ abstract final class MatchArchive {
     MatchState match, {
     String? replay,
     Set<int>? computerSeats,
+    BotDifficulty? botDifficulty,
   }) async {
     if (match.events.isEmpty) return;
     final timestamp = DateTime.now().toUtc().toIso8601String();
@@ -82,6 +112,7 @@ abstract final class MatchArchive {
       match.phase == MatchPhase.finished,
       winnerSeat == null ? null : match.players[winnerSeat].id,
       computerSeats: computerSeats,
+      botDifficulty: botDifficulty,
     );
     final indexKey = '$_indexPrefix$month';
     final previous = prefs.getStringList(indexKey) ?? [];
