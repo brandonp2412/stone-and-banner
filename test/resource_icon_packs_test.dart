@@ -26,6 +26,17 @@ void main() {
     resourceIconStyle.value = ResourceIconStyle.banner;
   });
 
+  testWidgets('startup decodes only the requested icon pack', (tester) async {
+    final revision = resourceIconsRevision.value;
+    await tester.runAsync(() async {
+      final first = loadResourceIconPack(ResourceIconStyle.tabletop);
+      final second = loadResourceIconPack(ResourceIconStyle.tabletop);
+      expect(identical(first, second), isTrue);
+      await Future.wait([first, second]);
+    });
+    expect(resourceIconsRevision.value, revision + 1);
+  });
+
   testWidgets('all packs load and selection persists', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.runAsync(loadResourceIcons);

@@ -18,6 +18,7 @@ const shell = [
   'assets/FontManifest.json', 'assets/fonts/MaterialIcons-Regular.otf',
   'assets/assets/fonts/NotoSans-Regular.ttf', 'assets/assets/fonts/NotoSans-Bold.ttf',
   'assets/assets/art/stone_banner_crest.jpg',
+  ...goods.slice(0, 5).map((good) => 'assets/assets/icons/tabletop/' + good + '.png'),
   ...packs.flatMap((pack) => goods.map((good) => 'assets/assets/icons/' + pack + '/' + good + '.png')),
 ];
 
@@ -70,5 +71,26 @@ self.addEventListener('fetch', (event) => {
     const response = await fetch(request);
     if (response.ok) await cache.put(key, response.clone());
     return response;
+  })());
+});
+
+// A first visit can render before installation finishes. Cache engine and
+// other same-origin static requests which escaped the fetch handler.
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'cache-startup-resources' ||
+      !Array.isArray(event.data.urls)) return;
+  event.waitUntil((async () => {
+    const cache = await caches.open(cacheName);
+    await Promise.allSettled(event.data.urls.map(async (value) => {
+      const url = new URL(value);
+      if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
+      const path = url.pathname.slice(scope.pathname.length);
+      if (!(shell.includes(path) || path.startsWith('assets/') ||
+            path.startsWith('canvaskit/') || path.startsWith('icons/'))) return;
+      const key = asset(path);
+      if (await cache.match(key)) return;
+      const response = await fetch(key);
+      if (response.ok) await cache.put(key, response);
+    }));
   })());
 });

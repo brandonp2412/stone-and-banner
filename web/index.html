@@ -31,8 +31,44 @@
 
   <title>Stone & Banner</title>
   <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#15252c">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body { margin: 0; background: #15252c; }
+    #stone-loading {
+      position: fixed; inset: 0; z-index: 9999; display: grid;
+      place-content: center; justify-items: center; gap: 18px;
+      background: #15252c; color: #e5c183; font: 16px system-ui, sans-serif;
+    }
+    #stone-loading strong { font-size: 25px; letter-spacing: .03em; }
+    #stone-loading small { color: #c0cbd0; }
+    #stone-loading .spinner {
+      width: 30px; height: 30px; border: 3px solid #41535b;
+      border-top-color: #e5c183; border-radius: 50%;
+      animation: stone-spin .8s linear infinite;
+    }
+    @keyframes stone-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      #stone-loading .spinner { animation: none; }
+    }
+  </style>
 </head>
 <body>
+  <div id="stone-loading" role="status" aria-live="polite">
+    <strong>Stone &amp; Banner</strong>
+    <div class="spinner" aria-hidden="true"></div>
+    <small id="stone-loading-message">Loading game…</small>
+  </div>
+  <script>
+    window.addEventListener('flutter-first-frame', () => {
+      performance.mark('stone-first-frame');
+      document.getElementById('stone-loading')?.remove();
+    }, { once: true });
+    window.setTimeout(() => {
+      const message = document.getElementById('stone-loading-message');
+      if (message) message.textContent = 'Still loading…';
+    }, 12000);
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

@@ -414,7 +414,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     super.initState();
     FocusManager.instance.addEarlyKeyEventHandler(_handleMainActionKey);
     _secondsLeft = widget.onlineTurnSeconds ?? (widget.online ? 150 : 90);
-    unawaited(loadResourceIcons());
+    unawaited(loadResourceIconPack(resourceIconStyle.value));
     unawaited(loadTabletopArt());
     unawaited(_loadHints());
     _scheduleIncomingTrade();

@@ -38,7 +38,8 @@ Future<void> main() async {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
   registerResourceIconLicenses();
-  await Future.wait([loadResourceIcons(), restoreResourceIconStyle()]);
+  await restoreResourceIconStyle();
+  await loadResourceIconPack(resourceIconStyle.value);
   runApp(const StoneBannerApp());
 }
 

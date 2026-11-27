@@ -3,7 +3,7 @@
 
 // Flutter's deprecated worker now unregisters itself. Keep local games
 // reloadable offline and serve CanvasKit from this site's own build.
-(async () => {
+async function prepareOffline() {
   if ('serviceWorker' in navigator && window.isSecureContext) {
     try {
       const workerUrl = new URL('stone_offline_worker.js', document.baseURI);
@@ -29,7 +29,33 @@
       // Private mode or an unavailable worker must not block local play.
     }
   }
-  _flutter.loader.load({
-    config: { canvasKitBaseUrl: new URL('canvaskit/', document.baseURI).href },
-  });
+}
+
+(async () => {
+  const controlled = !!navigator.serviceWorker?.controller;
+  const offline = prepareOffline();
+  // A returning controlled page must switch to the new version before loading
+  // its Dart bundle. A first visit has no old worker and can start immediately.
+  if (controlled) await offline;
+  if (!controlled) {
+    window.addEventListener('flutter-first-frame', async () => {
+      await offline;
+      const worker = navigator.serviceWorker?.controller;
+      if (!worker) return;
+      // Some engine/font requests may have completed before the worker took
+      // control. Save them for the first subsequent offline reload.
+      worker.postMessage({
+        type: 'cache-startup-resources',
+        urls: performance.getEntriesByType('resource').map(entry => entry.name),
+      });
+    }, { once: true });
+  }
+  try {
+    await _flutter.loader.load({
+      config: { canvasKitBaseUrl: new URL('canvaskit/', document.baseURI).href },
+    });
+  } catch (_) {
+    const message = document.getElementById('stone-loading-message');
+    if (message) message.textContent = 'Could not load the game. Please reload.';
+  }
 })();

@@ -46,17 +46,16 @@ enum ResourceIconStyle {
 final resourceIconStyle = ValueNotifier(ResourceIconStyle.tabletop);
 final resourceIconsRevision = ValueNotifier(0);
 final _images = <ResourceIconStyle, Map<Resource, ui.Image>>{};
-Future<void>? _loading;
+final _loading = <ResourceIconStyle, Future<void>>{};
 
 String resourceIconAsset(ResourceIconStyle style, Resource resource) =>
     'assets/icons/${style == ResourceIconStyle.tabletop && resource.index >= Resource.paper.index ? ResourceIconStyle.banner.folder : style.folder}/${resource.name}.png';
 
-/// Load once for both canvas terrain and widgets. Assets remain available offline.
-Future<void> loadResourceIcons() => _loading ??= _loadResourceIcons();
-
-Future<void> _loadResourceIcons() async {
-  await Future.wait(
-    ResourceIconStyle.values.map((style) async {
+/// Load the requested pack only. Concurrent requests share a single decode.
+Future<void> loadResourceIconPack(ResourceIconStyle style) {
+  if (_images.containsKey(style)) return Future.value();
+  return _loading.putIfAbsent(style, () async {
+    try {
       final images = <Resource, ui.Image>{};
       await Future.wait(
         Resource.values.map((resource) async {
@@ -71,9 +70,16 @@ Future<void> _loadResourceIcons() async {
         }),
       );
       _images[style] = images;
-    }),
-  );
-  resourceIconsRevision.value++;
+      resourceIconsRevision.value++;
+    } finally {
+      _loading.remove(style);
+    }
+  });
+}
+
+/// Explicitly load every pack for the picker and visual tests.
+Future<void> loadResourceIcons() async {
+  await Future.wait(ResourceIconStyle.values.map(loadResourceIconPack));
 }
 
 Future<void> restoreResourceIconStyle() async {
@@ -86,7 +92,7 @@ Future<void> restoreResourceIconStyle() async {
 }
 
 Future<void> selectResourceIconStyle(ResourceIconStyle style) async {
-  if (!_images.containsKey(style)) await loadResourceIcons();
+  await loadResourceIconPack(style);
   resourceIconStyle.value = style;
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('resource_icon_pack', style.name);
@@ -100,33 +106,35 @@ class ResourceIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    loadResourceIcons();
     return Semantics(
       label: resource.displayName,
       image: true,
       child: ValueListenableBuilder<ResourceIconStyle>(
         valueListenable: resourceIconStyle,
-        builder: (context, selected, _) => ValueListenableBuilder<int>(
-          valueListenable: resourceIconsRevision,
-          builder: (context, revision, _) => RawImage(
-            image: _images[style ?? selected]?[resource],
-            width: size,
-            height: size,
-            fit: BoxFit.contain,
-            // Silhouette packs use pale gold artwork for the dark board.
-            // Give their UI previews and inventory icons a readable light ink.
-            color:
-                Theme.of(context).brightness == Brightness.light &&
-                    {
-                      ResourceIconStyle.gameIcons,
-                      ResourceIconStyle.pictogrammers,
-                    }.contains(style ?? selected)
-                ? gameColor(context, const Color(0xffe5c183))
-                : null,
-            colorBlendMode: BlendMode.srcIn,
-            filterQuality: FilterQuality.medium,
-          ),
-        ),
+        builder: (context, selected, _) {
+          loadResourceIconPack(style ?? selected);
+          return ValueListenableBuilder<int>(
+            valueListenable: resourceIconsRevision,
+            builder: (context, revision, _) => RawImage(
+              image: _images[style ?? selected]?[resource],
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+              // Silhouette packs use pale gold artwork for the dark board.
+              // Give their UI previews and inventory icons a readable light ink.
+              color:
+                  Theme.of(context).brightness == Brightness.light &&
+                      {
+                        ResourceIconStyle.gameIcons,
+                        ResourceIconStyle.pictogrammers,
+                      }.contains(style ?? selected)
+                  ? gameColor(context, const Color(0xffe5c183))
+                  : null,
+              colorBlendMode: BlendMode.srcIn,
+              filterQuality: FilterQuality.medium,
+            ),
+          );
+        },
       ),
     );
   }
