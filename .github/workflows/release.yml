@@ -9,6 +9,11 @@ on:
         description: 'Existing release tag to build and publish (e.g. v1.0.0)'
         required: true
         type: string
+      verify_signing_only:
+        description: Build and verify Android APKs from the selected branch without publishing a release
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -43,18 +48,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: android
-            runner: ubuntu-22.04
-          - platform: linux
-            runner: ubuntu-22.04
-          - platform: windows
-            runner: windows-2022
+        include: ${{ fromJSON(inputs.verify_signing_only && '[{"platform":"android","runner":"ubuntu-22.04"}]' || '[{"platform":"android","runner":"ubuntu-22.04"},{"platform":"linux","runner":"ubuntu-22.04"},{"platform":"windows","runner":"windows-2022"}]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+          ref: ${{ inputs.verify_signing_only && github.sha || format('refs/tags/{0}', needs.resolve.outputs.tag) }}
       - name: Verify package version matches release tag
         shell: bash
         env:
@@ -138,6 +137,7 @@ jobs:
           if-no-files-found: error
 
   build-web:
+    if: ${{ !inputs.verify_signing_only }}
     name: Build website
     needs: resolve
     runs-on: ubuntu-latest
@@ -215,6 +215,7 @@ jobs:
           exit 1
 
   release:
+    if: ${{ !inputs.verify_signing_only }}
     name: Publish release assets
     needs: [resolve, build, build-web]
     runs-on: ubuntu-latest
