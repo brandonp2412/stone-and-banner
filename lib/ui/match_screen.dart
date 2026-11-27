@@ -5817,7 +5817,7 @@ class _Painter extends CustomPainter {
           _paintTabletop(
             canvas,
             sprite,
-            _spriteBounds(sprite, Offset.zero, radius * .48),
+            _spriteBounds(sprite, Offset.zero, radius * .42),
           );
         } else {
           canvas.drawCircle(
