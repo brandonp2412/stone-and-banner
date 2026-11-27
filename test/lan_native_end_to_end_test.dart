@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/network/lan_client.dart';
 import 'package:stone_and_banner/engine/match.dart';
+import 'package:stone_and_banner/engine/heuristic_ai.dart';
 import 'package:stone_and_banner/network/lan_host.dart';
 
 Future<void> until(bool Function() ready) async {
@@ -14,6 +15,66 @@ Future<void> until(bool Function() ready) async {
 }
 
 void main() {
+  for (final difficulty in [BotDifficulty.easy, BotDifficulty.medium]) {
+    test('LAN synchronizes and plays ${difficulty.label} bots', () async {
+      final server = await LanHostServer.start(
+        bindAddress: '127.0.0.1',
+        advertise: false,
+        shuffleTurns: false,
+      );
+      final host = LanRoomClient(), guest = LanRoomClient();
+      addTearDown(() async {
+        host.dispose();
+        guest.dispose();
+        await server.close();
+      });
+      final url = 'ws://127.0.0.1:${server.port}/room';
+      host.host(url, 'Host', 3, 42);
+      await until(() => host.room != null);
+      guest.join(url, 'Guest', host.room!);
+      await until(() => host.players.length == 2 && guest.seat != null);
+      expect(guest.botDifficulty, BotDifficulty.hard);
+      guest.setBotDifficulty(BotDifficulty.easy);
+      await until(() => guest.error != null);
+      expect(host.botDifficulty, BotDifficulty.hard);
+      host.setBots(1);
+      host.setBotDifficulty(difficulty);
+      await until(
+        () =>
+            host.botDifficulty == difficulty &&
+            guest.botDifficulty == difficulty &&
+            host.botCount == 1,
+      );
+      host.start();
+      await until(() => host.game != null && guest.game != null);
+      host.setBotDifficulty(BotDifficulty.hard);
+      await until(() => host.error != null);
+      expect(guest.botDifficulty, difficulty);
+      host.dispatch(PlaceVillage(MatchEngine.legalVertices(host.game!).first));
+      await until(() => host.version == 1 && !host.pending);
+      host.dispatch(PlaceRoad(MatchEngine.legalEdges(host.game!).first));
+      await until(() => guest.version == 2);
+      guest.dispatch(
+        PlaceVillage(MatchEngine.legalVertices(guest.game!).first),
+      );
+      await until(() => guest.version == 3 && !guest.pending);
+      final before = guest.game!;
+      final road = PlaceRoad(MatchEngine.legalEdges(before).first);
+      // Public setup geometry contains all inputs used by the bot's draft.
+      final next = MatchEngine.apply(before, road);
+      final expected =
+          HeuristicAi(difficulty: difficulty).choose(next)! as PlaceVillage;
+      expect(
+        expected.vertex,
+        isNot((const HeuristicAi().choose(next)! as PlaceVillage).vertex),
+      );
+      guest.dispatch(road);
+      await until(() => host.version >= 5);
+      expect(host.game!.sites[expected.vertex]?.owner, 2);
+      expect(host.botDifficulty, difficulty);
+    });
+  }
+
   test(
     'in-app LAN host accepts real TCP clients, starts match, syncs state',
     () async {

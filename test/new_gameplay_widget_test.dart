@@ -46,7 +46,7 @@ void main() {
   );
 
   testWidgets(
-    'new card banner visible while bot acts and Realm stays on viewer',
+    'new card indicator visible without board overlay while bot acts',
     (tester) async {
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1;
@@ -79,11 +79,9 @@ void main() {
       state = state.copyWith(players: players, active: 1);
       await tester.pumpWidget(app());
       await tester.pump(const Duration(milliseconds: 750));
-      expect(
-        find.byKey(const ValueKey('card-received-banner')),
-        findsOneWidget,
-      );
-      expect(find.text('NEW STRATEGY CARD!'), findsOneWidget);
+      expect(find.byKey(const ValueKey('card-received-banner')), findsNothing);
+      expect(find.text('NEW STRATEGY CARD!'), findsNothing);
+      expect(find.byKey(const ValueKey('cards-count-badge')), findsOneWidget);
       if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
         await tester.runAsync(
           () => capture(tester, '/tmp/stone-card-receipt-ui.png'),

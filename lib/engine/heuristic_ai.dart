@@ -6,7 +6,7 @@ import 'board.dart';
 import 'game.dart';
 import 'match.dart';
 
-/// Hard preserves the original tuned policy. Older saves default to Hard.
+/// Older saves default to Hard.
 enum BotDifficulty {
   easy('Easy', 2),
   medium('Medium', 4),
@@ -329,10 +329,204 @@ class HeuristicAi {
     }
   }
 
+  RespondTrade answerOffer(MatchState state, int seat, TradeProposal offer) {
+    final responding = state.copyWith(active: seat, offers: [offer]);
+    final view = AiActionAdapter.observe(responding, seat);
+    final hard = difficulty == BotDifficulty.hard;
+    final answer = AiCardStrategy.incomingOffer(
+      view,
+      goal: hard ? _hardGoal(responding) : null,
+      cautious: hard,
+    );
+    return answer is RespondTrade
+        ? answer
+        : RespondTrade(seat, false, offerId: offer.id);
+  }
+
+  List<ProposeTrade> _recentRejectedOffers(MatchState state) {
+    final rejected = <int>{};
+    final accepted = <int>{};
+    final result = <ProposeTrade>[];
+    var actor = state.active;
+    var turns = 0;
+    for (var i = state.events.length - 1; i >= 0; i--) {
+      final event = state.events[i];
+      if (event is EndTurn) {
+        turns++;
+        if (turns > state.players.length * 2) break;
+        final order = state.turnOrder;
+        actor = order[(order.indexOf(actor) - 1 + order.length) % order.length];
+      } else if (event is RespondTrade && event.offerId != null) {
+        (event.accept ? accepted : rejected).add(event.offerId!);
+      } else if (event is ProposeTrade &&
+          event.counterOf == null &&
+          actor == state.active &&
+          rejected.contains(i) &&
+          !accepted.contains(i)) {
+        result.add(event);
+      }
+    }
+    return result;
+  }
+
+  // A construction plan reserves the same goods for bank, player trades and
+  // development. Only public geometry and our own hand enter this decision.
+  double _hardRoadValue(MatchState state, int edgeId) {
+    final edge = state.topology.edges[edgeId];
+    bool open(int v) => _open(state, v) && !state.guards.containsKey(v);
+    bool blocked(int v) =>
+        (state.sites[v] != null && state.sites[v]!.owner != state.active) ||
+        (state.guards[v] != null && state.guards[v]!.owner != state.active);
+    bool connected(int v) => state.topology.vertices[v].edges.any(
+      (e) => state.roads[e] == state.active,
+    );
+    var best = 0.0;
+    for (final v in [edge.a, edge.b]) {
+      if (connected(v) || blocked(v)) continue;
+      if (open(v)) best = math.max(best, siteValue(state, v));
+      for (final nextEdge in state.topology.vertices[v].edges) {
+        if (nextEdge == edgeId || state.roads.containsKey(nextEdge)) continue;
+        final next = state.topology.edges[nextEdge];
+        final target = next.a == v ? next.b : next.a;
+        if (open(target) && !connected(target)) {
+          best = math.max(best, siteValue(state, target) * .65);
+        }
+      }
+    }
+    return best;
+  }
+
+  Map<Resource, int> _hardGoal(MatchState state) {
+    final own = state.sites.entries.where((e) => e.value.owner == state.active);
+    final goals = <(Map<Resource, int>, double)>[];
+    bool open(int v) => _open(state, v) && !state.guards.containsKey(v);
+    final reachable = state.topology.vertices.where(
+      (v) => open(v.id) && v.edges.any((e) => state.roads[e] == state.active),
+    );
+    if (reachable.isNotEmpty) {
+      final quality = reachable
+          .map((v) => siteValue(state, v.id))
+          .reduce(math.max);
+      goals.add((MatchEngine.villageCost, 7 + quality * .35));
+    }
+    for (final site in own) {
+      final quality = siteValue(state, site.key);
+      if (site.value.structure == Structure.village) {
+        goals.add((
+          state.reaverScars.contains(site.key)
+              ? MatchEngine.rebuildCost
+              : MatchEngine.townCost,
+          9 +
+              quality * .35 +
+              (own.any((e) => e.value.structure != Structure.village) ? 0 : 5),
+        ));
+      } else if (site.value.structure == Structure.town) {
+        goals.add((MatchEngine.capitalCost, 13 + quality * .15));
+      }
+    }
+    if (reachable.isEmpty &&
+        state.roads.values.where((p) => p == state.active).length <
+            MatchEngine.roadLimit) {
+      bool linked(int v) {
+        if (state.guards[v] case final guard?
+            when guard.owner != state.active) {
+          return false;
+        }
+        if (state.sites[v] case final site?) return site.owner == state.active;
+        return state.topology.vertices[v].edges.any(
+          (e) => state.roads[e] == state.active,
+        );
+      }
+
+      final roads = state.topology.edges.where(
+        (e) => !state.roads.containsKey(e.id) && (linked(e.a) || linked(e.b)),
+      );
+      if (roads.isNotEmpty) {
+        final quality = roads
+            .map((e) => _hardRoadValue(state, e.id))
+            .reduce(math.max);
+        if (quality >= 3) {
+          goals.add((MatchEngine.effectiveRoadCost(state), 5 + quality * .35));
+        }
+      }
+    }
+    if (goals.isEmpty) return MatchEngine.villageCost;
+    double value((Map<Resource, int>, double) plan) {
+      final deficit = plan.$1.entries.fold<int>(
+        0,
+        (n, e) => n + math.max(0, e.value - _have(state, e.key)),
+      );
+      return plan.$2 - deficit * 1.5;
+    }
+
+    goals.sort((a, b) => value(b).compareTo(value(a)));
+    return goals.first.$1;
+  }
+
+  BankExchange? _hardExchange(
+    MatchState state,
+    AiLegalActions legal,
+    Map<Resource, int> goal,
+  ) {
+    final prior = state.events.reversed
+        .takeWhile((e) => e is! RollDice && e is! EndTurn)
+        .whereType<BankExchange>()
+        .toList();
+    if (prior.length >= 2) return null;
+    final commerce = state.current.level(StrategyDeck.commerce);
+    double gain(BankExchange e) {
+      final missing = (goal[e.receive] ?? 0) - _have(state, e.receive);
+      final rate = MatchEngine.tradeRate(state, state.active, e.give);
+      final surplus = _have(state, e.give) - (goal[e.give] ?? 0);
+      if (missing <= 0 ||
+          surplus < rate ||
+          prior.any((p) => p.give == e.receive)) {
+        return -100;
+      }
+      final received = commerce >= 5
+          ? state.balance.bazaarGoods
+          : commerce >= 3 && e.receive == Resource.cloth
+          ? 2
+          : 1;
+      return math.min(missing, received) * 10.0 -
+          rate * 1.5 +
+          missing * .2 +
+          surplus * .05;
+    }
+
+    final candidates = legal.exchanges.where((e) => gain(e) > 0).toList();
+    if (candidates.isEmpty) return null;
+    return _best<BankExchange>(
+      candidates,
+      gain,
+      (e) => e.give.index * 8 + e.receive.index,
+    );
+  }
+
   MatchEvent _action(MatchState state, AiLegalActions legal) {
     final view = AiActionAdapter.observe(state, state.active);
     if (view.actionsSinceRoll >= difficulty.actionLimit) return const EndTurn();
-    final answer = AiCardStrategy.incomingOffer(view);
+    final hard = difficulty == BotDifficulty.hard;
+    final goal = hard ? _hardGoal(state) : null;
+    // Never sacrifice an immediate winning construction action for shared defence.
+    if (hard) {
+      final score = MatchEngine.score(state, state.active);
+      for (final upgrade in legal.upgrades) {
+        final points = state.sites[upgrade.vertex]!.structure == Structure.town
+            ? 2
+            : 1;
+        if (score + points >= GameEngine.winningPoints) return upgrade;
+      }
+      if (score + 1 >= GameEngine.winningPoints && legal.villages.isNotEmpty) {
+        return legal.villages.first;
+      }
+    }
+
+    final answer = AiCardStrategy.incomingOffer(
+      view,
+      goal: goal,
+      cautious: hard,
+    );
     if (answer != null) return answer;
 
     // Defend before all ore is sunk into points: a Guard needs a recruitment
@@ -353,7 +547,14 @@ class HeuristicAi {
     );
     // A player with no towns at risk can profit from an undefended invasion.
     final defend = ownsTown || !rivalTowns;
-    if (defend && needDefence && view.actionsSinceRoll < 6) {
+    // Earlier defence is worthwhile if it does not delay a scoring build.
+    // Near the raid, protect the board even when construction is possible.
+    final urgent = roundsUntilRaid <= 2;
+    final canBuild = legal.villages.isNotEmpty || legal.upgrades.isNotEmpty;
+    if (defend &&
+        needDefence &&
+        view.actionsSinceRoll < 6 &&
+        (!hard || urgent || !canBuild)) {
       if (legal.activates.isNotEmpty) {
         return _best<ActivateGuard>(
           legal.activates,
@@ -361,9 +562,22 @@ class HeuristicAi {
           (event) => event.vertex,
         );
       }
-      if (needDefence && legal.promotions.isNotEmpty) {
+      final promotions = hard && !urgent && ownGuards.length > 1
+          ? legal.promotions
+                .where(
+                  (e) => MatchEngine.promotionCost(state.guards[e.vertex]!.rank)
+                      .entries
+                      .every(
+                        (cost) =>
+                            _have(state, cost.key) - cost.value >=
+                            (goal![cost.key] ?? 0),
+                      ),
+                )
+                .toList()
+          : legal.promotions;
+      if (needDefence && promotions.isNotEmpty) {
         return _best<PromoteGuard>(
-          legal.promotions,
+          promotions,
           (event) => state.guards[event.vertex]!.rank.strength.toDouble(),
           (event) => event.vertex,
         );
@@ -425,7 +639,12 @@ class HeuristicAi {
       );
     }
 
-    final advanced = AiActionAdapter.advancedDecision(view);
+    final advanced = AiActionAdapter.advancedDecision(
+      view,
+      constructionGoal: goal,
+      deferDefence: hard,
+      deferExchange: hard,
+    );
     if (advanced != null) return advanced;
 
     // A Town opens productive commodities; Commerce II improves all exchanges.
@@ -438,10 +657,12 @@ class HeuristicAi {
       }
     }
 
-    final card = AiCardStrategy.playCard(view);
+    final card = AiCardStrategy.playCard(view, goal: goal);
     if (card != null) return card;
 
-    final trade = _exchange(state, legal);
+    final trade = hard
+        ? _hardExchange(state, legal, goal!)
+        : _exchange(state, legal);
     if (trade != null) return trade;
 
     // Roads are an investment only when they unlock useful, spaced sites.
@@ -453,16 +674,27 @@ class HeuristicAi {
     );
     if (!availableSite &&
         legal.roads.isNotEmpty &&
-        state.roads.values.where((p) => p == state.active).length < 12) {
+        state.roads.values.where((p) => p == state.active).length <
+            (hard ? MatchEngine.roadLimit : 12)) {
       final road = _best<PlaceRoad>(
         legal.roads,
-        (e) => _roadValue(state, e.edge),
+        (e) => hard ? _hardRoadValue(state, e.edge) : _roadValue(state, e.edge),
         (e) => e.edge,
       );
-      if (_roadValue(state, road.edge) >= 3) return road;
+      if ((hard
+              ? _hardRoadValue(state, road.edge)
+              : _roadValue(state, road.edge)) >=
+          3) {
+        return road;
+      }
     }
 
-    final proposal = AiCardStrategy.propose(view);
+    final proposal = AiCardStrategy.propose(
+      view,
+      goal: goal,
+      cautious: hard,
+      excluded: hard ? _recentRejectedOffers(state) : const [],
+    );
     if (proposal != null) return proposal;
     return const EndTurn();
   }

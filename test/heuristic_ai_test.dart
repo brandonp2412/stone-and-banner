@@ -229,6 +229,56 @@ void main() {
     );
   });
 
+  test('Hard takes a winning build instead of spending on shared defence', () {
+    const ai = HeuristicAi();
+    var state = afterDraft(117);
+    final (a, b) = MatchEngine.expectedDice(state);
+    state = MatchEngine.apply(state, RollDice(a, b));
+    if (state.phase == MatchPhase.bandit) {
+      state = MatchEngine.apply(state, ai.choose(state)!);
+    }
+    final players = state.players.toList();
+    players[state.active] = state.current.copyWith(
+      charterPoints:
+          GameEngine.winningPoints - 1 - MatchEngine.score(state, state.active),
+    );
+    state = deal(
+      state.copyWith(players: players, reaverPressure: state.raidInterval - 1),
+      {Resource.wheat: 2, Resource.ore: 3},
+    );
+    final move = ai.choose(state)!;
+    expect(move, isA<UpgradeSite>());
+    expect(MatchEngine.winner(MatchEngine.apply(state, move)), state.active);
+  });
+
+  test('Hard declines a profitable offer from a near-winning rival', () {
+    const ai = HeuristicAi();
+    var state = afterDraft(117);
+    final (a, b) = MatchEngine.expectedDice(state);
+    state = MatchEngine.apply(state, RollDice(a, b));
+    if (state.phase == MatchPhase.bandit) {
+      state = MatchEngine.apply(state, ai.choose(state)!);
+    }
+    final proposer = state.active;
+    final responder = (proposer + 1) % state.players.length;
+    state = deal(state, {Resource.ore: 2});
+    final players = state.players.toList();
+    players[proposer] = state.current.copyWith(
+      charterPoints:
+          GameEngine.winningPoints - 1 - MatchEngine.score(state, proposer),
+    );
+    state = state.copyWith(players: players);
+    state = deal(state.copyWith(active: responder), {
+      Resource.wood: 1,
+    }).copyWith(active: proposer);
+    state = MatchEngine.apply(
+      state,
+      ProposeTrade(responder, Resource.ore, 2, Resource.wood, 1),
+    );
+    final offer = state.offers.single;
+    expect(ai.answerOffer(state, responder, offer).accept, isFalse);
+  });
+
   test('bounded multi-round deterministic bot applies only reducer events', () {
     const ai = HeuristicAi();
     for (final seed in [71, 72, 73]) {

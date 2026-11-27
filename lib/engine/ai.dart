@@ -362,7 +362,12 @@ abstract final class AiActionAdapter {
 
   /// A bounded, replay-safe advanced policy; all candidates are from the
   /// adapter whitelist, so finite bank stock and legality stay in the reducer.
-  static MatchEvent? advancedDecision(AiTurnView view) {
+  static MatchEvent? advancedDecision(
+    AiTurnView view, {
+    Map<Resource, int>? constructionGoal,
+    bool deferDefence = false,
+    bool deferExchange = false,
+  }) {
     final s = view.strategy;
     final actions = view.legalActions;
     if (view.phase == MatchPhase.finished) return null;
@@ -418,7 +423,7 @@ abstract final class AiActionAdapter {
     final promotes = actions.whereType<PromoteGuard>().toList();
     final forts = actions.whereType<FortifyTown>().toList();
     final recruits = actions.whereType<RecruitGuard>().toList();
-    if (impending) {
+    if (impending && !deferDefence) {
       if (activates.isNotEmpty) return activates.first;
       // Forts both strengthen defence and absorb a failed invasion hit.
       if (forts.isNotEmpty) return forts.first;
@@ -476,7 +481,23 @@ abstract final class AiActionAdapter {
         final result = developValue(b).compareTo(developValue(a));
         return result != 0 ? result : a.track.index.compareTo(b.track.index);
       });
-      if (developValue(development.first) >= 6) return development.first;
+      final selected = development.first;
+      final value = developValue(selected);
+      // Hard reserves construction goods unless the development has a
+      // meaningful economic/defensive payoff. Legacy callers retain the policy.
+      if (value >= 6 &&
+          (constructionGoal == null ||
+              value >= 17 ||
+              selected.track
+                  .costFor((s.levels[selected.track] ?? 0) + 1)
+                  .entries
+                  .every(
+                    (e) =>
+                        (view.ownGoods[e.key] ?? 0) - e.value >=
+                        (constructionGoal[e.key] ?? 0),
+                  ))) {
+        return selected;
+      }
     }
 
     // Recover construction deficits via *actual* stock-backed bank trades.
@@ -493,7 +514,7 @@ abstract final class AiActionAdapter {
           spare >= s.tradeRate &&
           (s.bankStock[a.receive] ?? 0) > 0;
     }).toList();
-    if (exchanges.isNotEmpty) {
+    if (!deferExchange && exchanges.isNotEmpty) {
       exchanges.sort((a, b) {
         final aDeficit =
             (goal[a.receive] ?? 0) - (view.ownGoods[a.receive] ?? 0);

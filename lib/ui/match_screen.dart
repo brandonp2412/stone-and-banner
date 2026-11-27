@@ -8,6 +8,7 @@ import 'dart:ui' as ui;
 import 'compact_layout.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/semantics.dart' show SemanticsProperties;
 
@@ -293,6 +294,9 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   GameplayHint? get _activeGameplayHint {
     if (!_hintsLoaded ||
         !_hintsEnabled ||
+        // Fortification uses the normal highlighted board targets; a modal
+        // tutorial would intercept the very tap needed to place it.
+        (s.phase == MatchPhase.actions && move == _Move.fortify) ||
         // Multiplayer instruction overlays can consume a timed turn. Players
         // can still consult the rulebook without blocking each other's game.
         widget.online ||
@@ -404,8 +408,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
   int? _crownRoadWinner;
   List<int> _crownRoadRoute = const [];
   bool _unseenCard = false;
-  String? _newCardNotice;
-  Timer? _newCardTimer;
   String? _fallenCityOwner;
   int _fallenCityVp = 0;
 
@@ -838,6 +840,58 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     }
   }
 
+  int? _reinforcementSiteAt(Offset point, BoardGeometry geometry) {
+    if (s.phase != MatchPhase.actions || s.active != viewerSeat) return null;
+    int? nearest;
+    var distance = double.infinity;
+    for (final entry in s.sites.entries) {
+      if (entry.value.owner != viewerSeat ||
+          entry.value.structure == Structure.village)
+        continue;
+      final anchor = geometry.vertex(s.topology.vertices[entry.key]);
+      final bounds = _siteSpriteBounds(geometry, anchor, entry.value);
+      if (!bounds.inflate(3).contains(point)) continue;
+      final d = (point - bounds.center).distance;
+      if (d < distance) {
+        distance = d;
+        nearest = entry.key;
+      }
+    }
+    return nearest;
+  }
+
+  Future<void> _confirmReinforcement(int vertex) async {
+    if (!MatchEngine.legalFort(s, vertex) || s.active != viewerSeat) return;
+    final building = s.sites[vertex]!.structure.name;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => CompactAlertDialog(
+        title: Text('Reinforce $building?'),
+        content: ResourceLabel(
+          'Cost: ${_costLabel(MatchEngine.fortCost)}',
+          showNames: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-reinforcement'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reinforce'),
+          ),
+        ],
+      ),
+    );
+    if (mounted &&
+        confirmed == true &&
+        s.active == viewerSeat &&
+        MatchEngine.legalFort(s, vertex)) {
+      send(FortifyTown(vertex));
+    }
+  }
+
   String? _boardHover(Offset point, Size size) {
     if (widget.observing ||
         s.tactical != null ||
@@ -894,6 +948,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       return null;
     }
     if (s.phase != MatchPhase.actions) return null;
+    final reinforcement = _reinforcementSiteAt(point, g);
+    if (reinforcement != null) {
+      final name = s.sites[reinforcement]!.structure.name;
+      if (s.fortified.contains(reinforcement))
+        return 'Already reinforced $name';
+      return MatchEngine.legalFort(s, reinforcement)
+          ? 'Reinforce $name · ${_costLabel(MatchEngine.fortCost)}'
+          : 'Reinforce $name · not enough resources';
+    }
     for (final id in s.guards.keys) {
       if ((point - g.vertex(s.topology.vertices[id])).distance <=
           math.max(22, g.radius * .35)) {
@@ -1085,6 +1148,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       }
     } else {
       if (move == _Move.inspect && s.phase == MatchPhase.actions) {
+        final reinforcement = _reinforcementSiteAt(tap, g);
+        if (reinforcement != null) {
+          await _confirmReinforcement(reinforcement);
+          return;
+        }
         for (final entry in s.guards.entries) {
           if ((tap - g.vertex(s.topology.vertices[entry.key])).distance >
               math.max(22, g.radius * .35)) {
@@ -1149,39 +1217,61 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               title: Text(
                 upgrade ? 'Upgrade village?' : 'Build at this junction',
               ),
-              content: ResourceLabel(
-                upgrade
-                    ? _upgradeCostLabel()
-                    : 'Choose what to build at junction ${vertex + 1}.',
+              scrollable: true,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
+              content: SizedBox(
+                width: 380,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (upgrade) ...[
+                      ResourceLabel(_upgradeCostLabel()),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: () =>
+                            Navigator.pop(context, UpgradeSite(vertex)),
+                        child: const Text('Upgrade village'),
+                      ),
+                    ],
+                    if (canVillage)
+                      _junctionBuildChoice(
+                        key: const ValueKey('build-village-at-junction'),
+                        title: 'Build village',
+                        icon: Icons.home_rounded,
+                        cost: MatchEngine.villageCost,
+                        primary: true,
+                        onPressed: () =>
+                            Navigator.pop(context, PlaceVillage(vertex)),
+                      ),
+                    if (canVillage && canRecruit) const SizedBox(height: 8),
+                    if (canRecruit)
+                      _junctionBuildChoice(
+                        key: const ValueKey('build-guard-at-junction'),
+                        title: 'Build Guard',
+                        icon: Icons.shield_outlined,
+                        cost:
+                            s.players[viewerSeat].level(
+                                  StrategyDeck.governance,
+                                ) >=
+                                4
+                            ? {Resource.wool: 1}
+                            : MatchEngine.recruitCost,
+                        primary: !canVillage,
+                        onPressed: () =>
+                            Navigator.pop(context, RecruitGuard(vertex)),
+                      ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Cancel'),
                 ),
-                if (upgrade)
-                  FilledButton(
-                    onPressed: () =>
-                        Navigator.pop(context, UpgradeSite(vertex)),
-                    child: const Text('Upgrade village'),
-                  ),
-                if (canVillage)
-                  FilledButton(
-                    onPressed: () =>
-                        Navigator.pop(context, PlaceVillage(vertex)),
-                    child: ResourceLabel(
-                      'Build village · ${_costLabel(MatchEngine.villageCost)}',
-                    ),
-                  ),
-                if (canRecruit)
-                  OutlinedButton(
-                    key: const ValueKey('build-guard-at-junction'),
-                    onPressed: () =>
-                        Navigator.pop(context, RecruitGuard(vertex)),
-                    child: ResourceLabel(
-                      'Build Guard · ${_costLabel(s.players[viewerSeat].level(StrategyDeck.governance) >= 4 ? {Resource.wool: 1} : MatchEngine.recruitCost)}',
-                    ),
-                  ),
               ],
             ),
           );
@@ -1203,6 +1293,77 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         }
       }
     }
+  }
+
+  Widget _junctionBuildChoice({
+    required Key key,
+    required String title,
+    required IconData icon,
+    required Map<Resource, int> cost,
+    required bool primary,
+    required VoidCallback onPressed,
+  }) {
+    final style = FilledButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      alignment: Alignment.centerLeft,
+    );
+    final content = Row(
+      children: [
+        Icon(icon, size: 26),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 12,
+                runSpacing: 5,
+                children: [
+                  for (final entry in cost.entries)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ResourceIcon(entry.key, size: 18),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${entry.value}',
+                          semanticsLabel:
+                              '${entry.value} ${entry.key.displayName}',
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        const Icon(Icons.chevron_right, size: 20),
+      ],
+    );
+    return primary
+        ? FilledButton(
+            key: key,
+            onPressed: onPressed,
+            style: style,
+            child: content,
+          )
+        : OutlinedButton(
+            key: key,
+            onPressed: onPressed,
+            style: style,
+            child: content,
+          );
   }
 
   List<int> get availableTargets => switch (move) {
@@ -1442,11 +1603,14 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
 
   bool get _compact => MediaQuery.sizeOf(context).height < 350;
 
+  int get _cardCount => s.players[viewerSeat].cards.length;
+
   int _tab = 0;
   // null: map; -1: full-screen actions.
   int? _mobilePage;
 
   void _openMobileCategory(int tab) {
+    if (tab == 2 && _cardCount == 0) return;
     // Viewing any category is allowed, even while another player acts.
     setState(() {
       _tab = tab;
@@ -1468,7 +1632,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     FocusManager.instance.removeEarlyKeyEventHandler(_handleMainActionKey);
     _boardHoverPosition.dispose();
     _turnClock?.cancel();
-    _newCardTimer?.cancel();
     _roadController.dispose();
     _numberPulseController.dispose();
     _banditBlockController.dispose();
@@ -1557,13 +1720,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       }).toList();
       if (gainedCards.isNotEmpty) {
         _unseenCard = _tab != 2;
-        _newCardNotice = gainedCards
-            .map((card) => card.definition.name)
-            .join(', ');
-        _newCardTimer?.cancel();
-        _newCardTimer = Timer(const Duration(seconds: 5), () {
-          if (mounted) setState(() => _newCardNotice = null);
-        });
         if (!MediaQuery.disableAnimationsOf(context)) {
           _cardsTabController.forward(from: 0);
         }
@@ -1582,14 +1738,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       _roadBreakVertex = null;
       _dismissedHintContext = null;
       _unseenCard = false;
-      _newCardNotice = null;
-      _newCardTimer?.cancel();
       _mapCard = null;
       _mapCardOptions = const [];
     }
     if (s.phase != oldWidget.state.phase ||
         (s.phase == MatchPhase.finished && s.seed != oldWidget.state.seed)) {
       _endModalDismissed = false;
+    }
+    if (_cardCount == 0) {
+      if (_tab == 2) _tab = 0;
+      _unseenCard = false;
     }
     final skipping =
         _skipBotDice ||
@@ -1808,7 +1966,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             _Move.village => 'Place a village',
             _Move.road => 'Build a road',
             _Move.upgrade => 'Upgrade a village',
-            _Move.fortify => 'Fortify a town',
+            _Move.fortify => 'Fortify a Town or Capital',
             _Move.recruit => 'Recruit a Guard',
             _Move.activate => 'Activate a Guard',
             _Move.promote => 'Promote a Guard',
@@ -1842,6 +2000,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               '${_costLabel(MatchEngine.effectiveRoadCost(s))} · tap a connected edge',
             _Move.village =>
               '${_costLabel(MatchEngine.villageCost)} · tap a glowing junction',
+            _Move.fortify => 'Tap a highlighted Town or Capital',
             _Move.inspect => 'Build, trade or play a card',
             _ => 'Tap a glowing target on the map',
           },
@@ -1915,182 +2074,197 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         child: Stack(
           children: [
             SafeArea(
-              child: Column(
-                children: [
-                  if (!mobile || _mobilePage == null) _playerBar(),
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: LayoutBuilder(
-                            key: _panelHintTarget,
-                            builder: (context, bounds) {
-                              if (mobile) return _mobileLayout(phase);
-                              final desktop =
-                                  bounds.maxWidth >= 1200 &&
-                                  bounds.maxHeight >= 550;
-                              final railWidth = desktop
-                                  ? (bounds.maxWidth * .25).clamp(320.0, 420.0)
-                                  : math.min(320.0, bounds.maxWidth * .48);
-                              return Column(
-                                children: [
-                                  Expanded(
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        Expanded(child: _map()),
-                                        SizedBox(
-                                          width: railWidth,
-                                          child: Material(
-                                            color: gameColor(
-                                              context,
-                                              const Color(0xff182a31),
-                                            ),
-                                            child: Column(
-                                              children: [
-                                                if (s.tactical == null ||
-                                                    widget.observing)
-                                                  _tabs(),
-                                                Expanded(
-                                                  child:
-                                                      s.tactical != null &&
-                                                          !widget.observing
-                                                      ? _TacticalPanel(
-                                                          state: s,
-                                                          onEvent: send,
-                                                          online: widget.online,
-                                                        )
-                                                      : Scrollbar(
-                                                          controller:
-                                                              _panelScroll[_tab],
-                                                          thumbVisibility: true,
-                                                          interactive: true,
-                                                          child: ListView(
+              child: LayoutBuilder(
+                builder: (context, bounds) => Column(
+                  children: [
+                    if (!mobile || _mobilePage == null)
+                      _playerBar(bounds.maxHeight),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: LayoutBuilder(
+                              key: _panelHintTarget,
+                              builder: (context, bounds) {
+                                if (mobile) return _mobileLayout(phase);
+                                final desktop =
+                                    bounds.maxWidth >= 1200 &&
+                                    bounds.maxHeight >= 550;
+                                final railWidth = desktop
+                                    ? (bounds.maxWidth * .25).clamp(
+                                        320.0,
+                                        420.0,
+                                      )
+                                    : math.min(320.0, bounds.maxWidth * .48);
+                                return Column(
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Expanded(child: _map()),
+                                          SizedBox(
+                                            width: railWidth,
+                                            child: Material(
+                                              color: gameColor(
+                                                context,
+                                                const Color(0xff182a31),
+                                              ),
+                                              child: Column(
+                                                children: [
+                                                  if (s.tactical == null ||
+                                                      widget.observing)
+                                                    _tabs(),
+                                                  Expanded(
+                                                    child:
+                                                        s.tactical != null &&
+                                                            !widget.observing
+                                                        ? _TacticalPanel(
+                                                            state: s,
+                                                            onEvent: send,
+                                                            online:
+                                                                widget.online,
+                                                          )
+                                                        : Scrollbar(
                                                             controller:
                                                                 _panelScroll[_tab],
-                                                            key: PageStorageKey(
-                                                              'panel-$_tab',
-                                                            ),
-                                                            padding:
-                                                                EdgeInsets.symmetric(
-                                                                  horizontal:
-                                                                      _compact
-                                                                      ? 8
-                                                                      : 12,
-                                                                  vertical:
-                                                                      _compact
-                                                                      ? 4
-                                                                      : 12,
-                                                                ),
-                                                            children: [
-                                                              _waitingStatus(),
-                                                              ..._visiblePanelContents(
-                                                                phase,
+                                                            thumbVisibility:
+                                                                true,
+                                                            interactive: true,
+                                                            child: ListView(
+                                                              controller:
+                                                                  _panelScroll[_tab],
+                                                              key: PageStorageKey(
+                                                                'panel-$_tab',
                                                               ),
-                                                            ],
+                                                              padding:
+                                                                  EdgeInsets.symmetric(
+                                                                    horizontal:
+                                                                        _compact
+                                                                        ? 8
+                                                                        : 12,
+                                                                    vertical:
+                                                                        _compact
+                                                                        ? 4
+                                                                        : 12,
+                                                                  ),
+                                                              children: [
+                                                                _waitingStatus(),
+                                                                ..._visiblePanelContents(
+                                                                  phase,
+                                                                ),
+                                                              ],
+                                                            ),
                                                           ),
-                                                        ),
-                                                ),
-                                              ],
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  _desktopFooter(railWidth),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                        // Keep the roll above the changing turn layout so a
-                        // bot-to-human handoff cannot remount its animation.
-                        if (_rollingDice case final dice?)
-                          Positioned.fill(
-                            key: ValueKey('dice-overlay-$_diceAnimationSerial'),
-                            child: IgnorePointer(
-                              child: LayoutBuilder(
-                                builder: (context, bounds) {
-                                  final width = bounds.maxWidth;
-                                  final rail = mobile
-                                      ? 0.0
-                                      : width >= 1200 && bounds.maxHeight >= 550
-                                      ? (width * .25).clamp(320.0, 420.0)
-                                      : math.min(320.0, width * .48);
-                                  return Padding(
-                                    padding: EdgeInsets.only(right: rail),
-                                    child: DiceRoll(
-                                      first: dice.first,
-                                      second: dice.second,
-                                      onComplete: () {
-                                        if (mounted &&
-                                            identical(_rollingDice, dice)) {
-                                          setState(() => _rollingDice = null);
-                                        }
-                                      },
-                                    ),
-                                  );
-                                },
-                              ),
+                                    _desktopFooter(railWidth),
+                                  ],
+                                );
+                              },
                             ),
                           ),
-                        if ((portrait || !mobile || _hasTopActivitySpace) &&
-                            _mobilePage == null)
-                          Positioned(
-                            top: 4,
-                            left: portrait ? 12 : 132,
-                            right: portrait
-                                ? 12
-                                : 132 +
-                                      (mobile
-                                          ? 0
-                                          : MediaQuery.sizeOf(context).width >=
-                                                    1200 &&
-                                                MediaQuery.sizeOf(context)
-                                                            .height -
-                                                        MediaQuery.paddingOf(
-                                                          context,
-                                                        ).vertical -
-                                                        160 -
-                                                        _instructionHeight >=
-                                                    550
-                                          ? (MediaQuery.sizeOf(context).width *
-                                                    .25)
-                                                .clamp(320.0, 420.0)
-                                          : math.min(
-                                              320.0,
-                                              MediaQuery.sizeOf(context).width *
-                                                  .48,
-                                            )),
-                            child: Center(
-                              child: MatchActivity(
-                                key: ValueKey(
-                                  portrait
-                                      ? 'portrait-reaction-toast'
-                                      : 'top-reaction-toast',
+                          // Keep the roll above the changing turn layout so a
+                          // bot-to-human handoff cannot remount its animation.
+                          if (_rollingDice case final dice?)
+                            Positioned.fill(
+                              key: ValueKey(
+                                'dice-overlay-$_diceAnimationSerial',
+                              ),
+                              child: IgnorePointer(
+                                child: LayoutBuilder(
+                                  builder: (context, bounds) {
+                                    final width = bounds.maxWidth;
+                                    final rail = mobile
+                                        ? 0.0
+                                        : width >= 1200 &&
+                                              bounds.maxHeight >= 550
+                                        ? (width * .25).clamp(320.0, 420.0)
+                                        : math.min(320.0, width * .48);
+                                    return Padding(
+                                      padding: EdgeInsets.only(right: rail),
+                                      child: DiceRoll(
+                                        first: dice.first,
+                                        second: dice.second,
+                                        onComplete: () {
+                                          if (mounted &&
+                                              identical(_rollingDice, dice)) {
+                                            setState(() => _rollingDice = null);
+                                          }
+                                        },
+                                      ),
+                                    );
+                                  },
                                 ),
-                                showActivity: portrait || _hasTopActivitySpace,
-                                fastForwardingBots: widget.fastForwardingBots,
-                                state: s,
-                                viewerSeat: viewerSeat,
-                                computerSeats: widget.computerSeats,
-                                emote: widget.networkEmote ?? _emote,
-                                emoteSerial:
-                                    widget.online && widget.onEmote != null
-                                    ? widget.networkEmoteSerial
-                                    : _emoteSerial,
-                                emoteSeat: widget.networkEmoteSeat,
                               ),
                             ),
-                          ),
-                      ],
+                          if ((portrait || !mobile || _hasTopActivitySpace) &&
+                              _mobilePage == null)
+                            Positioned(
+                              top: 4,
+                              left: portrait ? 12 : 132,
+                              right: portrait
+                                  ? 12
+                                  : 132 +
+                                        (mobile
+                                            ? 0
+                                            : MediaQuery.sizeOf(context)
+                                                          .width >=
+                                                      1200 &&
+                                                  MediaQuery.sizeOf(context)
+                                                              .height -
+                                                          MediaQuery.paddingOf(
+                                                            context,
+                                                          ).vertical -
+                                                          160 -
+                                                          _instructionHeight >=
+                                                      550
+                                            ? (MediaQuery.sizeOf(context)
+                                                          .width *
+                                                      .25)
+                                                  .clamp(320.0, 420.0)
+                                            : math.min(
+                                                320.0,
+                                                MediaQuery.sizeOf(context)
+                                                        .width *
+                                                    .48,
+                                              )),
+                              child: Center(
+                                child: MatchActivity(
+                                  key: ValueKey(
+                                    portrait
+                                        ? 'portrait-reaction-toast'
+                                        : 'top-reaction-toast',
+                                  ),
+                                  showActivity:
+                                      portrait || _hasTopActivitySpace,
+                                  fastForwardingBots: widget.fastForwardingBots,
+                                  state: s,
+                                  viewerSeat: viewerSeat,
+                                  computerSeats: widget.computerSeats,
+                                  emote: widget.networkEmote ?? _emote,
+                                  emoteSerial:
+                                      widget.online && widget.onEmote != null
+                                      ? widget.networkEmoteSerial
+                                      : _emoteSerial,
+                                  emoteSeat: widget.networkEmoteSeat,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (!mobile || _mobilePage == null || _tradeComposerOpen)
-                    _resourceTray(anchorHarvest: true),
-                ],
+                    if (!mobile || _mobilePage == null || _tradeComposerOpen)
+                      _resourceTray(anchorHarvest: true),
+                  ],
+                ),
               ),
             ),
             if (!widget.fastForwardingBots)
@@ -2197,85 +2371,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-            if (_newCardNotice != null)
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + (mobile ? 155 : 118),
-                left: 16,
-                right: 16,
-                child: Center(
-                  child: Material(
-                    key: const ValueKey('card-received-banner'),
-                    elevation: 12,
-                    color: gameColor(context, const Color(0xff60451d)),
-                    borderRadius: BorderRadius.circular(18),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: () => setState(() {
-                        _tab = 2;
-                        _unseenCard = false;
-                        if (mobile) _mobilePage = -1;
-                        _newCardNotice = null;
-                      }),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 22,
-                          vertical: 14,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.auto_awesome_rounded,
-                              color: gameColor(
-                                context,
-                                const Color(0xffffe092),
-                              ),
-                              size: 29,
-                            ),
-                            const SizedBox(width: 12),
-                            Flexible(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'NEW STRATEGY CARD!',
-                                    style: TextStyle(
-                                      color: gameColor(
-                                        context,
-                                        const Color(0xffffe092),
-                                      ),
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  Text(
-                                    _newCardNotice!,
-                                    style: TextStyle(
-                                      color: gameColor(context, Colors.white),
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Tap to view in Cards',
-                                    style: TextStyle(
-                                      color: gameColor(
-                                        context,
-                                        const Color(0xfff9db9a),
-                                      ),
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             if (_unseenCard && mobile && _mobilePage == null)
               Positioned(
                 bottom: 102,
@@ -2301,17 +2396,6 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
               Positioned.fill(
                 child: BlockSemantics(
                   child: _gameplayHint(mobile, gameplayHint),
-                ),
-              ),
-            if (s.phase == MatchPhase.finished && _endModalDismissed)
-              Positioned(
-                right: 16,
-                top: 65,
-                child: FilledButton.tonalIcon(
-                  key: const ValueKey('reopen-match-finale'),
-                  onPressed: () => setState(() => _endModalDismissed = false),
-                  icon: const Icon(Icons.workspace_premium_outlined, size: 18),
-                  label: const Text('Results'),
                 ),
               ),
             if (s.phase == MatchPhase.finished && !_endModalDismissed)
@@ -2524,77 +2608,127 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             const Color(0xff3c0715),
           ).withValues(alpha: .72),
           child: Center(
-            child: Transform.translate(
-              offset: Offset(shake, math.sin(t * 22) * 5),
-              child: Transform.scale(
-                scale:
-                    0.75 + .38 * Curves.elasticOut.transform(t.clamp(0.0, 1.0)),
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 560),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 26,
-                    vertical: 28,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    color: gameColor(context, const Color(0xff1b101b)),
-                    border: Border.all(
-                      color: gameColor(context, const Color(0xffff6c43)),
-                      width: 3,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              child: LayoutBuilder(
+                builder: (context, bounds) => Transform.translate(
+                  offset: Offset(shake, math.sin(t * 22) * 5),
+                  child: Transform.scale(
+                    scale:
+                        (0.75 +
+                                .38 *
+                                    Curves.elasticOut.transform(
+                                      t.clamp(0.0, 1.0),
+                                    ))
+                            .clamp(0.0, 1.0),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: SizedBox(
+                        width: math.min(560, bounds.maxWidth),
+                        child: Container(
+                          key: const ValueKey('city-fall-panel'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 26,
+                            vertical: 28,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            color: gameColor(context, const Color(0xff1b101b)),
+                            border: Border.all(
+                              color: gameColor(
+                                context,
+                                const Color(0xffff6c43),
+                              ),
+                              width: 3,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xffff4b22)
+                                    .withValues(alpha: .5),
+                                blurRadius: 45,
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                children: [
+                                  for (final icon in [
+                                    Icons.bolt,
+                                    Icons.local_fire_department,
+                                    Icons.bolt,
+                                  ])
+                                    Icon(
+                                      icon,
+                                      color: gameColor(
+                                        context,
+                                        const Color(0xffff8861),
+                                      ),
+                                      size: 36,
+                                    ),
+                                ],
+                              ),
+                              Transform.rotate(
+                                angle: math.sin(t * 38) * (1 - t) * .23,
+                                child: Icon(
+                                  Icons.castle_rounded,
+                                  color: gameColor(
+                                    context,
+                                    const Color(0xffff8861),
+                                  ),
+                                  size: 84,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                mine
+                                    ? 'YOUR CITY HAS FALLEN!'
+                                    : "${_fallenCityOwner!.toUpperCase()}'S CITY HAS FALLEN!",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: gameColor(
+                                    context,
+                                    const Color(0xffffd6a3),
+                                  ),
+                                  fontSize: 25,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.4,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                mine
+                                    ? 'Your proud banners burn. The entire realm mocks your defeat.'
+                                    : 'The invaders grind another proud city into dust.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: gameColor(
+                                    context,
+                                    const Color(0xffffb8aa),
+                                  ),
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                '−$_fallenCityVp VICTORY ${_fallenCityVp == 1 ? 'POINT' : 'POINTS'}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: gameColor(
+                                    context,
+                                    const Color(0xffff6555),
+                                  ),
+                                  fontSize: 21,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xffff4b22).withValues(alpha: .5),
-                        blurRadius: 45,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('⚡  🔥  ⚡', style: TextStyle(fontSize: 38)),
-                      Transform.rotate(
-                        angle: math.sin(t * 38) * (1 - t) * .23,
-                        child: Icon(
-                          Icons.castle_rounded,
-                          color: gameColor(context, const Color(0xffff8861)),
-                          size: 84,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        mine
-                            ? 'YOUR CITY HAS FALLEN!'
-                            : "${_fallenCityOwner!.toUpperCase()}'S CITY HAS FALLEN!",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: gameColor(context, const Color(0xffffd6a3)),
-                          fontSize: 25,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        mine
-                            ? 'Your proud banners burn. The entire realm mocks your defeat.'
-                            : 'The invaders grind another proud city into dust.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: gameColor(context, const Color(0xffffb8aa)),
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        '−$_fallenCityVp VICTORY ${_fallenCityVp == 1 ? 'POINT' : 'POINTS'}',
-                        style: TextStyle(
-                          color: gameColor(context, const Color(0xffff6555)),
-                          fontSize: 21,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),
@@ -2679,6 +2813,16 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     ),
   );
 
+  bool get _reviewingFinishedMatch =>
+      s.phase == MatchPhase.finished && _endModalDismissed;
+
+  Widget _resultsButton() => FilledButton.tonalIcon(
+    key: const ValueKey('reopen-match-finale'),
+    onPressed: () => setState(() => _endModalDismissed = false),
+    icon: const Icon(Icons.workspace_premium_outlined, size: 18),
+    label: const Text('Results'),
+  );
+
   Widget _mobileLayout(MatchPhase phase) {
     if (_mobilePage != null) {
       return Column(
@@ -2699,10 +2843,34 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
           if (s.tactical != null && !widget.observing) _backToBoardAction(),
           Expanded(child: _mobileActionHub()),
+          if (_reviewingFinishedMatch)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _resultsButton(),
+              ),
+            ),
           // Keep inventory visible while trading, without burying it below
           // offer history in the scrolling panel.
           if (_tab == 1 && s.tactical == null && !_tradeComposerOpen)
             _resourceTray(),
+        ],
+      );
+    }
+    // A finished board gets a dedicated footer rather than floating controls
+    // over the terrain, standings, raid indicator or dice.
+    if (_reviewingFinishedMatch) {
+      return Column(
+        children: [
+          Expanded(child: _map(mobileFullscreen: true)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [_mobileActionsButton(), _resultsButton()],
+            ),
+          ),
         ],
       );
     }
@@ -2911,7 +3079,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     ],
   );
 
-  Widget _playerBar() => LayoutBuilder(
+  Widget _playerBar(double availableHeight) => LayoutBuilder(
     builder: (context, bounds) {
       final winner = MatchEngine.winner(s);
       final actingLabel = s.pendingDiscards.isNotEmpty
@@ -2943,260 +3111,116 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           portrait &&
           (bounds.maxWidth < 340 ||
               MediaQuery.textScalerOf(context).scale(12) > 15);
-      final width = portrait
+      final columns = (s.players.length / 2).ceil();
+      const rowGap = 4.0;
+      final twoRowHeight = 2 * height - 6 + rowGap;
+      final mapHeight =
+          availableHeight -
+          _resourceTrayHeight(portrait: true, tight: true, horizontal: false) -
+          (_reviewingFinishedMatch ? 56 : 0);
+      final oneRowBoard = BoardGeometry(
+        Size(bounds.maxWidth, mapHeight - height),
+      );
+      final twoRowBoard = BoardGeometry(
+        Size(bounds.maxWidth, mapHeight - twoRowHeight),
+      );
+      final twoRows =
+          portrait &&
+          s.players.length > 2 &&
+          !singleColumn &&
+          twoRowBoard.isPortrait &&
+          oneRowBoard.isPortrait &&
+          twoRowBoard.radius >= oneRowBoard.radius;
+      final width = twoRows
+          ? (bounds.maxWidth - 8) / columns - 6
+          : portrait
           ? singleColumn
-                ? bounds.maxWidth - 20 - (widget.onLeaveRoom != null ? 48 : 0)
-                : (bounds.maxWidth -
-                          26 -
-                          (widget.onLeaveRoom != null ? 48 : 0)) /
-                      2
+                ? bounds.maxWidth - 20
+                : (bounds.maxWidth - 26) / 2
           : math.max(
               124.0 * MediaQuery.textScalerOf(context).scale(12) / 12,
-              (bounds.maxWidth - 50 - (widget.onLeaveRoom != null ? 48 : 0)) /
-                      s.players.length -
-                  6,
+              (bounds.maxWidth - 50) / s.players.length - 6,
             );
-      return Container(
-        height: height,
-        padding: EdgeInsets.fromLTRB(8, 3, portrait ? 0 : 42, 3),
-        child: Row(
-          children: [
-            if (widget.onLeaveRoom != null)
-              IconButton(
-                key: const ValueKey('match-room-menu'),
-                tooltip: 'Match menu',
-                onPressed: _openPlayerOptions,
-                icon: const Icon(Icons.menu_rounded),
-              ),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final i in [
-                      viewerSeat,
-                      for (var seat = 0; seat < s.players.length; seat++)
-                        if (seat != viewerSeat) seat,
-                    ])
-                      Semantics(
-                        label:
-                            '${s.players[i].id}, ${MatchEngine.score(s, i)} of 15 Renown${i == winner
-                                ? ', winner'
-                                : i == s.actingSeat && winner == null
-                                ? ', active player'
-                                : ''}',
-                        child: Tooltip(
-                          message: i == viewerSeat
-                              ? 'Settings'
-                              : '${MatchEngine.score(s, i)} Renown',
-                          child: InkWell(
-                            onTap: i == viewerSeat ? _openPlayerOptions : null,
-                            child: Container(
-                              key: ValueKey('player-tile-$i'),
-                              width: width,
-                              margin: const EdgeInsets.symmetric(horizontal: 3),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    (i == s.actingSeat && winner == null) ||
-                                        i == winner
-                                    ? gameColor(
-                                        context,
-                                        seatColors[i],
-                                      ).withValues(alpha: .13)
-                                    : gameColor(
-                                        context,
-                                        const Color(0xff1c2e35),
-                                      ),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color:
-                                      (i == s.actingSeat && winner == null) ||
-                                          i == winner
-                                      ? gameColor(context, seatColors[i])
-                                      : gameColor(
-                                          context,
-                                          const Color(0xff30434a),
-                                        ),
-                                ),
-                              ),
-                              child: Stack(
+      final tiles = <Widget>[
+        for (final i in [
+          viewerSeat,
+          for (var seat = 0; seat < s.players.length; seat++)
+            if (seat != viewerSeat) seat,
+        ])
+          SizedBox(
+            height: height - 6,
+            child: Semantics(
+              label:
+                  '${s.players[i].id}, ${MatchEngine.score(s, i)} of 15 Renown${i == winner
+                      ? ', winner'
+                      : i == s.actingSeat && winner == null
+                      ? ', active player'
+                      : ''}',
+              child: Tooltip(
+                message: i == viewerSeat
+                    ? 'Settings'
+                    : '${MatchEngine.score(s, i)} Renown',
+                child: InkWell(
+                  onTap: i == viewerSeat ? _openPlayerOptions : null,
+                  child: Container(
+                    key: ValueKey('player-tile-$i'),
+                    width: width,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          (i == s.actingSeat && winner == null) || i == winner
+                          ? gameColor(
+                              context,
+                              seatColors[i],
+                            ).withValues(alpha: .13)
+                          : gameColor(context, const Color(0xff1c2e35)),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color:
+                            (i == s.actingSeat && winner == null) || i == winner
+                            ? gameColor(context, seatColors[i])
+                            : gameColor(context, const Color(0xff30434a)),
+                      ),
+                    ),
+                    child: Stack(
+                      children: [
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: portrait ? 20 : 29,
+                              height: 40,
+                              child: Column(
                                 children: [
-                                  Row(
-                                    children: [
-                                      SizedBox(
-                                        width: portrait ? 20 : 29,
-                                        height: 40,
-                                        child: Stack(
-                                          clipBehavior: Clip.none,
-                                          children: [
-                                            Align(
-                                              alignment: Alignment.topCenter,
-                                              child: Icon(
-                                                i == s.actingSeat &&
-                                                        winner == null
-                                                    ? Icons.flag_rounded
-                                                    : Icons.shield_outlined,
-                                                size: portrait ? 16 : 20,
-                                                color: gameColor(
-                                                  context,
-                                                  seatColors[i],
-                                                ),
-                                              ),
-                                            ),
-                                            if (!portrait &&
-                                                MediaQuery.sizeOf(context)
-                                                        .width <
-                                                    900 &&
-                                                !_hasTopActivitySpace)
-                                              Positioned(
-                                                left: 0,
-                                                right: 0,
-                                                bottom: 0,
-                                                height: 21,
-                                                child: MatchActivity(
-                                                  key: ValueKey(
-                                                    'player-emote-$i',
-                                                  ),
-                                                  state: s,
-                                                  viewerSeat: viewerSeat,
-                                                  targetSeat: i,
-                                                  emotesOnly: true,
-                                                  computerSeats:
-                                                      widget.computerSeats,
-                                                  emote:
-                                                      widget.networkEmote ??
-                                                      _emote,
-                                                  emoteSerial:
-                                                      widget.online &&
-                                                          widget.onEmote != null
-                                                      ? widget
-                                                            .networkEmoteSerial
-                                                      : _emoteSerial,
-                                                  emoteSeat:
-                                                      widget.networkEmoteSeat,
-                                                ),
-                                              ),
-                                          ],
+                                  Expanded(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.topCenter,
+                                      child: Icon(
+                                        i == s.actingSeat && winner == null
+                                            ? Icons.flag_rounded
+                                            : Icons.shield_outlined,
+                                        size: portrait ? 16 : 20,
+                                        color: gameColor(
+                                          context,
+                                          seatColors[i],
                                         ),
                                       ),
-                                      SizedBox(width: portrait ? 3 : 6),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              s.players[i].id,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                height: 1.2,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                            if (!portrait &&
-                                                i == s.actingSeat &&
-                                                winner == null &&
-                                                i != winner &&
-                                                width < 180)
-                                              FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                alignment: Alignment.centerLeft,
-                                                child: Text(
-                                                  '${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    height: 1.2,
-                                                    color: gameColor(
-                                                      context,
-                                                      seatColors[i],
-                                                    ),
-                                                  ),
-                                                ),
-                                              )
-                                            else if (!portrait)
-                                              Text(
-                                                i == winner
-                                                    ? 'Winner'
-                                                    : i == s.actingSeat &&
-                                                          winner == null
-                                                    ? '$actingLabel · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.crownRoadHolder == i ? ' · Road +2' : ''}'
-                                                    : s.crownRoadHolder == i
-                                                    ? 'Crown road · +2 Renown'
-                                                    : 'Realm ${i + 1}',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  height: 1.2,
-                                                  color:
-                                                      i == s.actingSeat &&
-                                                          winner == null
-                                                      ? gameColor(
-                                                          context,
-                                                          seatColors[i],
-                                                        )
-                                                      : gameColor(
-                                                          context,
-                                                          const Color(
-                                                            0xffa6b6ba,
-                                                          ),
-                                                        ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      SizedBox(
-                                        width: portrait
-                                            ? 22
-                                            : MediaQuery.textScalerOf(context)
-                                                      .scale(20) *
-                                                  1.4,
-                                        child: Text(
-                                          '${MatchEngine.score(s, i)}',
-                                          textAlign: TextAlign.right,
-                                          style: TextStyle(
-                                            color: gameColor(
-                                              context,
-                                              seatColors[i],
-                                            ),
-                                            fontSize: portrait ? 14 : 20,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ),
-                                      if (!portrait)
-                                        Text(
-                                          ' /15',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            height: 1.2,
-                                            color: gameColor(
-                                              context,
-                                              const Color(0xffa6b6ba),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
+                                    ),
                                   ),
-                                  if (!portrait && !_hasTopActivitySpace)
-                                    Positioned.fill(
+                                  if (!portrait &&
+                                      MediaQuery.sizeOf(context).width < 900 &&
+                                      !_hasTopActivitySpace)
+                                    Expanded(
                                       child: MatchActivity(
-                                        key: ValueKey('activity-seat-$i'),
+                                        key: ValueKey('player-emote-$i'),
                                         state: s,
                                         viewerSeat: viewerSeat,
                                         targetSeat: i,
-                                        showEmotes: false,
-                                        fastForwardingBots:
-                                            widget.fastForwardingBots,
+                                        emotesOnly: true,
                                         computerSeats: widget.computerSeats,
                                         emote: widget.networkEmote ?? _emote,
                                         emoteSerial:
@@ -3210,14 +3234,138 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                                 ],
                               ),
                             ),
-                          ),
+                            SizedBox(width: portrait ? 3 : 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    s.players[i].id,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      height: 1.2,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  if (!portrait &&
+                                      i == s.actingSeat &&
+                                      winner == null &&
+                                      i != winner &&
+                                      width < 180)
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        '${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          height: 1.2,
+                                          color: gameColor(
+                                            context,
+                                            seatColors[i],
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  else if (!portrait)
+                                    Text(
+                                      i == winner
+                                          ? 'Winner'
+                                          : i == s.actingSeat && winner == null
+                                          ? '$actingLabel · ${_secondsLeft ~/ 60}:${(_secondsLeft % 60).toString().padLeft(2, '0')}${s.crownRoadHolder == i ? ' · Road +2' : ''}'
+                                          : s.crownRoadHolder == i
+                                          ? 'Crown road · +2 Renown'
+                                          : 'Realm ${i + 1}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        height: 1.2,
+                                        color:
+                                            i == s.actingSeat && winner == null
+                                            ? gameColor(context, seatColors[i])
+                                            : gameColor(
+                                                context,
+                                                const Color(0xffa6b6ba),
+                                              ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(
+                              width: portrait
+                                  ? 22
+                                  : MediaQuery.textScalerOf(context).scale(20) *
+                                        1.4,
+                              child: Text(
+                                '${MatchEngine.score(s, i)}',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  color: gameColor(context, seatColors[i]),
+                                  fontSize: portrait ? 14 : 20,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            if (!portrait)
+                              Text(
+                                ' /15',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  height: 1.2,
+                                  color: gameColor(
+                                    context,
+                                    const Color(0xffa6b6ba),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
-                  ],
+                        if (!portrait && !_hasTopActivitySpace)
+                          Positioned.fill(
+                            child: MatchActivity(
+                              key: ValueKey('activity-seat-$i'),
+                              state: s,
+                              viewerSeat: viewerSeat,
+                              targetSeat: i,
+                              showEmotes: false,
+                              fastForwardingBots: widget.fastForwardingBots,
+                              computerSeats: widget.computerSeats,
+                              emote: widget.networkEmote ?? _emote,
+                              emoteSerial:
+                                  widget.online && widget.onEmote != null
+                                  ? widget.networkEmoteSerial
+                                  : _emoteSerial,
+                              emoteSeat: widget.networkEmoteSeat,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ],
+          ),
+      ];
+      return Container(
+        height: twoRows ? twoRowHeight : height,
+        padding: EdgeInsets.fromLTRB(8, 3, portrait ? 0 : 42, 3),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: twoRows
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: tiles.take(columns).toList()),
+                    const SizedBox(height: rowGap),
+                    Row(children: tiles.skip(columns).toList()),
+                  ],
+                )
+              : Row(children: tiles),
         ),
       );
     },
@@ -3676,7 +3824,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         ),
         SizedBox(
           width: railWidth,
-          child: _canFastForward
+          child: _reviewingFinishedMatch
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  child: _resultsButton(),
+                )
+              : _canFastForward
               ? null
               : Visibility(
                   visible:
@@ -3705,118 +3861,146 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
       ? math.sin(_cardsTabController.value * math.pi * 3).abs()
       : 0;
 
-  Widget _tabs() => AnimatedBuilder(
-    animation: _cardsTabController,
-    builder: (context, _) => Row(
-      children: [
-        for (final (index, icon, label) in [
-          (0, Icons.construction_rounded, 'Build'),
-          (1, Icons.swap_horiz_rounded, 'Trade'),
-          (2, Icons.style_outlined, 'Cards'),
-          (3, Icons.castle_outlined, 'Realm'),
-        ])
-          Expanded(
-            child: Tooltip(
-              key: index == 3 ? _realmHintTarget : _tabHintTargets[index],
-              message: label,
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    _tab = index;
-                    if (index == 2) _unseenCard = false;
-                    if (index != 0) {
-                      choice = _Move.inspect;
-                      selectedGuard = null;
-                    }
-                  });
-                },
-                child: Container(
-                  constraints: BoxConstraints(
-                    minHeight:
-                        isCompactLandscape(context) &&
-                            MediaQuery.sizeOf(context).width < 900
-                        ? 44
-                        : _compact
-                        ? 48
-                        : 54,
-                  ),
-                  decoration: BoxDecoration(
-                    color: index == 2
-                        ? Color.lerp(
-                            _tab == index
-                                ? gameColor(context, const Color(0xff2c4145))
-                                : Colors.transparent,
-                            gameColor(
-                              context,
-                              const Color(0xff786039),
-                              light: const Color(0xffe4cda3),
+  Widget _tabs() => LayoutBuilder(
+    builder: (context, bounds) => TweenAnimationBuilder<double>(
+      tween: Tween(end: _cardCount > 0 ? 1.0 : 0.0),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 240),
+      curve: Curves.easeInOutCubic,
+      builder: (context, visibility, _) {
+        final width = bounds.maxWidth / (3 + visibility);
+        return AnimatedBuilder(
+          animation: _cardsTabController,
+          builder: (context, _) => Row(
+            children: [
+              for (final (index, icon, label) in [
+                (0, Icons.construction_rounded, 'Build'),
+                (1, Icons.swap_horiz_rounded, 'Trade'),
+                (2, Icons.style_outlined, 'Cards'),
+                (3, Icons.castle_outlined, 'Realm'),
+              ])
+                if (index != 2)
+                  SizedBox(width: width, child: _matchTab(index, icon, label))
+                else if (visibility > 0)
+                  SizedBox(
+                    width: width * visibility,
+                    child: ClipRect(
+                      child: OverflowBox(
+                        fit: OverflowBoxFit.deferToChild,
+                        alignment: Alignment.center,
+                        minWidth: width,
+                        maxWidth: width,
+                        child: IgnorePointer(
+                          ignoring: _cardCount == 0,
+                          child: ExcludeSemantics(
+                            excluding: _cardCount == 0,
+                            child: Opacity(
+                              opacity: visibility,
+                              child: _matchTab(index, icon, label),
                             ),
-                            _cardsTabPulse * 0.7,
-                          )
-                        : _tab == index
-                        ? gameColor(context, const Color(0xff2c4145))
-                        : null,
-                    border: Border(
-                      bottom: BorderSide(
-                        width: 2,
-                        color: _tab == index
-                            ? gameColor(context, const Color(0xffe5c183))
-                            : Colors.transparent,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Transform.translate(
-                        offset: Offset(0, index == 2 ? -3 * _cardsTabPulse : 0),
-                        child: Transform.scale(
-                          key: index == 2
-                              ? const ValueKey('cards-tab-pulse')
-                              : null,
-                          scale: index == 2 ? 1 + 0.2 * _cardsTabPulse : 1,
-                          child: Icon(
-                            icon,
-                            size: 20,
-                            color:
-                                _tab == index ||
-                                    (index == 2 &&
-                                        _cardsTabController.isAnimating)
-                                ? gameColor(context, const Color(0xffefd6a3))
-                                : gameColor(context, const Color(0xffa6b6ba)),
-                          ),
-                        ),
-                      ),
-                      if (index == 2 && _unseenCard)
-                        Text(
-                          'NEW CARD',
-                          key: const ValueKey('new-card-indicator'),
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w900,
-                            color: Color.lerp(
-                              gameColor(context, const Color(0xffffdb7d)),
-                              gameColor(context, Colors.white),
-                              _cardsTabPulse,
-                            ),
-                          ),
-                        ),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _tab == index
-                              ? gameColor(context, const Color(0xffefd6a3))
-                              : gameColor(context, const Color(0xffa6b6ba)),
-                        ),
-                      ),
-                    ],
+            ],
+          ),
+        );
+      },
+    ),
+  );
+
+  Widget _matchTab(int index, IconData icon, String label) => Tooltip(
+    key: index == 3 ? _realmHintTarget : _tabHintTargets[index],
+    message: label,
+    child: InkWell(
+      onTap: () {
+        setState(() {
+          _tab = index;
+          if (index == 2) _unseenCard = false;
+          if (index != 0) {
+            choice = _Move.inspect;
+            selectedGuard = null;
+          }
+        });
+      },
+      child: Container(
+        constraints: BoxConstraints(
+          minHeight:
+              isCompactLandscape(context) &&
+                  MediaQuery.sizeOf(context).width < 900
+              ? 44
+              : _compact
+              ? 48
+              : 54,
+        ),
+        decoration: BoxDecoration(
+          color: index == 2
+              ? Color.lerp(
+                  _tab == index
+                      ? gameColor(context, const Color(0xff2c4145))
+                      : Colors.transparent,
+                  gameColor(
+                    context,
+                    const Color(0xff786039),
+                    light: const Color(0xffe4cda3),
+                  ),
+                  _cardsTabPulse * 0.7,
+                )
+              : _tab == index
+              ? gameColor(context, const Color(0xff2c4145))
+              : null,
+          border: Border(
+            bottom: BorderSide(
+              width: 2,
+              color: _tab == index
+                  ? gameColor(context, const Color(0xffe5c183))
+                  : Colors.transparent,
+            ),
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Transform.translate(
+              offset: Offset(0, index == 2 ? -3 * _cardsTabPulse : 0),
+              child: Transform.scale(
+                key: index == 2 ? const ValueKey('cards-tab-pulse') : null,
+                scale: index == 2 ? 1 + 0.2 * _cardsTabPulse : 1,
+                child: Badge(
+                  isLabelVisible: index == 2 && _cardCount > 0,
+                  backgroundColor: gameColor(context, const Color(0xffe5c183)),
+                  textColor: const Color(0xff28271e),
+                  offset: const Offset(8, -3),
+                  label: Text(
+                    '$_cardCount',
+                    key: const ValueKey('cards-count-badge'),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color:
+                        _tab == index ||
+                            (index == 2 && _cardsTabController.isAnimating)
+                        ? gameColor(context, const Color(0xffefd6a3))
+                        : gameColor(context, const Color(0xffa6b6ba)),
                   ),
                 ),
               ),
             ),
-          ),
-      ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: _tab == index
+                    ? gameColor(context, const Color(0xffefd6a3))
+                    : gameColor(context, const Color(0xffa6b6ba)),
+              ),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 
@@ -4051,8 +4235,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         ],
         if (phase != MatchPhase.setupVillage &&
             phase != MatchPhase.setupRoad) ...[
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          AdaptiveActionGrid(
             children: [
               _buildAction(
                 _Move.road,
@@ -4078,11 +4261,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 _upgradeCostLabel(),
                 MatchEngine.legalUpgrades(s).isNotEmpty,
               ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+
               _buildAction(
                 _Move.fortify,
                 Icons.shield_outlined,
@@ -4258,16 +4437,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             ),
           ),
         ),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Text(
+          'Town Developments',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+      ),
+      AdaptiveActionGrid(
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              'Town Developments',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-          ),
           for (final track in StrategyDeck.values)
             Builder(
               builder: (context) {
@@ -4449,6 +4627,19 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           ),
         );
 
+  double _resourceTrayHeight({
+    required bool portrait,
+    required bool tight,
+    required bool horizontal,
+  }) =>
+      math.max(
+        horizontal ? 58 : (tight ? 49 : 66),
+        MediaQuery.textScalerOf(context).scale(tight ? 14 : 17) * 1.2 +
+            (horizontal ? 0 : (tight ? 20 : 27)) +
+            (tight ? 13 : 19),
+      ) *
+      (portrait ? 2 : 1);
+
   Widget _resourceTray({bool anchorHarvest = false}) {
     final tight = _compact || MediaQuery.sizeOf(context).width < 900;
     final horizontal = anchorHarvest && MediaQuery.sizeOf(context).width >= 900;
@@ -4528,14 +4719,11 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
         ),
     ];
     return Container(
-      height:
-          math.max(
-            horizontal ? 58 : (tight ? 49 : 66),
-            MediaQuery.textScalerOf(context).scale(tight ? 14 : 17) * 1.2 +
-                (horizontal ? 0 : (tight ? 20 : 27)) +
-                (tight ? 13 : 19),
-          ) *
-          (portrait ? 2 : 1),
+      height: _resourceTrayHeight(
+        portrait: portrait,
+        tight: tight,
+        horizontal: horizontal,
+      ),
       padding: EdgeInsets.symmetric(horizontal: 8, vertical: tight ? 4 : 6),
       decoration: BoxDecoration(
         color: gameColor(context, const Color(0xff101e25)),
@@ -5499,56 +5687,62 @@ class _TacticalPanel extends StatelessWidget {
         if (w.kind == TacticalKind.invasion &&
             MediaQuery.sizeOf(context).width >= 900)
           Text('Expected outcome: ${MatchEngine.invasionForecast(state)}'),
-        if (w.kind == TacticalKind.bandit &&
-            MatchEngine.canIntercept(state, responder))
-          FilledButton.icon(
-            onPressed: () => onEvent(
-              RespondTactical(w.id, responder, TacticalChoice.intercept),
-            ),
-            icon: const Icon(Icons.shield_outlined),
-            label: const Text('Intercept with Guard'),
-          ),
-        if (w.kind == TacticalKind.governance)
-          for (final i in MatchEngine.counterCards(state, responder, w.card!))
-            FilledButton.icon(
-              onPressed: () => onEvent(
-                RespondTactical(
-                  w.id,
-                  responder,
-                  TacticalChoice.counter,
-                  cardIndex: i,
+        AdaptiveActionRow(
+          children: [
+            if (w.kind == TacticalKind.bandit &&
+                MatchEngine.canIntercept(state, responder))
+              FilledButton.icon(
+                onPressed: () => onEvent(
+                  RespondTactical(w.id, responder, TacticalChoice.intercept),
                 ),
+                icon: const Icon(Icons.shield_outlined),
+                label: const Text('Intercept with Guard'),
               ),
-              icon: const Icon(Icons.gavel_outlined),
-              label: Text(
-                'Counter: ${state.players[responder].cards[i].definition.name}',
-              ),
-            ),
-        if (w.kind == TacticalKind.invasion)
-          for (final good in [Resource.wheat, Resource.ore])
-            if ((state.players[responder].stores[good] ?? 0) > 0)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: FilledButton.icon(
+            if (w.kind == TacticalKind.governance)
+              for (final i in MatchEngine.counterCards(
+                state,
+                responder,
+                w.card!,
+              ))
+                FilledButton.icon(
                   onPressed: () => onEvent(
                     RespondTactical(
                       w.id,
                       responder,
-                      TacticalChoice.aid,
-                      good: good,
+                      TacticalChoice.counter,
+                      cardIndex: i,
                     ),
                   ),
-                  icon: const Icon(Icons.volunteer_activism_outlined),
-                  label: ResourceLabel(
-                    'Pledge 1 ${good.displayName}',
-                    showNames: true,
+                  icon: const Icon(Icons.gavel_outlined),
+                  label: Text(
+                    'Counter: ${state.players[responder].cards[i].definition.name}',
                   ),
                 ),
+            if (w.kind == TacticalKind.invasion)
+              for (final good in [Resource.wheat, Resource.ore])
+                if ((state.players[responder].stores[good] ?? 0) > 0)
+                  FilledButton.icon(
+                    onPressed: () => onEvent(
+                      RespondTactical(
+                        w.id,
+                        responder,
+                        TacticalChoice.aid,
+                        good: good,
+                      ),
+                    ),
+                    icon: const Icon(Icons.volunteer_activism_outlined),
+                    label: ResourceLabel(
+                      'Pledge 1 ${good.displayName}',
+                      showNames: true,
+                    ),
+                  ),
+            OutlinedButton(
+              onPressed: () => onEvent(
+                RespondTactical(w.id, responder, TacticalChoice.pass),
               ),
-        OutlinedButton(
-          onPressed: () =>
-              onEvent(RespondTactical(w.id, responder, TacticalChoice.pass)),
-          child: const Text('Pass'),
+              child: const Text('Pass'),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         Text(
@@ -5608,6 +5802,36 @@ class BoardGeometry {
         math.sqrt(3) * radius * (p.q + p.r / 2) * horizontalFactor,
         1.5 * radius * p.r * verticalFactor,
       );
+}
+
+Rect _siteSpriteBounds(BoardGeometry g, Offset c, Site site) {
+  final size = g.size;
+  final sprite = _tabletopArt['${site.structure.name}${site.owner}'];
+  final width = switch (site.structure) {
+    Structure.village => (g.radius * .54).clamp(28.0, 60.0),
+    Structure.town => (g.radius * .68).clamp(35.0, 76.0),
+    Structure.capital => (g.radius * .82).clamp(43.0, 90.0),
+  };
+  final height = sprite == null
+      ? width * .75
+      : width * sprite.height / sprite.width;
+  // Put the junction inside the visible building footprint, rather
+  // than at the transparent bottom of the original grass-based sprite.
+  final anchor = sprite == null
+      ? .25
+      : switch (site.structure) {
+          Structure.village => .12,
+          Structure.town => .20,
+          Structure.capital => .24,
+        };
+  final center = Offset(
+    c.dx.clamp(width / 2, math.max(width / 2, size.width - width / 2)),
+    (c.dy - height * anchor).clamp(
+      height / 2,
+      math.max(height / 2, size.height - height / 2),
+    ),
+  );
+  return Rect.fromCenter(center: center, width: width, height: height);
 }
 
 class _Painter extends CustomPainter {
@@ -5705,7 +5929,7 @@ class _Painter extends CustomPainter {
         );
         canvas.drawImageRect(
           terrain,
-          source.deflate(5),
+          source.deflate(source.shortestSide * .12),
           hex.getBounds(),
           Paint()
             ..filterQuality = FilterQuality.medium
@@ -6050,27 +6274,7 @@ class _Painter extends CustomPainter {
       final site = state.sites[v.id];
       if (site == null) continue;
       final sprite = _tabletopArt['${site.structure.name}${site.owner}'];
-      final width = switch (site.structure) {
-        Structure.village => (g.radius * .54).clamp(28.0, 60.0),
-        Structure.town => (g.radius * .68).clamp(35.0, 76.0),
-        Structure.capital => (g.radius * .82).clamp(43.0, 90.0),
-      };
-      final height = sprite == null
-          ? width * .75
-          : width * sprite.height / sprite.width;
-      // Anchor the illustrated piece at its junction.
-      final center = Offset(
-        c.dx.clamp(width / 2, math.max(width / 2, size.width - width / 2)),
-        (c.dy - height * .38).clamp(
-          height / 2,
-          math.max(height / 2, size.height - height / 2),
-        ),
-      );
-      final bounds = Rect.fromCenter(
-        center: center,
-        width: width,
-        height: height,
-      );
+      final bounds = _siteSpriteBounds(g, c, site);
       if (state.fortified.contains(v.id)) {
         final halo = bounds.inflate(10);
         canvas.drawOval(
@@ -6099,7 +6303,7 @@ class _Painter extends CustomPainter {
         _label(
           canvas,
           '!',
-          c + Offset(width * .45, height * .2),
+          c + Offset(bounds.width * .45, bounds.height * .2),
           14,
           const Color(0xffec6757),
         );

@@ -284,6 +284,7 @@ class _StoneBannerAppState extends State<StoneBannerApp>
       read: () => match,
       commit: _commitAi,
       isComputerSeat: (seat) => aiSeats.contains(seat),
+      difficulty: () => matchBotDifficulty,
       // Give each committed computer action room for its on-screen animation.
       delay: const Duration(milliseconds: 2400),
       decide: (state) =>

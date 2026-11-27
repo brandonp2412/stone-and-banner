@@ -77,14 +77,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.ancestor(
-        of: resourceLabel('Build village ·', contains: true),
+        of: find.text('Build village'),
         matching: find.byType(FilledButton),
       ),
       findsOneWidget,
     );
     expect(
       find.ancestor(
-        of: resourceLabel('Build Guard ·', contains: true),
+        of: find.text('Build Guard'),
         matching: find.byType(OutlinedButton),
       ),
       findsOneWidget,
@@ -157,44 +157,66 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('small landscape keeps reaction on player profile', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(844, 390);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPhysicalSize);
-    final state = tableWithSupplies();
-    Widget screen(int serial) => MaterialApp(
-      theme: ThemeData(fontFamily: 'NotoSans', brightness: Brightness.dark),
-      home: MatchView(
-        state: state,
-        online: true,
-        viewingSeat: 0,
-        observing: true,
-        onEvent: (_) {},
-        onEmote: (_) {},
-        networkEmote: serial == 0 ? null : '😄',
-        networkEmoteSerial: serial,
-        networkEmoteSeat: 1,
-      ),
-    );
-    await tester.runAsync(loadTabletopArt);
-    await tester.pumpWidget(screen(0));
-    await tester.runAsync(loadTabletopArt);
-    await tester.pumpWidget(screen(1));
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byKey(const ValueKey('player-emote-1')), findsOneWidget);
-    expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is GameEmoteIcon &&
-            widget.emoji == '😄' &&
-            widget.size == 17,
-      ),
-      findsOneWidget,
-    );
-  });
+  for (final size in [const Size(640, 320), const Size(844, 390)]) {
+    testWidgets('landscape emotes fit without borders at $size', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final state = tableWithSupplies();
+      Widget screen(int serial, String? emoji) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(fontFamily: 'NotoSans', brightness: Brightness.dark),
+        home: MatchView(
+          state: state,
+          online: true,
+          viewingSeat: 0,
+          observing: true,
+          onEvent: (_) {},
+          onEmote: (_) {},
+          networkEmote: emoji,
+          networkEmoteSerial: serial,
+          networkEmoteSeat: 1,
+        ),
+      );
+      await tester.runAsync(loadTabletopArt);
+      await tester.pumpWidget(screen(0, null));
+      final slot = find.byKey(const ValueKey('player-emote-1'));
+      final tile = find.byKey(const ValueKey('player-tile-1'));
+      final shield = find
+          .descendant(of: tile, matching: find.byType(Icon))
+          .first;
+      var serial = 0;
+      for (final emoji in ['😄', '😤', '😏', '👏', '🤝', '👋']) {
+        await tester.pumpWidget(screen(++serial, emoji));
+        await tester.pump(const Duration(milliseconds: 250));
+        final icon = find.descendant(
+          of: slot,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is GameEmoteIcon && widget.emoji == emoji,
+          ),
+        );
+        expect(icon, findsOneWidget);
+        final fitted = find
+            .ancestor(of: icon, matching: find.byType(FittedBox))
+            .first;
+        final rect = tester.getRect(fitted);
+        final bounds = tester.getRect(tile);
+        expect(rect.top, greaterThanOrEqualTo(bounds.top));
+        expect(rect.bottom, lessThanOrEqualTo(bounds.bottom));
+        expect(rect.overlaps(tester.getRect(shield)), isFalse);
+        expect(
+          find.descendant(of: slot, matching: find.byType(DecoratedBox)),
+          findsNothing,
+        );
+        expect(tester.widget<FittedBox>(fitted).fit, BoxFit.scaleDown);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets('another player discards with a comic insult', (tester) async {
     final before = MatchEngine.newGame(['Alex', 'Mira', 'Sam'], 901);

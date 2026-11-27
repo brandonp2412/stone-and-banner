@@ -109,7 +109,7 @@ void main() {
 
       testWidgets('board and action categories snapshots', (tester) async {
         await auditSetup(tester, size);
-        await renderMatch(tester);
+        await renderMatch(tester, state: tableWithSupplies(withCards: true));
         await golden(tester, 'board');
         if (size.width < 900) {
           await tester.tap(find.byKey(const ValueKey('mobile-open-actions')));

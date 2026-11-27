@@ -23,7 +23,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      final state = tableWithSupplies().copyWith(active: 1);
+      final state = tableWithSupplies(withCards: true).copyWith(active: 1);
       final events = <MatchEvent>[];
       await tester.pumpWidget(
         MaterialApp(
@@ -57,16 +57,9 @@ void main() {
       await tester.tap(find.text('Cards').first);
       await tester.pump();
       expect(find.textContaining('Strategy hand'), findsOneWidget);
-      // This navigation button is within the panel previously blocked by
-      // AbsorbPointer, and must still work when it isn't your turn.
-      if (mobile) {
-        await tester.tap(find.text('Develop').first);
-        await tester.pump();
-        expect(find.text('Your realm'), findsOneWidget);
-      } else {
-        await tester.tap(find.text('Realm').first);
-        await tester.pump();
-      }
+      await tester.tap(find.text('Realm').first);
+      await tester.pump();
+      expect(find.text('Your realm'), findsOneWidget);
       expect(find.text('Town Developments'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('quick-innovation-development')),

@@ -14,8 +14,8 @@ import 'p2p_transport.dart';
 import 'room_host.dart';
 import 'room_protocol.dart';
 
-MatchEvent? _chooseMultiplayerBotEvent(MatchState state) =>
-    const HeuristicAi().choose(state);
+MatchEvent? _chooseMultiplayerBotEvent((MatchState, BotDifficulty) input) =>
+    HeuristicAi(difficulty: input.$2).choose(input.$1);
 
 String _randomId(int bytes) {
   final rng = Random.secure();
@@ -37,10 +37,12 @@ class P2pRoom extends ChangeNotifier {
       read: () => _room?.state,
       commit: _commitBotMove,
       isComputerSeat: botSeats.contains,
+      difficulty: () => botDifficulty,
       delay: botMoveDelay,
       decide:
           botDecisionForTest ??
-          (state) => compute(_chooseMultiplayerBotEvent, state),
+          (state) =>
+              compute(_chooseMultiplayerBotEvent, (state, botDifficulty)),
       onError: _handleBotFailure,
     );
     _rtc = P2pTransport(_onEvent);
@@ -68,6 +70,9 @@ class P2pRoom extends ChangeNotifier {
   /// Bot seats run exclusively on the host with the local-game AI strategy.
   final Set<int> botSeats = {};
   int botCount = 0;
+  BotDifficulty _guestBotDifficulty = BotDifficulty.hard;
+  BotDifficulty get botDifficulty =>
+      _room?.botDifficulty ?? _guestBotDifficulty;
   int aiMoveCount = 0;
   String? aiError;
   Timer? _botRecoveryTimer;
@@ -559,6 +564,16 @@ class P2pRoom extends ChangeNotifier {
     }
     botCount = requested;
     _planBotSeats();
+    _broadcast();
+  }
+
+  void setBotDifficulty(BotDifficulty difficulty) {
+    if (!isHost || _room == null) {
+      throw StateError(
+        'Only the host can change bot difficulty before starting.',
+      );
+    }
+    _room!.setBotDifficulty(0, difficulty);
     _broadcast();
   }
 
@@ -1091,6 +1106,7 @@ class P2pRoom extends ChangeNotifier {
           ..clear()
           ..addAll((msg['bots'] as List? ?? const []).cast<int>());
         botCount = botSeats.length;
+        _guestBotDifficulty = BotDifficulty.parse(msg['botDifficulty']);
       case 'state':
         version = msg['version'] as int;
         generation = (msg['generation'] as int?) ?? 0;

@@ -538,28 +538,36 @@ class _MatchActivityState extends State<MatchActivity> {
               : Align(
                   key: ValueKey('player-cue-${cue.index}'),
                   alignment: cue.isEmote
-                      ? Alignment.bottomLeft
+                      ? Alignment.center
                       : Alignment.centerLeft,
                   child: Semantics(
                     label: cue.isEmote
                         ? '$name reacts ${cue.emoji}'
                         : cue.title,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: gameColor(context, const Color(0xff172a33)),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: gameColor(context, cue.color),
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 3,
-                          vertical: 2,
-                        ),
-                        child: cue.isEmote
-                            ? GameEmoteIcon(cue.emoji, size: 17)
-                            : SizedBox(
+                    child: cue.isEmote
+                        ? FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: MediaQuery.withNoTextScaling(
+                              child: GameEmoteIcon(cue.emoji, size: 17),
+                            ),
+                          )
+                        : DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: gameColor(
+                                context,
+                                const Color(0xff172a33),
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: gameColor(context, cue.color),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 3,
+                                vertical: 2,
+                              ),
+                              child: SizedBox(
                                 width: 110,
                                 child: Row(
                                   children: [
@@ -582,8 +590,8 @@ class _MatchActivityState extends State<MatchActivity> {
                                   ],
                                 ),
                               ),
-                      ),
-                    ),
+                            ),
+                          ),
                   ),
                 ),
         ),
@@ -668,9 +676,11 @@ class _ActivityCard extends StatelessWidget {
     decoration: BoxDecoration(
       color: gameColor(context, const Color(0xff172a33)),
       borderRadius: BorderRadius.circular(22),
-      border: Border.all(
-        color: gameColor(context, cue.color).withValues(alpha: .65),
-      ),
+      border: cue.isEmote
+          ? null
+          : Border.all(
+              color: gameColor(context, cue.color).withValues(alpha: .65),
+            ),
       boxShadow: const [
         BoxShadow(
           color: Color(0x9a000000),

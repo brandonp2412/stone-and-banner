@@ -1,0 +1,1 @@
+Hard bots now prioritize stronger economies, construction and better trades. Choose Easy, Medium or Hard in LAN and online lobbies. Reinforce towns and capitals directly from the board, with confirmation. Improved portrait player cards, build choices, landscape actions, emotes and city-loss dialogs. The Cards tab shows your card count and stays hidden when empty.

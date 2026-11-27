@@ -74,7 +74,7 @@ void main() {
 
   testWidgets('board and action categories portrait snapshots', (tester) async {
     await portraitSetup(tester);
-    await renderMatch(tester);
+    await renderMatch(tester, state: tableWithSupplies(withCards: true));
     await golden(tester, 'board');
     await tester.tap(find.byKey(const ValueKey('mobile-open-actions')));
     await tester.pumpAndSettle();

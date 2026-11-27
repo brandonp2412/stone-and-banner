@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../engine/match.dart';
+import '../engine/heuristic_ai.dart';
 import 'room_protocol.dart';
 
 class LanRoomClient extends ChangeNotifier {
@@ -23,6 +24,7 @@ class LanRoomClient extends ChangeNotifier {
   int? seat;
   int capacity = 3, version = 0, botCount = 0, generation = 0;
   List<int> botSeats = [];
+  BotDifficulty botDifficulty = BotDifficulty.hard;
   List<String> players = [];
   List<bool> connectedPlayers = [];
   MatchState? game;
@@ -161,6 +163,7 @@ class LanRoomClient extends ChangeNotifier {
         if (_outstanding != null) _send(_outstanding!);
       case 'lobby':
         botCount = (msg['botCount'] as int?) ?? 0;
+        botDifficulty = BotDifficulty.parse(msg['botDifficulty']);
         botSeats = (msg['bots'] as List? ?? const []).cast<int>();
         capacity = msg['capacity'] as int;
         players = (msg['players'] as List).cast<String>();
@@ -201,6 +204,8 @@ class LanRoomClient extends ChangeNotifier {
   void start() => _send({'op': 'start'});
   void playAgain() => _send({'op': 'playAgain', 'generation': generation});
   void setBots(int count) => _send({'op': 'setBots', 'count': count});
+  void setBotDifficulty(BotDifficulty difficulty) =>
+      _send({'op': 'setBotDifficulty', 'difficulty': difficulty.name});
 
   void dispatch(MatchEvent event) {
     if (!connected || pending || game == null) return;

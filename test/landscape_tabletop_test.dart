@@ -4,6 +4,8 @@ import 'action_helpers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/board.dart';
+import 'package:stone_and_banner/engine/cards.dart';
+import 'package:stone_and_banner/engine/game.dart';
 import 'package:stone_and_banner/engine/match.dart';
 import 'package:stone_and_banner/network/room_protocol.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
@@ -22,7 +24,7 @@ class NonlinearTestScaler extends TextScaler {
       : size;
 }
 
-MatchState tableWithSupplies() {
+MatchState tableWithSupplies({bool withCards = false}) {
   var state = MatchEngine.newGame(['Ada', 'Ben', 'Cora', 'Dee'], 804);
   for (var i = 0; i < 8; i++) {
     state = MatchEngine.apply(
@@ -41,7 +43,12 @@ MatchState tableWithSupplies() {
     stores[good] = (stores[good] ?? 0) + 3;
   }
   final players = state.players.toList();
-  players[state.active] = state.current.copyWith(stores: stores);
+  players[state.active] = state.current.copyWith(
+    stores: stores,
+    cards: withCards
+        ? [const HeldCard(StrategyDeck.commerce, 0)]
+        : state.current.cards,
+  );
   return state.copyWith(
     phase: MatchPhase.actions,
     players: players,
@@ -126,7 +133,7 @@ void main() {
     await display(
       tester,
       const Size(640, 320),
-      tableWithSupplies(),
+      tableWithSupplies(withCards: true),
       textScaler: const NonlinearTestScaler(),
     );
     expect(tester.takeException(), isNull);
@@ -204,7 +211,12 @@ void main() {
     testWidgets('mobile stack returns to same board at $variant', (
       tester,
     ) async {
-      await display(tester, variant.$1, tableWithSupplies(), scale: variant.$2);
+      await display(
+        tester,
+        variant.$1,
+        tableWithSupplies(withCards: true),
+        scale: variant.$2,
+      );
       final originalMap = tester.getRect(
         find.byKey(const ValueKey('realm-map')),
       );
@@ -324,7 +336,7 @@ void main() {
     await display(
       tester,
       const Size(844, 390),
-      tableWithSupplies().copyWith(phase: MatchPhase.roll),
+      tableWithSupplies(withCards: true).copyWith(phase: MatchPhase.roll),
     );
     await tester.tap(find.text('Actions'));
     await tester.pumpAndSettle();

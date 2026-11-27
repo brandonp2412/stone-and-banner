@@ -88,6 +88,62 @@ void main() {
     },
   );
 
+  for (final size in [
+    const Size(360, 780),
+    const Size(780, 360),
+    const Size(1280, 720),
+  ]) {
+    testWidgets('review results has its own space at $size', (tester) async {
+      await setup(tester);
+      tester.view.physicalSize = size;
+      await tester.runAsync(loadTabletopArt);
+      await tester.pumpWidget(
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.dark,
+            fontFamily: 'NotoSans',
+          ),
+          home: Scaffold(
+            body: MatchView(
+              state: finishedFor(0),
+              visibleSeat: 0,
+              onEvent: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 1300));
+      await tester.tap(find.byKey(const ValueKey('match-finale-review')));
+      await tester.pump(const Duration(milliseconds: 200));
+      final results = find.byKey(const ValueKey('reopen-match-finale'));
+      final board = find.byKey(const ValueKey('realm-map'));
+      expect(results.hitTestable(), findsOneWidget);
+      expect(tester.getRect(results).overlaps(tester.getRect(board)), isFalse);
+      expect(
+        tester
+            .getRect(results)
+            .overlaps(
+              tester.getRect(find.byKey(const ValueKey('raid-defense-hud'))),
+            ),
+        isFalse,
+      );
+      if (size.width < 900) {
+        final actions = find.byKey(const ValueKey('mobile-open-actions'));
+        expect(actions.hitTestable(), findsOneWidget);
+        expect(
+          tester.getRect(results).overlaps(tester.getRect(actions)),
+          isFalse,
+        );
+      }
+      await tester.tap(results);
+      await tester.pump(const Duration(milliseconds: 1300));
+      expect(find.byKey(const ValueKey('match-finale-dialog')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('AI win shows animated defeat for human viewer', (tester) async {
     await setup(tester);
     final state = finishedFor(1);

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'compact_layout.dart';
+import 'bot_difficulty_picker.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -467,23 +468,27 @@ class _LanRoomPageState extends State<LanRoomPage> {
           ),
           if (!host && savedRoom != null && savedToken != null) ...[
             const SizedBox(height: 18),
-            OutlinedButton.icon(
-              onPressed: client.connecting
-                  ? null
-                  : () {
-                      try {
-                        final (url, _) = _joinDetails();
-                        client.resume(url, savedRoom!, savedToken!);
-                      } on Object catch (e) {
-                        setState(() => client.error = '$e');
-                      }
-                    },
-              icon: const Icon(Icons.restore),
-              label: Text('Reconnect to $savedRoom'),
-            ),
-            TextButton(
-              onPressed: _forget,
-              child: const Text('Forget saved room credentials'),
+            AdaptiveActionRow(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: client.connecting
+                      ? null
+                      : () {
+                          try {
+                            final (url, _) = _joinDetails();
+                            client.resume(url, savedRoom!, savedToken!);
+                          } on Object catch (e) {
+                            setState(() => client.error = '$e');
+                          }
+                        },
+                  icon: const Icon(Icons.restore),
+                  label: Text('Reconnect to $savedRoom'),
+                ),
+                TextButton(
+                  onPressed: _forget,
+                  child: const Text('Forget saved room credentials'),
+                ),
+              ],
             ),
           ],
         ],
@@ -572,6 +577,15 @@ class _LanRoomPageState extends State<LanRoomPage> {
                       : null,
                 ),
               ],
+            ),
+          ],
+          if (client.botCount > 0) ...[
+            const SizedBox(height: 8),
+            BotDifficultyPicker(
+              difficulty: client.botDifficulty,
+              onChanged: client.seat == 0 && client.connected && !client.started
+                  ? client.setBotDifficulty
+                  : null,
             ),
           ],
           for (var i = 0; i < client.capacity; i++)

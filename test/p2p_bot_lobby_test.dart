@@ -1,8 +1,38 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/engine/match.dart';
+import 'package:stone_and_banner/engine/heuristic_ai.dart';
 import 'package:stone_and_banner/network/p2p_room.dart';
 
 void main() {
+  for (final difficulty in [BotDifficulty.easy, BotDifficulty.medium]) {
+    test('P2P host actually plays ${difficulty.label} bot moves', () async {
+      final room = P2pRoom(botMoveDelay: const Duration(milliseconds: 2));
+      addTearDown(room.dispose);
+      room.host('Host', 3, 42);
+      expect(room.botDifficulty, BotDifficulty.hard);
+      room.setBotCount(2);
+      room.setBotDifficulty(difficulty);
+      room.start();
+      expect(() => room.setBotDifficulty(BotDifficulty.hard), throwsStateError);
+      room.dispatch(PlaceVillage(MatchEngine.legalVertices(room.game!).first));
+      final before = room.authoritativeStateForTest!;
+      final road = PlaceRoad(MatchEngine.legalEdges(before).first);
+      final next = MatchEngine.apply(before, road);
+      final expected = HeuristicAi(difficulty: difficulty).choose(next)!;
+      expect(
+        expected.toJson(),
+        isNot(const HeuristicAi().choose(next)!.toJson()),
+      );
+      room.dispatch(road);
+      await room.aiSettled.timeout(const Duration(seconds: 20));
+      expect(
+        room.authoritativeStateForTest!.events[next.events.length].toJson(),
+        expected.toJson(),
+      );
+      expect(room.aiError, isNull);
+    });
+  }
+
   test(
     'one host can fill remaining three-player lobby with solo-game bots',
     () async {
@@ -71,6 +101,7 @@ void main() {
     final guest = P2pRoom();
     addTearDown(guest.dispose);
     expect(() => guest.setBotCount(1), throwsStateError);
+    expect(() => guest.setBotDifficulty(BotDifficulty.easy), throwsStateError);
     expect(guest.botSeats, isEmpty);
   });
 

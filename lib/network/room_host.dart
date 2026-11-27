@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import '../engine/match.dart';
+import '../engine/heuristic_ai.dart';
 import 'room_protocol.dart';
 
 String _secret(int bytes) {
@@ -47,6 +48,18 @@ class HostedRoom {
   final bool shuffleTurns;
   final seats = <RoomSeat>[];
   MatchState? state;
+  BotDifficulty _botDifficulty = BotDifficulty.hard;
+  BotDifficulty get botDifficulty => _botDifficulty;
+
+  void setBotDifficulty(int seat, BotDifficulty difficulty) {
+    if (seat != 0 || state != null) {
+      throw StateError(
+        'Only the host can change bot difficulty before starting.',
+      );
+    }
+    _botDifficulty = difficulty;
+  }
+
   final _responses = <int, Map<String, (String, Map<String, Object?>)>>{};
   final _audit = <Map<String, Object?>>[];
 
@@ -76,6 +89,7 @@ class HostedRoom {
     'players': [for (final s in seats) s.name],
     'connected': [for (final s in seats) s.connected],
     'started': state != null,
+    'botDifficulty': botDifficulty.name,
   };
 
   void start(int seat) {
@@ -305,6 +319,7 @@ class HostedRoom {
     'secretSeed': secretSeed,
     'generation': generation,
     'shuffleTurns': shuffleTurns,
+    'botDifficulty': botDifficulty.name,
     'version': version,
     'seats': [
       for (final seat in seats) {'name': seat.name, 'token': seat.token},
@@ -337,13 +352,16 @@ class HostedRoom {
         (capacity < 3 || capacity > 6)) {
       throw const FormatException('Invalid LAN room identity.');
     }
-    final room = HostedRoom.restored(
-      id,
-      capacity,
-      boardSeed,
-      secretSeed,
-      shuffleTurns: (data['shuffleTurns'] as bool?) ?? false,
-    )..generation = (data['generation'] as int?) ?? 0;
+    final room =
+        HostedRoom.restored(
+            id,
+            capacity,
+            boardSeed,
+            secretSeed,
+            shuffleTurns: (data['shuffleTurns'] as bool?) ?? false,
+          )
+          ..generation = (data['generation'] as int?) ?? 0
+          .._botDifficulty = BotDifficulty.parse(data['botDifficulty']);
     for (final raw in data['seats'] as List) {
       final seat = Map<String, dynamic>.from(raw as Map);
       final name = seat['name'] as String;

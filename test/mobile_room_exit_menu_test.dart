@@ -36,7 +36,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('match-room-menu')));
+    expect(find.byKey(const ValueKey('match-room-menu')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('player-tile-0')));
     await tester.pumpAndSettle();
     expect(find.byType(BottomSheet), findsOneWidget);
     showMatch.value = false;
@@ -49,7 +50,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mobile room exit is in top-left menu, not over reactions', (
+  testWidgets('mobile room exit is in own profile, not over reactions', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(780, 360);
@@ -75,7 +76,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final menu = find.byKey(const ValueKey('match-room-menu'));
+    expect(find.byKey(const ValueKey('match-room-menu')), findsNothing);
+    final menu = find.byKey(const ValueKey('player-tile-0'));
     expect(menu, findsOneWidget);
     expect(find.byTooltip('Leave P2P match'), findsNothing);
     expect(find.byTooltip('Leave LAN match'), findsNothing);

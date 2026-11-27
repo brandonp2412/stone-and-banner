@@ -31,22 +31,24 @@ abstract final class AiCardStrategy {
     Resource give,
     int giveCount,
     Resource receive,
-    int receiveCount,
-  ) {
+    int receiveCount, {
+    Map<Resource, int>? goal,
+  }) {
     final before = Map<Resource, int>.of(view.ownGoods);
     if ((before[give] ?? 0) < giveCount) return -1000;
     final after = Map<Resource, int>.of(before)
       ..[give] = before[give]! - giveCount
       ..[receive] = (before[receive] ?? 0) + receiveCount;
-    final goal = _goal(view);
-    return _utility(after, goal) - _utility(before, goal);
+    final plan = goal ?? _goal(view);
+    return _utility(after, plan) - _utility(before, plan);
   }
 
   static double _bundleGain(
     AiTurnView view,
     Map<Resource, int> gives,
-    Map<Resource, int> wants,
-  ) {
+    Map<Resource, int> wants, {
+    Map<Resource, int>? goal,
+  }) {
     if (!canPayTrade(view.ownGoods, gives)) return -1000;
     final after = Map<Resource, int>.of(view.ownGoods);
     for (final e in gives.entries) {
@@ -55,8 +57,8 @@ abstract final class AiCardStrategy {
     for (final e in wants.entries) {
       after[e.key] = (after[e.key] ?? 0) + e.value;
     }
-    final goal = _goal(view);
-    return _utility(after, goal) - _utility(view.ownGoods, goal);
+    final plan = goal ?? _goal(view);
+    return _utility(after, plan) - _utility(view.ownGoods, plan);
   }
 
   static MatchEvent? tactical(AiTurnView view) {
@@ -100,7 +102,11 @@ abstract final class AiCardStrategy {
 
   /// Responds to visible outstanding offers before any optional turn spending.
   /// Counters only original offers, never a counter to a counter.
-  static MatchEvent? incomingOffer(AiTurnView view) {
+  static MatchEvent? incomingOffer(
+    AiTurnView view, {
+    Map<Resource, int>? goal,
+    bool cautious = false,
+  }) {
     if (view.phase != MatchPhase.actions) return null;
     final offers =
         view.publicOffers.where((o) => o.canRespond(view.seat)).toList()
@@ -114,7 +120,12 @@ abstract final class AiCardStrategy {
         (e) => e.offerId == offer.id && e.accept,
       );
       if (acceptance.isEmpty) continue;
-      final gain = _bundleGain(view, offer.wants, offer.gives);
+      if (cautious &&
+          view.publicScores[offer.proposer] >= GameEngine.winningPoints - 2 &&
+          view.publicScores[offer.proposer] > view.publicScores[view.seat]) {
+        continue;
+      }
+      final gain = _bundleGain(view, offer.wants, offer.gives, goal: goal);
       final surplus =
           offer.gives.values.fold<int>(0, (a, b) => a + b) -
           offer.wants.values.fold<int>(0, (a, b) => a + b);
@@ -130,7 +141,11 @@ abstract final class AiCardStrategy {
       return profitable.first.$1;
     }
     final offer = offers.first;
-    if (!offer.isCounter) {
+    if (!offer.isCounter &&
+        (!cautious ||
+            view.publicScores[offer.proposer] < GameEngine.winningPoints - 2 ||
+            view.publicScores[offer.proposer] <=
+                view.publicScores[view.seat])) {
       final counters = view.legalActions
           .whereType<ProposeTrade>()
           .where((e) => e.counterOf == offer.id)
@@ -140,11 +155,18 @@ abstract final class AiCardStrategy {
           view,
           b.gives,
           b.wants,
-        ).compareTo(_bundleGain(view, a.gives, a.wants));
+          goal: goal,
+        ).compareTo(_bundleGain(view, a.gives, a.wants, goal: goal));
         return quality != 0 ? quality : a.give.index.compareTo(b.give.index);
       });
       if (counters.isNotEmpty &&
-          _bundleGain(view, counters.first.gives, counters.first.wants) > 0.5) {
+          _bundleGain(
+                view,
+                counters.first.gives,
+                counters.first.wants,
+                goal: goal,
+              ) >
+              0.5) {
         return counters.first;
       }
     }
@@ -154,9 +176,13 @@ abstract final class AiCardStrategy {
     return null;
   }
 
-  static double _cardValue(AiTurnView view, PlayStrategyCard play) {
+  static double _cardValue(
+    AiTurnView view,
+    PlayStrategyCard play,
+    Map<Resource, int>? plan,
+  ) {
     final definition = view.ownCards[play.handIndex].definition;
-    final goal = _goal(view);
+    final goal = plan ?? _goal(view);
     final bank = view.strategy.bankStock;
     double receipt(Resource good, int count) {
       if ((bank[good] ?? 0) < count) return -100;
@@ -191,6 +217,7 @@ abstract final class AiCardStrategy {
           definition.power == CardPower.leverageSwap ? 2 : 1,
           play.receive!,
           definition.power == CardPower.portSwap ? 2 : 1,
+          goal: goal,
         );
       case CardPower.activate:
         return danger ? 14 : 4;
@@ -213,19 +240,23 @@ abstract final class AiCardStrategy {
     }
   }
 
-  static MatchEvent? playCard(AiTurnView view) {
+  static MatchEvent? playCard(AiTurnView view, {Map<Resource, int>? goal}) {
     if (view.phase != MatchPhase.actions || view.actionsSinceRoll >= 7) {
       return null;
     }
     final plays = view.legalActions.whereType<PlayStrategyCard>().toList();
     plays.sort((a, b) {
-      final score = _cardValue(view, b).compareTo(_cardValue(view, a));
+      final score = _cardValue(
+        view,
+        b,
+        goal,
+      ).compareTo(_cardValue(view, a, goal));
       if (score != 0) return score;
       final hand = a.handIndex.compareTo(b.handIndex);
       if (hand != 0) return hand;
       return a.toJson().toString().compareTo(b.toJson().toString());
     });
-    if (plays.isNotEmpty && _cardValue(view, plays.first) > 1.5) {
+    if (plays.isNotEmpty && _cardValue(view, plays.first, goal) > 1.5) {
       return plays.first;
     }
     // At the hand limit, free a slot for the next deterministic event draw.
@@ -288,7 +319,26 @@ abstract final class AiCardStrategy {
     return recipients.map(appealFor).reduce((a, b) => a > b ? a : b);
   }
 
-  static MatchEvent? propose(AiTurnView view) {
+  static MatchEvent? propose(
+    AiTurnView view, {
+    Map<Resource, int>? goal,
+    bool cautious = false,
+    List<ProposeTrade> excluded = const [],
+  }) {
+    final plan = goal ?? _goal(view);
+    bool same(Map<Resource, int> a, Map<Resource, int> b) =>
+        a.length == b.length && a.entries.every((e) => b[e.key] == e.value);
+    // Broadcasts are deliberate game UI behaviour. Avoid offering a leading
+    // opponent the goods for a publicly inferable scoring build.
+    bool safe(ProposeTrade offer) =>
+        !cautious ||
+        !List.generate(view.publicScores.length, (i) => i).any(
+          (seat) =>
+              seat != view.seat &&
+              view.publicScores[seat] >= GameEngine.winningPoints - 2 &&
+              view.publicScores[seat] > view.publicScores[view.seat] &&
+              offer.gives.keys.any((g) => (view.publicGoals[seat][g] ?? 0) > 0),
+        );
     if (view.phase != MatchPhase.actions ||
         !view.triesPlayerTrade ||
         view.actionsSinceRoll > 3 ||
@@ -300,6 +350,12 @@ abstract final class AiCardStrategy {
         .where(
           (offer) =>
               offer.counterOf == null &&
+              safe(offer) &&
+              !excluded.any(
+                (old) =>
+                    same(old.gives, offer.gives) &&
+                    same(old.wants, offer.wants),
+              ) &&
               // A broadcast should be generous enough to be worth answering.
               // Do not flood everybody with requests for equally valued goods.
               offer.gives.values.fold<int>(0, (a, b) => a + b) >
@@ -309,9 +365,9 @@ abstract final class AiCardStrategy {
               offer.gives.entries.every(
                 (entry) =>
                     (view.ownGoods[entry.key] ?? 0) - entry.value >=
-                    (_goal(view)[entry.key] ?? 0),
+                    (plan[entry.key] ?? 0),
               ) &&
-              _bundleGain(view, offer.gives, offer.wants) > 0.5 &&
+              _bundleGain(view, offer.gives, offer.wants, goal: plan) > 0.5 &&
               _recipientAppeal(view, offer) > 0.75,
         )
         .toList();
@@ -324,7 +380,7 @@ abstract final class AiCardStrategy {
       final count =
           offer.gives.values.fold<int>(0, (a, b) => a + b) +
           offer.wants.values.fold<int>(0, (a, b) => a + b);
-      return _bundleGain(view, offer.gives, offer.wants) / count +
+      return _bundleGain(view, offer.gives, offer.wants, goal: plan) / count +
           1.25 * _recipientAppeal(view, offer);
     }
 

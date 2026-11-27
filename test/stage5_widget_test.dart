@@ -1,3 +1,10 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:stone_and_banner/ui/resource_icon.dart';
+
 import 'resource_label_finder.dart';
 
 import 'package:stone_and_banner/ui/trade_picker.dart';
@@ -36,14 +43,37 @@ MatchState grant(MatchState s, int player, Resource good) {
   );
 }
 
+Future<void> captureLayout(WidgetTester tester, String name) async {
+  if (!const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(const ValueKey('layout-capture')),
+  );
+  await tester.runAsync(() async {
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await File('/tmp/stone-layout-$name.png')
+        .writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
+}
+
 Future<void> showMatch(
   WidgetTester tester,
   MatchState initial,
   void Function(MatchState) updated,
 ) async {
+  if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
+    await tester.runAsync(loadResourceIcons);
+    await tester.runAsync(loadTabletopArt);
+  }
   var state = initial;
   await tester.pumpWidget(
     MaterialApp(
+      theme: const bool.fromEnvironment('STONE_VISUAL_CAPTURE')
+          ? ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans')
+          : null,
+      builder: (_, child) =>
+          RepaintBoundary(key: const ValueKey('layout-capture'), child: child!),
       home: Scaffold(
         body: StatefulBuilder(
           builder: (context, refresh) => MatchView(
@@ -61,11 +91,42 @@ Future<void> showMatch(
 }
 
 void main() {
+  if (const bool.fromEnvironment('STONE_VISUAL_CAPTURE')) {
+    setUpAll(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final fonts = FontLoader('NotoSans')
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+      await fonts.load();
+    });
+  }
+
   setUp(
     () => SharedPreferences.setMockInitialValues({
       'gameplay_hints_enabled': false,
     }),
   );
+  testWidgets('wide build panel groups actions in columns', (tester) async {
+    tester.view.physicalSize = const Size(844, 390);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await showMatch(
+      tester,
+      drafted().copyWith(phase: MatchPhase.actions),
+      (_) {},
+    );
+    await tester.tap(find.text('Actions'));
+    await tester.pumpAndSettle();
+    final road = tester.getRect(find.widgetWithText(OutlinedButton, 'Road'));
+    final village = tester.getRect(
+      find.widgetWithText(OutlinedButton, 'Village'),
+    );
+    expect(road.top, closeTo(village.top, 2));
+    expect(road.right, lessThan(village.left));
+    await captureLayout(tester, 'build');
+  });
+
   testWidgets('bank exchange uses focused route, conserves stock and returns', (
     tester,
   ) async {
@@ -209,6 +270,14 @@ void main() {
       expect(find.text('Bandit interception'), findsOneWidget);
       expect(find.textContaining('Strategy hand'), findsNothing);
       expect(find.textContaining('wood '), findsNothing);
+      final intercept = tester.getRect(
+        find.widgetWithText(FilledButton, 'Intercept with Guard'),
+      );
+      final pass = tester.getRect(find.widgetWithText(OutlinedButton, 'Pass'));
+      expect(intercept.center.dy, closeTo(pass.center.dy, 2));
+      expect(intercept.right, lessThan(pass.left));
+      expect((intercept.left + pass.right) / 2, closeTo(422, 2));
+      await captureLayout(tester, 'response');
       await tester.ensureVisible(find.text('Intercept with Guard'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Intercept with Guard'));

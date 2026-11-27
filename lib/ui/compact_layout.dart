@@ -101,3 +101,58 @@ class CompactPageHeader extends StatelessWidget {
     );
   }
 }
+
+/// Use the actual panel width, not the screen width: desktop sidebars and
+/// portrait phones stay single-column, wide landscape pages use spare space.
+class AdaptiveActionGrid extends StatelessWidget {
+  const AdaptiveActionGrid({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      const gap = 8.0;
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final minWidth = 280 * scale;
+      final columns = ((constraints.maxWidth + gap) / (minWidth + gap))
+          .floor()
+          .clamp(1, 3);
+      final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+      return Wrap(
+        spacing: gap,
+        children: [
+          for (final child in children) SizedBox(width: width, child: child),
+        ],
+      );
+    },
+  );
+}
+
+/// Short independent actions should size to their content and wrap only when
+/// the available panel width cannot fit them side by side.
+class AdaptiveActionRow extends StatelessWidget {
+  const AdaptiveActionRow({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final landscape =
+          MediaQuery.orientationOf(context) == Orientation.landscape;
+      return landscape && constraints.maxWidth >= 380
+          ? Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
+              children: children,
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            );
+    },
+  );
+}

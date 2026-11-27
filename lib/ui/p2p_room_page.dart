@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'compact_layout.dart';
+import 'bot_difficulty_picker.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -728,6 +729,13 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
         'Friends always keep their own seats.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
+      if (room.botCount > 0) ...[
+        const SizedBox(height: 8),
+        BotDifficultyPicker(
+          difficulty: room.botDifficulty,
+          onChanged: room.started ? null : room.setBotDifficulty,
+        ),
+      ],
       const SizedBox(height: 8),
       if (room.signallingPreparing)
         const Text('Preparing your one-link invitation…'),
@@ -809,6 +817,8 @@ class _P2pRoomPageState extends State<P2pRoomPage> with WidgetsBindingObserver {
       ),
       const SizedBox(height: 8),
     ],
+    if (!room.isHost && room.botCount > 0)
+      BotDifficultyPicker(difficulty: room.botDifficulty),
     Text('Players', style: Theme.of(context).textTheme.titleMedium),
     for (var i = 0; i < room.capacity; i++)
       ListTile(

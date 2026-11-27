@@ -162,7 +162,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'gameplay_hints_seen_v1': ['town'],
       });
-      final state = tableWithSupplies();
+      final state = tableWithSupplies(withCards: true);
       await showMatch(
         tester,
         state,

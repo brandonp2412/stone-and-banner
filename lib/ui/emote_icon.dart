@@ -100,7 +100,6 @@ class _FacePainter extends CustomPainter {
     final devil = expression == _Expression.devil;
     final center = Offset(50, devil ? 56 : 50);
     final radius = devil ? 40.0 : 46.0;
-    final faceBounds = Rect.fromCircle(center: center, radius: radius);
     final fill = Paint();
 
     if (devil) {
@@ -113,24 +112,35 @@ class _FacePainter extends CustomPainter {
         ..quadraticBezierTo(91, 21, 83, 5)
         ..quadraticBezierTo(75, 19, 61, 23)
         ..close();
-      canvas.drawPath(horns, fill..color = const Color(0xffcc861e));
+      canvas.drawPath(horns, fill..color = const Color(0xffeb8f00));
     }
 
+    // Match the saturated yellow/gold of the native hand and face emoji.
+    // A darker lower rim provides depth without turning the whole face orange.
+    canvas.drawCircle(center, radius, fill..color = const Color(0xffeb8f00));
+    final surfaceCenter = center.translate(0, -1.5);
+    final surfaceRadius = radius - 1.5;
     canvas.drawCircle(
-      center,
-      radius,
+      surfaceCenter,
+      surfaceRadius,
       Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-.25, -.45),
-          radius: .85,
-          colors: [
-            const Color(0xffffe98c),
-            devil ? const Color(0xffefa833) : const Color(0xffffbb32),
-          ],
-        ).createShader(faceBounds),
+        ..shader =
+            const RadialGradient(
+              center: Alignment(0, -.10),
+              radius: .54,
+              colors: [
+                Color(0xfffde030),
+                Color(0xfffde030),
+                Color(0xfff9c92c),
+                Color(0xfff4a621),
+              ],
+              stops: [0, .42, .83, 1],
+            ).createShader(
+              Rect.fromCircle(center: surfaceCenter, radius: surfaceRadius),
+            ),
     );
 
-    const featureColor = Color(0xff56301d);
+    const featureColor = Color(0xff35220b);
     final stroke = Paint()
       ..color = featureColor
       ..style = PaintingStyle.stroke
@@ -171,19 +181,33 @@ class _FacePainter extends CustomPainter {
         );
         canvas.restore();
       case _Expression.smirk:
+        // Relaxed, slightly raised brows and a deliberate sideways glance.
         canvas.drawPath(
           Path()
-            ..moveTo(22, 42)
-            ..quadraticBezierTo(32, 37, 42, 41)
-            ..moveTo(58, 39)
-            ..quadraticBezierTo(68, 32, 78, 37)
-            ..moveTo(29, 64)
-            ..quadraticBezierTo(53, 80, 75, 58),
-          stroke,
+            ..moveTo(19, 35)
+            ..quadraticBezierTo(25, 29, 34, 29)
+            ..moveTo(66, 29)
+            ..quadraticBezierTo(75, 29, 81, 35),
+          stroke..strokeWidth = 3.7,
+        );
+        canvas.drawPath(
+          Path()
+            ..moveTo(22, 45)
+            ..quadraticBezierTo(31, 40, 41, 44)
+            ..moveTo(59, 44)
+            ..quadraticBezierTo(68, 40, 78, 45),
+          stroke..strokeWidth = 4.4,
         );
         fill.color = featureColor;
-        canvas.drawOval(const Rect.fromLTWH(33, 40, 9, 11), fill);
-        canvas.drawOval(const Rect.fromLTWH(69, 36, 9, 11), fill);
+        canvas.drawOval(const Rect.fromLTWH(31, 43, 10, 11), fill);
+        canvas.drawOval(const Rect.fromLTWH(68, 43, 10, 11), fill);
+        // A nearly level closed mouth that curls up on only one side.
+        canvas.drawPath(
+          Path()
+            ..moveTo(36, 77)
+            ..cubicTo(51, 79, 70, 77, 72, 66),
+          stroke..strokeWidth = 6.2,
+        );
       case _Expression.devil:
         final eyes = Path()
           ..moveTo(23, 43)

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'lan_discovery_targets.dart';
 
 import '../engine/match.dart';
+import '../engine/heuristic_ai.dart';
 import '../engine/ai_turn_coordinator.dart';
 import 'room_host.dart';
 import 'room_protocol.dart';
@@ -386,6 +387,13 @@ class _LanServerProtocol {
         }
         botCounts[room] = count;
         broadcast(room);
+      case 'setBotDifficulty':
+        final requested = BotDifficulty.values
+            .where((level) => level.name == msg['difficulty'])
+            .firstOrNull;
+        if (requested == null) throw StateError('Unknown bot difficulty.');
+        room.setBotDifficulty(seat, requested);
+        broadcast(room);
       case 'start':
         final fresh = room.state == null;
         if (fresh) {
@@ -506,6 +514,9 @@ class _LanServerProtocol {
       () => AiTurnCoordinator(
         read: () => room.state,
         isComputerSeat: computer.contains,
+        difficulty: () => room.botDifficulty,
+        decide: (state) =>
+            HeuristicAi(difficulty: room.botDifficulty).choose(state),
         delay: const Duration(milliseconds: 450),
         commit: (previous, next) {
           if (!identical(room.state, previous) ||

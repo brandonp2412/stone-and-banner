@@ -28,7 +28,10 @@ void main() {
           fontFamily: 'NotoSans',
         ),
         home: Scaffold(
-          body: MatchView(state: tableWithSupplies(), onEvent: (_) {}),
+          body: MatchView(
+            state: tableWithSupplies(withCards: true),
+            onEvent: (_) {},
+          ),
         ),
       ),
     );

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'ai.dart';
-import 'ai_cards.dart';
 import 'heuristic_ai.dart';
 import 'match.dart';
 
@@ -20,6 +19,7 @@ class AiTurnCoordinator {
     this.delay = const Duration(milliseconds: 45),
     this.maxEventsPerRun = 96,
     AiDecision? decide,
+    this.difficulty,
   }) : _decide = decide ?? const HeuristicAi().choose {
     if (maxEventsPerRun < 1) {
       throw ArgumentError.value(maxEventsPerRun, 'maxEventsPerRun');
@@ -53,6 +53,7 @@ class AiTurnCoordinator {
 
   final int maxEventsPerRun;
   final AiDecision _decide;
+  final BotDifficulty Function()? difficulty;
 
   bool _paused = true;
   bool _running = false;
@@ -110,20 +111,9 @@ class AiTurnCoordinator {
     _generation++;
   }
 
-  static RespondTrade _answerOffer(
-    MatchState state,
-    int seat,
-    TradeProposal offer,
-  ) {
-    final view = AiActionAdapter.observe(
-      state.copyWith(active: seat, offers: [offer]),
-      seat,
-    );
-    final answer = AiCardStrategy.incomingOffer(view);
-    return answer is RespondTrade
-        ? answer
-        : RespondTrade(seat, false, offerId: offer.id);
-  }
+  RespondTrade _answerOffer(MatchState state, int seat, TradeProposal offer) =>
+      HeuristicAi(difficulty: difficulty?.call() ?? BotDifficulty.hard)
+          .answerOffer(state, seat, offer);
 
   Future<void> _drive(int ticket) async {
     var events = 0;
