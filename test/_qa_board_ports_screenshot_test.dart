@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show FontLoader, rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stone_and_banner/ui/match_screen.dart';
+import 'package:stone_and_banner/engine/match.dart';
+import 'package:stone_and_banner/engine/game.dart';
 import 'package:stone_and_banner/ui/resource_icon.dart';
 
 import 'landscape_tabletop_test.dart' show tableWithSupplies;
@@ -31,6 +33,12 @@ void main() {
       await fonts.load();
       await tester.runAsync(loadResourceIcons);
       await tester.runAsync(loadTabletopArt);
+      final base = tableWithSupplies();
+      final sites = Map<int, Site>.of(base.sites);
+      final vertices = sites.keys.toList();
+      sites[vertices[2]] = Site(sites[vertices[2]]!.owner, Structure.town);
+      sites[vertices[4]] = Site(sites[vertices[4]]!.owner, Structure.capital);
+      final state = base.copyWith(sites: sites);
       final boundary = GlobalKey();
       await tester.pumpWidget(
         RepaintBoundary(
@@ -42,7 +50,7 @@ void main() {
               fontFamily: 'NotoSans',
             ),
             home: Scaffold(
-              body: MatchView(state: tableWithSupplies(), onEvent: (_) {}),
+              body: MatchView(state: state, onEvent: (_) {}),
             ),
           ),
         ),

@@ -6051,13 +6051,29 @@ class _Painter extends CustomPainter {
       if (site == null) continue;
       final sprite = _tabletopArt['${site.structure.name}${site.owner}'];
       final width = switch (site.structure) {
-        Structure.village => 24.0,
-        Structure.town => 30.0,
-        Structure.capital => 34.0,
+        Structure.village => (g.radius * .54).clamp(28.0, 60.0),
+        Structure.town => (g.radius * .68).clamp(35.0, 76.0),
+        Structure.capital => (g.radius * .82).clamp(43.0, 90.0),
       };
-      final bounds = sprite != null
-          ? _spriteBounds(sprite, c - const Offset(0, 4), width)
-          : Rect.fromCenter(center: c, width: width, height: width * .75);
+      final height = sprite == null
+          ? width * .75
+          : width * sprite.height / sprite.width;
+      final baseHeight = math.max(10.0, width * .24);
+      // The ownership pedestal stays on the actual junction. Keep the
+      // illustrated piece above it, but inside the board at its top edge.
+      final baseCenter = c + Offset(0, baseHeight * .12);
+      final center = Offset(
+        c.dx.clamp(width / 2, math.max(width / 2, size.width - width / 2)),
+        (baseCenter.dy - height * .38).clamp(
+          height / 2,
+          math.max(height / 2, size.height - height / 2),
+        ),
+      );
+      final bounds = Rect.fromCenter(
+        center: center,
+        width: width,
+        height: height,
+      );
       if (state.fortified.contains(v.id)) {
         final halo = bounds.inflate(10);
         canvas.drawOval(
@@ -6070,24 +6086,26 @@ class _Painter extends CustomPainter {
         );
       }
       if (sprite != null) {
-        // Keep the player's colour visible even at minimum board scale.
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: c + const Offset(0, 5),
-            width: width * .94,
-            height: 10,
-          ),
-          Paint()..color = const Color(0xff20313b),
+        // A dark-edged, solid ownership pedestal remains legible even
+        // on similarly coloured terrain. Draw it in front of the art so
+        // the grassy base cannot hide the player colour.
+        _paintTabletop(canvas, sprite, bounds);
+        final pedestal = Rect.fromCenter(
+          center: baseCenter,
+          width: width * .88,
+          height: baseHeight,
         );
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: c + const Offset(0, 5),
-            width: width * .82,
-            height: 7,
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(pedestal, Radius.circular(baseHeight / 2)),
+          Paint()..color = const Color(0xff102128),
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            pedestal.deflate(2),
+            Radius.circular(baseHeight / 2),
           ),
           Paint()..color = seatColors[site.owner],
         );
-        _paintTabletop(canvas, sprite, bounds);
       } else {
         final building = RRect.fromRectAndRadius(
           bounds,
@@ -6103,7 +6121,7 @@ class _Painter extends CustomPainter {
         _label(
           canvas,
           '!',
-          c + const Offset(10, 11),
+          c + Offset(width * .45, baseHeight * .8),
           14,
           const Color(0xffec6757),
         );
