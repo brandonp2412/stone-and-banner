@@ -30,6 +30,7 @@ void main() {
         ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
       await fonts.load();
       await tester.runAsync(loadResourceIcons);
+      await tester.runAsync(loadTabletopArt);
       final boundary = GlobalKey();
       await tester.pumpWidget(
         RepaintBoundary(

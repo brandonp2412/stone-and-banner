@@ -55,6 +55,7 @@ void main() {
     );
     expect(MatchEngine.legalVillage(state, junction), isTrue);
     expect(MatchEngine.legalRecruit(state, junction), isTrue);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(fontFamily: 'NotoSans', brightness: Brightness.dark),
@@ -113,7 +114,9 @@ void main() {
         networkEmoteSeat: 1,
       ),
     );
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(screen(0));
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(screen(1));
     await tester.pump(const Duration(milliseconds: 450));
     expect(find.byKey(const ValueKey('player-emote-1')), findsNothing);
@@ -150,6 +153,7 @@ void main() {
         1,
       ),
     );
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -175,7 +179,9 @@ void main() {
         networkEmoteSeat: 1,
       ),
     );
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(screen(0));
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(screen(1));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('player-emote-1')), findsOneWidget);
@@ -202,12 +208,15 @@ void main() {
       theme: ThemeData(fontFamily: 'NotoSans', brightness: Brightness.dark),
       home: Scaffold(body: MatchActivity(state: state, viewerSeat: 0)),
     );
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(screen(before));
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(screen(after));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.textContaining('Mira'), findsOneWidget);
     expect(find.textContaining('mugged'), findsOneWidget);
     expect(find.textContaining('3 resources gone'), findsOneWidget);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -233,13 +242,16 @@ void main() {
       theme: ThemeData(fontFamily: 'NotoSans', brightness: Brightness.dark),
       home: MatchView(state: state, onEvent: (_) {}, observing: true),
     );
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(screen(before));
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(screen(after));
     await tester.pump(const Duration(milliseconds: 1150));
     await expectLater(
       find.byKey(const ValueKey('realm-map')),
       matchesGoldenFile('goldens/bandit_denied.png'),
     );
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(const SizedBox());
   });
 }

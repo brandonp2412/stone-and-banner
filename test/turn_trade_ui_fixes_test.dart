@@ -22,6 +22,7 @@ void main() {
       const ProposeTrade(0, Resource.wood, 1, Resource.wool, 1),
     );
     final events = <MatchEvent>[];
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -46,6 +47,7 @@ void main() {
     await tester.tap(find.byKey(ValueKey('decline-offer-${offer.id}')));
     await tester.pumpAndSettle();
     expect(events.single, isA<RespondTrade>());
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -54,6 +56,7 @@ void main() {
   ) async {
     var state = tableWithSupplies();
     final events = <MatchEvent>[];
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -88,6 +91,7 @@ void main() {
     expect(events.single, isA<EndTurn>());
     await tester.pumpAndSettle();
     expect(find.text('Close dialog'), findsNothing);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -97,6 +101,7 @@ void main() {
     var state = tableWithSupplies();
     final initialSeat = state.active;
     final events = <MatchEvent>[];
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -119,6 +124,7 @@ void main() {
     expect(state.active, (initialSeat + 1) % state.players.length);
     await tester.pump(const Duration(seconds: 1));
     expect(events, hasLength(1));
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -127,6 +133,7 @@ void main() {
   ) async {
     var state = tableWithSupplies().copyWith(phase: MatchPhase.roll);
     final initialSeat = state.active;
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -145,6 +152,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     }
     expect(state.active, (initialSeat + 1) % state.players.length);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -165,6 +173,7 @@ void main() {
       var observing = false;
       late StateSetter refresh;
       final events = <MatchEvent>[];
+      await tester.runAsync(loadTabletopArt);
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -209,6 +218,7 @@ void main() {
       final base = tableWithSupplies();
       var s = base;
       late StateSetter refresh;
+      await tester.runAsync(loadTabletopArt);
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(fontFamily: 'NotoSans', brightness: Brightness.dark),

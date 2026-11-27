@@ -38,6 +38,7 @@ void main() {
       var state = tableWithSupplies();
       late StateSetter refresh;
       var homeTapped = false;
+      await tester.runAsync(loadTabletopArt);
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(
@@ -90,6 +91,7 @@ void main() {
   testWidgets('AI win shows animated defeat for human viewer', (tester) async {
     await setup(tester);
     final state = finishedFor(1);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(
@@ -124,6 +126,7 @@ void main() {
   ) async {
     await setup(tester);
     final state = finishedFor(2);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
@@ -143,6 +146,7 @@ void main() {
   ) async {
     await setup(tester);
     tester.view.physicalSize = const Size(640, 320);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(
@@ -194,6 +198,7 @@ void main() {
 
   testWidgets('finale entrance and particle layer animate', (tester) async {
     await setup(tester);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),

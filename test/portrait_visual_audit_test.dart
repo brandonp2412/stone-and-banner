@@ -29,6 +29,7 @@ Future<void> portraitSetup(WidgetTester tester) async {
 }
 
 Future<void> renderMatch(WidgetTester tester, {MatchState? state}) async {
+  await tester.runAsync(loadTabletopArt);
   await tester.pumpWidget(
     MaterialApp(
       theme: ThemeData(
@@ -56,6 +57,7 @@ Future<void> golden(WidgetTester tester, String filename) async {
 void main() {
   testWidgets('home and setup portrait snapshots', (tester) async {
     await portraitSetup(tester);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(const StoneBannerApp(randomizeTurnOrder: false));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('stone-home-page')), findsOneWidget);

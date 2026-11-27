@@ -1,3 +1,4 @@
+import 'package:stone_and_banner/ui/match_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       StoneBannerApp(
         worldSeedFactory: () => 20261027,

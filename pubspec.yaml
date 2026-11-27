@@ -22,6 +22,8 @@ flutter:
   assets:
     - assets/art/stone_banner_crest.jpg
     - assets/art/capital.png
+    - assets/art/tabletop/
+    - assets/icons/tabletop/
     - assets/icons/
     - assets/icons/banner/
     - assets/icons/treasury/

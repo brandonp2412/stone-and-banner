@@ -53,6 +53,7 @@ void main() {
           'botDifficulty': 'easy',
         }),
       });
+      await tester.runAsync(loadTabletopArt);
       await tester.pumpWidget(
         StoneBannerApp(
           worldSeedFactory: () => 123456,
@@ -83,6 +84,7 @@ void main() {
         MatchEngine.importReplay(session['replay'] as String).seed,
         123456,
       );
+      await tester.runAsync(loadTabletopArt);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -124,6 +126,7 @@ void main() {
           'MaterialIcons',
         )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
         var tapped = false;
+        await tester.runAsync(loadTabletopArt);
         await tester.pumpWidget(
           MaterialApp(
             debugShowCheckedModeBanner: false,

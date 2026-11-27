@@ -31,6 +31,7 @@ void main() {
           .firstWhere((id) => state.topology.edges[id].b == vertex);
       final next = MatchEngine.apply(state, PlaceRoad(road));
       late StateSetter refresh;
+      await tester.runAsync(loadTabletopArt);
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),

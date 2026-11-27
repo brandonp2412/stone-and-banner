@@ -19,7 +19,9 @@ void main() {
     );
     Widget activity(MatchState state) =>
         MaterialApp(home: MatchActivity(state: state, viewerSeat: 0));
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(activity(settled));
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(activity(expanded));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byKey(const ValueKey('match-activity-notice')), findsNothing);
@@ -63,6 +65,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     var rulesOpened = false;
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(

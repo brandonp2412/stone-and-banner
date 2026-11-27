@@ -6,14 +6,12 @@ import 'package:stone_and_banner/engine/board.dart';
 import 'package:stone_and_banner/ui/resource_icon.dart';
 
 void main() {
-  test('missing and unknown saved packs fall back to Banner', () async {
+  test('missing and unknown saved packs fall back to Tabletop', () async {
     for (final saved in [null, 'unknown']) {
-      SharedPreferences.setMockInitialValues({
-        'resource_icon_pack': ?saved,
-      });
+      SharedPreferences.setMockInitialValues({'resource_icon_pack': ?saved});
       resourceIconStyle.value = ResourceIconStyle.treasury;
       await restoreResourceIconStyle();
-      expect(resourceIconStyle.value, ResourceIconStyle.banner);
+      expect(resourceIconStyle.value, ResourceIconStyle.tabletop);
     }
   });
 

@@ -71,59 +71,68 @@ const landColors = [
   Color(0xff81705c),
 ];
 
-final _capitalImage = ValueNotifier<ui.Image?>(null);
-Future<void>? _capitalImageLoad;
+final _tabletopArt = <String, ui.Image>{};
+final _tabletopRevision = ValueNotifier(0);
+Future<void>? _tabletopLoad;
 
-Future<void> _loadCapitalImage() async {
-  final data = await rootBundle.load('assets/art/capital.png');
-  final codec = await ui.instantiateImageCodec(
-    data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+Future<void> loadTabletopArt() => _tabletopLoad ??= _loadTabletopArt();
+
+Future<void> _loadTabletopArt() async {
+  final names = [
+    for (final land in Land.values) land.name,
+    'road',
+    'bandit',
+    'harbor',
+    'village',
+    'town',
+    'crownRoad',
+    'defense',
+    for (final structure in Structure.values)
+      for (var seat = 0; seat < seatColors.length; seat++)
+        '${structure.name}$seat',
+  ];
+  await Future.wait(
+    names.map((name) async {
+      final data = await rootBundle.load('assets/art/tabletop/$name.png');
+      final codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      );
+      try {
+        _tabletopArt[name] = (await codec.getNextFrame()).image;
+      } finally {
+        codec.dispose();
+      }
+    }),
   );
-  try {
-    _capitalImage.value = (await codec.getNextFrame()).image;
-  } finally {
-    codec.dispose();
-  }
+  _tabletopRevision.value++;
 }
 
-final _capitalPaints = [
-  Paint()..filterQuality = FilterQuality.medium,
-  for (final color in seatColors.skip(1))
-    Paint()
-      ..filterQuality = FilterQuality.medium
-      ..colorFilter = _capitalColorFilter(color),
-];
-
-ColorFilter _capitalColorFilter(Color color) {
-  // Scale the color shift by the source teal's green–red difference so
-  // the artwork retains its dark outline and pale highlights.
-  const tealChroma = 205 - 56;
-  final red = (color.r * 255 - 56) / tealChroma;
-  final green = (color.g * 255 - 205) / tealChroma;
-  final blue = (color.b * 255 - 182) / tealChroma;
-  return ColorFilter.matrix([
-    1 - red,
-    red,
-    0,
-    0,
-    0,
-    -green,
-    1 + green,
-    0,
-    0,
-    0,
-    -blue,
-    blue,
-    1,
-    0,
-    0,
-    0,
-    0,
-    0,
-    1,
-    0,
-  ]);
+void _paintTabletop(Canvas canvas, ui.Image image, Rect bounds) {
+  canvas.drawImageRect(
+    image,
+    Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+    bounds,
+    Paint()..filterQuality = FilterQuality.medium,
+  );
 }
+
+Rect _spriteBounds(ui.Image image, Offset center, double width) =>
+    Rect.fromCenter(
+      center: center,
+      width: width,
+      height: width * image.height / image.width,
+    );
+
+Widget _tabletopIcon(String name, double size) => ValueListenableBuilder<int>(
+  valueListenable: _tabletopRevision,
+  builder: (context, revision, child) => RawImage(
+    image: _tabletopArt[name],
+    width: size,
+    height: size,
+    fit: BoxFit.contain,
+    filterQuality: FilterQuality.medium,
+  ),
+);
 
 class MatchView extends StatefulWidget {
   const MatchView({
@@ -406,7 +415,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
     FocusManager.instance.addEarlyKeyEventHandler(_handleMainActionKey);
     _secondsLeft = widget.onlineTurnSeconds ?? (widget.online ? 150 : 90);
     unawaited(loadResourceIcons());
-    unawaited(_capitalImageLoad ??= _loadCapitalImage());
+    unawaited(loadTabletopArt());
     unawaited(_loadHints());
     _scheduleIncomingTrade();
     _turnClock = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -2407,6 +2416,7 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    _tabletopIcon('crownRoad', 48),
                     Text(
                       '🏆 CROWN ROAD!',
                       style: TextStyle(
@@ -3512,14 +3522,29 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'Raid Defense',
-                      style: TextStyle(
-                        color: gameColor(context, const Color(0xffefd6a3)),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _tabletopIcon('defense', 13),
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Raid Defense',
+                              style: TextStyle(
+                                color: gameColor(
+                                  context,
+                                  const Color(0xffefd6a3),
+                                ),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 3),
                     Text(
@@ -3864,7 +3889,13 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
             : null,
         child: Row(
           children: [
-            Icon(icon, size: 24),
+            switch (action) {
+              _Move.road => _tabletopIcon('road', 24),
+              _Move.village => _tabletopIcon('village', 24),
+              _Move.upgrade => _tabletopIcon('town', 24),
+              _Move.fortify => _tabletopIcon('defense', 24),
+              _ => Icon(icon, size: 24),
+            },
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -3989,13 +4020,15 @@ class _MatchViewState extends State<MatchView> with TickerProviderStateMixin {
           ),
         if (phase == MatchPhase.setupVillage ||
             phase == MatchPhase.setupRoad) ...[
-          Icon(
-            phase == MatchPhase.setupVillage
-                ? Icons.holiday_village_rounded
-                : Icons.route_rounded,
-            size: 48,
-            color: gameColor(context, seatColors[s.active]),
+          _tabletopIcon(
+            phase == MatchPhase.setupRoad
+                ? 'road'
+                : s.setupStep < s.players.length
+                ? 'village'
+                : 'town',
+            48,
           ),
+
           const SizedBox(height: 12),
           Text(
             phase == MatchPhase.setupVillage
@@ -5609,7 +5642,7 @@ class _Painter extends CustomPainter {
            banditBlock,
            resourceIconStyle,
            resourceIconsRevision,
-           _capitalImage,
+           _tabletopRevision,
          ]),
        );
   final MatchState state;
@@ -5672,7 +5705,12 @@ class _Painter extends CustomPainter {
       canvas.clipPath(hex);
       canvas.translate(c.dx, c.dy);
       // The board uses an oblique projection, but artwork must stay isotropic.
-      _terrain(canvas, Offset.zero, radius, tile.land, g);
+      final terrain = _tabletopArt[tile.land.name];
+      if (terrain != null) {
+        _paintTabletop(canvas, terrain, hex.getBounds().shift(-c));
+      } else {
+        _terrain(canvas, Offset.zero, radius, tile.land, g);
+      }
       canvas.restore();
       canvas.drawPath(
         hex,
@@ -5785,12 +5823,21 @@ class _Painter extends CustomPainter {
         );
         canvas.rotate(math.sin(progress * math.pi * 7) * .24 * humiliation);
         canvas.scale(1 + .23 * humiliation, 1 - .32 * humiliation);
-        canvas.drawCircle(
-          Offset.zero,
-          radius * .22,
-          Paint()..color = const Color(0xff262d37),
-        );
-        _label(canvas, 'B', Offset.zero, radius * .22, Colors.white);
+        final sprite = _tabletopArt['bandit'];
+        if (sprite != null) {
+          _paintTabletop(
+            canvas,
+            sprite,
+            _spriteBounds(sprite, Offset.zero, radius * .55),
+          );
+        } else {
+          canvas.drawCircle(
+            Offset.zero,
+            radius * .22,
+            Paint()..color = const Color(0xff262d37),
+          );
+          _label(canvas, 'B', Offset.zero, radius * .22, Colors.white);
+        }
         canvas.restore();
         if (humiliation > .03) {
           canvas.drawCircle(
@@ -5871,14 +5918,14 @@ class _Painter extends CustomPainter {
       }
       final building = e.id == animatedRoad && roadReveal.value < 1;
       final tip = building ? Offset.lerp(a, b, roadReveal.value)! : b;
-      // Restore the original simple two-stroke road: dark outline and a
-      // single player-coloured centre. Keep the newer build reveal animation.
+      final road = _tabletopArt['road'];
+      final length = (b - a).distance;
       canvas.drawLine(
         a,
         tip,
         Paint()
           ..color = const Color(0xff1b2834)
-          ..strokeWidth = 11
+          ..strokeWidth = 13
           ..strokeCap = StrokeCap.round,
       );
       canvas.drawLine(
@@ -5886,9 +5933,17 @@ class _Painter extends CustomPainter {
         tip,
         Paint()
           ..color = seatColors[owner]
-          ..strokeWidth = 6
+          ..strokeWidth = 10
           ..strokeCap = StrokeCap.round,
       );
+      if (road != null && length > 0) {
+        canvas.save();
+        canvas.translate(a.dx, a.dy);
+        canvas.rotate((b - a).direction);
+        canvas.clipRect(Rect.fromLTWH(-2, -8, (tip - a).distance + 2, 16));
+        _paintTabletop(canvas, road, Rect.fromLTWH(0, -3.5, length, 7));
+        canvas.restore();
+      }
       if (building) {
         canvas.drawCircle(
           tip,
@@ -6013,37 +6068,15 @@ class _Painter extends CustomPainter {
       }
       final site = state.sites[v.id];
       if (site == null) continue;
-      final capitalImage = _capitalImage.value;
-      final usesCapitalArt =
-          site.structure == Structure.capital && capitalImage != null;
+      final sprite = _tabletopArt['${site.structure.name}${site.owner}'];
       final width = switch (site.structure) {
-        Structure.village => 15.0,
-        Structure.town => 21.0,
-        Structure.capital => capitalImage == null ? 28.0 : 34.0,
+        Structure.village => 24.0,
+        Structure.town => 30.0,
+        Structure.capital => 34.0,
       };
-      final center = c + Offset(0, usesCapitalArt ? -4 : 2);
-      final Rect bounds;
-      if (usesCapitalArt) {
-        // Align the whole sprite to physical pixels so opposite edges and
-        // windows sample the source image at matching offsets.
-        final origin = boardOrigin();
-        final pixelSize = (width * devicePixelRatio).round();
-        final topLeft =
-            (origin + center) * devicePixelRatio -
-            Offset(pixelSize / 2, pixelSize / 2);
-        bounds = Rect.fromLTWH(
-          topLeft.dx.round() / devicePixelRatio - origin.dx,
-          topLeft.dy.round() / devicePixelRatio - origin.dy,
-          pixelSize / devicePixelRatio,
-          pixelSize / devicePixelRatio,
-        );
-      } else {
-        bounds = Rect.fromCenter(
-          center: center,
-          width: width,
-          height: site.structure == Structure.village ? width : width * .75,
-        );
-      }
+      final bounds = sprite != null
+          ? _spriteBounds(sprite, c - const Offset(0, 4), width)
+          : Rect.fromCenter(center: c, width: width, height: width * .75);
       if (state.fortified.contains(v.id)) {
         final halo = bounds.inflate(10);
         canvas.drawOval(
@@ -6055,18 +6088,25 @@ class _Painter extends CustomPainter {
             ).createShader(halo),
         );
       }
-      if (usesCapitalArt) {
-        canvas.drawImageRect(
-          capitalImage,
-          Rect.fromLTWH(
-            0,
-            0,
-            capitalImage.width.toDouble(),
-            capitalImage.height.toDouble(),
+      if (sprite != null) {
+        // Keep the player's colour visible even at minimum board scale.
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: c + const Offset(0, 5),
+            width: width * .94,
+            height: 10,
           ),
-          bounds,
-          _capitalPaints[site.owner],
+          Paint()..color = const Color(0xff20313b),
         );
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: c + const Offset(0, 5),
+            width: width * .82,
+            height: 7,
+          ),
+          Paint()..color = seatColors[site.owner],
+        );
+        _paintTabletop(canvas, sprite, bounds);
       } else {
         final building = RRect.fromRectAndRadius(
           bounds,
@@ -6077,27 +6117,6 @@ class _Painter extends CustomPainter {
           building.deflate(2),
           Paint()..color = seatColors[site.owner],
         );
-        if (site.structure != Structure.village) {
-          final ink = Paint()..color = const Color(0xff20313b);
-          // Arched entrance and windows make towns readable at board scale.
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(
-              Rect.fromCenter(
-                center: c + const Offset(0, 5),
-                width: 5,
-                height: 8,
-              ),
-              const Radius.circular(2),
-            ),
-            ink,
-          );
-          for (final dx in [-6.0, 6.0]) {
-            canvas.drawRect(
-              Rect.fromCenter(center: c + Offset(dx, 0), width: 3, height: 4),
-              ink,
-            );
-          }
-        }
       }
       if (state.reaverScars.contains(v.id)) {
         _label(
@@ -6217,8 +6236,15 @@ class _Painter extends CustomPainter {
           resource,
         );
       }
-      final textCenter =
-          badge.center + Offset(dock.resource == null ? 0 : 8, 0);
+      final harbor = _tabletopArt['harbor'];
+      if (dock.resource == null && harbor != null) {
+        _paintTabletop(
+          canvas,
+          harbor,
+          _spriteBounds(harbor, Offset(badge.left + 10, badge.center.dy), 17),
+        );
+      }
+      final textCenter = badge.center + const Offset(8, 0);
       label.paint(
         canvas,
         textCenter - Offset(label.width / 2, label.height / 2),

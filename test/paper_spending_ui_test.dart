@@ -40,6 +40,7 @@ void main() {
     final before = state.current.stores[Resource.paper] ?? 0;
     expect(MatchEngine.canDevelop(state, StrategyDeck.innovation), isTrue);
     late StateSetter refresh;
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(brightness: Brightness.dark, fontFamily: 'NotoSans'),

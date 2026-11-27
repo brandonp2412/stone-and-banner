@@ -16,6 +16,7 @@ void main() {
     final showMatch = ValueNotifier(true);
     addTearDown(showMatch.dispose);
     await tester.runAsync(loadResourceIcons);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         home: ValueListenableBuilder<bool>(
@@ -57,6 +58,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     var leaveRequests = 0;
     await tester.runAsync(loadResourceIcons);
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),

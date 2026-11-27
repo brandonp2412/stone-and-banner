@@ -44,7 +44,9 @@ void main() {
         ),
       ),
     );
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(frame(before));
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(frame(after));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining('visits the market'), findsOneWidget);
@@ -57,6 +59,7 @@ void main() {
       find.byType(Scaffold),
       matchesGoldenFile('goldens/player_avatar_action.png'),
     );
+    await tester.runAsync(loadTabletopArt);
     await tester.pumpWidget(const SizedBox());
   });
 }

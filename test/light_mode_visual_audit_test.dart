@@ -43,6 +43,7 @@ Future<void> auditSetup(WidgetTester tester, Size size) async {
 }
 
 Future<void> renderMatch(WidgetTester tester, {MatchState? state}) async {
+  await tester.runAsync(loadTabletopArt);
   await tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -89,6 +90,7 @@ void main() {
     group('light mode at $size', () {
       testWidgets('home and setup snapshots', (tester) async {
         await auditSetup(tester, size);
+        await tester.runAsync(loadTabletopArt);
         await tester.pumpWidget(
           const StoneBannerApp(randomizeTurnOrder: false),
         );
@@ -152,6 +154,7 @@ void main() {
 
       testWidgets('rules, settings, history and multiplayer', (tester) async {
         await auditSetup(tester, size);
+        await tester.runAsync(loadTabletopArt);
         await tester.pumpWidget(
           const StoneBannerApp(randomizeTurnOrder: false),
         );
@@ -173,6 +176,7 @@ void main() {
           ('lan', const LanRoomPage()),
           ('p2p', const P2pRoomPage()),
         ]) {
+          await tester.runAsync(loadTabletopArt);
           await tester.pumpWidget(
             MaterialApp(
               debugShowCheckedModeBanner: false,
@@ -199,6 +203,7 @@ void main() {
       for (final victory in [true, false]) {
         testWidgets('finale victory=$victory', (tester) async {
           await auditSetup(tester, size);
+          await tester.runAsync(loadTabletopArt);
           await tester.pumpWidget(
             MaterialApp(
               debugShowCheckedModeBanner: false,
@@ -231,6 +236,7 @@ void main() {
           tableWithSupplies(),
           const ProposeTrade(1, Resource.wood, 1, Resource.brick, 1),
         );
+        await tester.runAsync(loadTabletopArt);
         await tester.pumpWidget(
           MaterialApp(
             debugShowCheckedModeBanner: false,
@@ -267,8 +273,10 @@ void main() {
         await tester.tap(find.byTooltip('Card details and discard'));
         await tester.pumpAndSettle();
         await golden(tester, 'card_detail');
+        await tester.runAsync(loadTabletopArt);
         await tester.pumpWidget(const SizedBox());
         await tester.pumpAndSettle();
+        await tester.runAsync(loadTabletopArt);
         await tester.pumpWidget(
           MaterialApp(
             debugShowCheckedModeBanner: false,
