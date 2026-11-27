@@ -1,8 +1,20 @@
+import java.io.File
+import java.util.Properties
+import java.security.KeyStore
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val expectedSigner = "011ee1a6e4e5ecd675f67fbf3d78ad82614a7a7a3f24ed71cc9c417154a0f0fd"
+val signingProperties = Properties()
+val projectSigningFile = rootProject.file("key.properties")
+val signingFile = if (projectSigningFile.isFile) projectSigningFile else
+    File(System.getProperty("user.home"), ".config/android-signing/flexify-release.properties")
+if (signingFile.isFile) signingFile.inputStream().use { signingProperties.load(it) }
 
 android {
     namespace = "nz.stone_and_banner"
@@ -28,11 +40,17 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = signingProperties.getProperty("keyAlias")
+            keyPassword = signingProperties.getProperty("keyPassword")
+            storeFile = signingProperties.getProperty("storeFile")?.let { file(it) }
+            storePassword = signingProperties.getProperty("storePassword")
+        }
+    }
     buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+        configureEach {
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
@@ -45,4 +63,20 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// Never package this application ID with anything except the Flex certificate.
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.project == project && Regex("(?i)^(assemble|bundle|package|install).*").matches(it.name) }) {
+        val config = android.signingConfigs.getByName("release")
+        val keyFile = config.storeFile
+        if (keyFile == null || !keyFile.isFile || config.storePassword.isNullOrEmpty() || config.keyAlias.isNullOrEmpty()) {
+            throw GradleException("Flex signing key required for Stone & Banner")
+        }
+        val keyStore = KeyStore.getInstance(keyFile, config.storePassword!!.toCharArray())
+        val certificate = keyStore.getCertificate(config.keyAlias)
+            ?: throw GradleException("Missing Flex signing certificate")
+        val actual = MessageDigest.getInstance("SHA-256").digest(certificate.encoded).joinToString("") { "%02x".format(it.toInt() and 255) }
+        if (actual != expectedSigner) throw GradleException("Wrong signing certificate: $actual; expected $expectedSigner")
+    }
 }
